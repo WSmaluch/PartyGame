@@ -1,0 +1,46 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_style = space
+indent_size = 4
+csharp_new_line_before_open_brace = all
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+
+[*.{json,md,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.sln]
+indent_style = tab
+
+[**/Migrations/*.cs]
+# EF Core generates block-scoped migration classes; keep generated diffs stable.
+csharp_style_namespace_declarations = block_scoped:silent
+
+# These generated migrations were created as UTF-8 with BOM. Preserve their
+# established encoding instead of rewriting historical migration artifacts.
+[**/Migrations/20260720172348_Phase2A.cs]
+charset = utf-8-bom
+
+[**/Migrations/20260720191632_AddPointsAwarded.cs]
+charset = utf-8-bom
+
+[**/Migrations/20260721150101_Phase3A.cs]
+charset = utf-8-bom
+
+[**/Migrations/20260721155414_Phase4APhotoAnswers.cs]
+charset = utf-8-bom

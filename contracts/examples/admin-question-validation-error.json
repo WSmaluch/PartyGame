@@ -1,0 +1,1 @@
+{"code":"content_validation_failed","errors":[{"path":"key","code":"question_key_invalid_format","message":"Klucz pytania musi mieć postać lowercase_snake_case."}]}

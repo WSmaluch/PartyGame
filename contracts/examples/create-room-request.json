@@ -1,0 +1,15 @@
+{
+  "nickname": "Wojtek",
+  "settings": {
+    "roundCount": 4,
+    "questionsPerRound": 5,
+    "playerSelectionSeconds": 20,
+    "textAnswerSeconds": 40,
+    "votingSeconds": 20,
+    "photoSeconds": 45,
+    "drawingSeconds": 90,
+    "resultPresentationSeconds": 8,
+    "finalRoundEnabled": true,
+    "finalDrawingPasses": 3
+  }
+}

@@ -1,0 +1,1 @@
+{"key":"text_party_story","type":"TextAnswer","textPl":"Opowiedz historię","textEn":"Tell a story","minimumPlayers":3,"sortOrder":1,"isActive":true,"concurrencyToken":"question-token","packageConcurrencyToken":"package-token"}

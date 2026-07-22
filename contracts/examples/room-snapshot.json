@@ -1,0 +1,35 @@
+{
+  "roomCode": "7KQX",
+  "phase": "Lobby",
+  "stateVersion": 3,
+  "displayConnected": true,
+  "minimumPlayers": 3,
+  "maximumPlayers": 10,
+  "canStart": false,
+  "settings": {
+    "roundCount": 4,
+    "questionsPerRound": 5,
+    "playerSelectionSeconds": 20,
+    "textAnswerSeconds": 40,
+    "votingSeconds": 20,
+    "photoSeconds": 45,
+    "drawingSeconds": 90,
+    "resultPresentationSeconds": 8,
+    "finalRoundEnabled": true,
+    "finalDrawingPasses": 3
+  },
+  "players": [
+    {
+      "id": "770c75e2-a3df-47fd-a454-7e96063be120",
+      "nickname": "Wojtek",
+      "isHost": true,
+      "isReady": false,
+      "isConnected": true,
+      "hasProfilePhoto": false,
+      "profilePhotoUrl": null,
+      "score": 0
+    }
+  ],
+  "createdAtUtc": "2026-07-20T16:00:00+00:00",
+  "startedAtUtc": null
+}

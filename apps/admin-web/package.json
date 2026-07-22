@@ -1,0 +1,50 @@
+{
+  "name": "admin-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:e2e:categories": "bash ../../scripts/test-admin-categories-e2e.sh",
+    "test:e2e:categories:playwright": "playwright test e2e/content-categories.spec.ts",
+    "test:e2e:questions-list": "bash ../../scripts/test-admin-questions-list-e2e.sh",
+    "test:e2e:questions-list:playwright": "playwright test e2e/content-questions-list.spec.ts",
+    "test:e2e:question-forms": "bash ../../scripts/test-admin-question-forms-e2e.sh",
+    "test:e2e:question-forms:playwright": "playwright test e2e/content-question-forms.spec.ts",
+    "test:e2e:publishing": "bash ../../scripts/test-admin-package-publishing-e2e.sh",
+    "test:e2e:publishing:playwright": "playwright test e2e/content-package-publishing.spec.ts",
+    "format:check": "prettier --check .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "eslint-plugin-testing-library": "^7.16.2",
+    "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.5",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.64.0",
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
+  }
+}

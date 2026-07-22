@@ -1,0 +1,21 @@
+{
+  "roomCode": "7KQX",
+  "playerId": "1b45ad30-78bf-47b3-9ef6-98ac4eaf71c3",
+  "reconnectToken": "another-example-one-time-raw-token",
+  "snapshot": {
+    "roomCode": "7KQX",
+    "phase": "Lobby",
+    "stateVersion": 2,
+    "displayConnected": false,
+    "minimumPlayers": 3,
+    "maximumPlayers": 10,
+    "canStart": false,
+    "settings": { "roundCount": 4, "questionsPerRound": 5, "playerSelectionSeconds": 20, "textAnswerSeconds": 40, "votingSeconds": 20, "photoSeconds": 45, "drawingSeconds": 90, "resultPresentationSeconds": 8, "finalRoundEnabled": true, "finalDrawingPasses": 3 },
+    "players": [
+      { "id": "770c75e2-a3df-47fd-a454-7e96063be120", "nickname": "Wojtek", "isHost": true, "isReady": false, "isConnected": false, "hasProfilePhoto": false, "profilePhotoUrl": null, "score": 0 },
+      { "id": "1b45ad30-78bf-47b3-9ef6-98ac4eaf71c3", "nickname": "Kasia", "isHost": false, "isReady": false, "isConnected": false, "hasProfilePhoto": false, "profilePhotoUrl": null, "score": 0 }
+    ],
+    "createdAtUtc": "2026-07-20T16:00:00+00:00",
+    "startedAtUtc": null
+  }
+}
