@@ -105,6 +105,6 @@ Skrypt `scripts/test-ios-drawing-answer-integration.sh` wykonuje `build-for-test
 
 ## Granice dalszych prac
 
-6B.5 domyka techniczny zakres lokalnego storage; cały etap 6B pozostaje oczekujący na formalny audyt. Retencja prawidłowo referencjonowanych odpowiedzi wymaga osobnej polityki lifecycle pokojów i nie jest częścią cleanupów 6B.2–6B.5.
+Etapy 6B.1–6B.5 domykają techniczny zakres lokalnego storage, a cały Etap 6B został formalnie odebrany po końcowym audycie backendu. Retencja prawidłowo referencjonowanych odpowiedzi wymaga osobnej polityki lifecycle pokojów i nie jest częścią cleanupów 6B.2–6B.5.
 
 Backup i restore, provider chmurowy, migracja między providerami, CDN, signed URLs, administracyjne zarządzanie mediami oraz produkcyjny deployment należą do późniejszych prac operations/deployment. Pełne Mixed Client E2E pozostaje osobnym hardeningiem infrastruktury testowej i nie jest częścią storage 6B.
