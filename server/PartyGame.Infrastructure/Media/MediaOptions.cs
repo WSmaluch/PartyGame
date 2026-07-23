@@ -21,6 +21,10 @@ public sealed class MediaOptions
     public bool UntrackedFileCleanupEnabled { get; set; } = true;
     public int UntrackedFileCleanupBatchSize { get; set; } = 25;
     public int UntrackedFileCleanupGracePeriodMinutes { get; set; } = 60;
+    public bool DiagnosticsEnabled { get; set; } = true;
+    public int DiagnosticsCacheSeconds { get; set; } = 30;
+    public int WarningFreePercent { get; set; } = 10;
+    public int CriticalFreePercent { get; set; } = 5;
 }
 
 public sealed class DrawingMediaOptions

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using PartyGame.Api.Endpoints;
+using PartyGame.Api.Health;
 using PartyGame.Api.Hubs;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Rooms;
@@ -46,10 +47,17 @@ builder.Services.AddOptions<MediaOptions>()
     .Validate(options => options.Provider == "LocalFileSystem", "Only the LocalFileSystem media provider is available in this release.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath), "MediaStorage:RootPath is required.")
     .Validate(options => options.UntrackedFileCleanupGracePeriodMinutes > 0, "MediaStorage:UntrackedFileCleanupGracePeriodMinutes must be greater than zero.")
+    .Validate(options => options.DiagnosticsCacheSeconds >= 0, "MediaStorage:DiagnosticsCacheSeconds must not be negative.")
+    .Validate(options => options.CriticalFreePercent > 0, "MediaStorage:CriticalFreePercent must be greater than zero.")
+    .Validate(options => options.WarningFreePercent > options.CriticalFreePercent && options.WarningFreePercent <= 100, "MediaStorage:WarningFreePercent must be greater than CriticalFreePercent and at most 100.")
     .ValidateOnStart();
 builder.Services.Configure<DrawingMediaOptions>(builder.Configuration.GetSection(DrawingMediaOptions.SectionName));
 builder.Services.AddSingleton<IMediaStorage, LocalMediaStorage>();
 builder.Services.AddSingleton<ILocalMediaFileCatalog, LocalMediaFileCatalog>();
+builder.Services.AddSingleton<IMediaStorageProbe, LocalMediaStorageProbe>();
+builder.Services.AddSingleton<IStorageVolumeInfoProvider, LocalStorageVolumeInfoProvider>();
+builder.Services.AddSingleton<IMediaStorageDiagnosticsService, LocalMediaStorageDiagnosticsService>();
+builder.Services.AddHealthChecks().AddCheck<MediaStorageHealthCheck>("media-storage", tags: ["storage"]);
 builder.Services.AddScoped<IProfilePhotoCleanupService, ProfilePhotoCleanupService>();
 builder.Services.AddScoped<IOrphanedGameMediaCleanupService, OrphanedGameMediaCleanupService>();
 builder.Services.AddScoped<IUntrackedMediaFileCleanupService, UntrackedMediaFileCleanupService>();
@@ -179,6 +187,20 @@ app.MapGet("/health", (IGameClock clock) =>
         clock.UtcNow)))
     .WithName("GetHealth")
     .Produces<HealthResponse>(StatusCodes.Status200OK);
+
+app.MapGet("/health/storage", async (
+    IMediaStorageDiagnosticsService diagnostics,
+    CancellationToken cancellationToken) =>
+{
+    var result = await diagnostics.GetAsync(cancellationToken);
+    var statusCode = result.Status is MediaStorageDiagnosticStatus.Unhealthy or MediaStorageDiagnosticStatus.NotSupported
+        ? StatusCodes.Status503ServiceUnavailable
+        : StatusCodes.Status200OK;
+    return Results.Json(result, statusCode: statusCode);
+})
+    .WithName("GetMediaStorageHealth")
+    .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status200OK)
+    .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status503ServiceUnavailable);
 
 app.MapHub<GameHub>("/hubs/game");
 app.MapRoomEndpoints();

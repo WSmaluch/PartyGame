@@ -161,9 +161,11 @@ public sealed class LocalMediaFileCatalog(
 
         try
         {
+            var fileInfo = new FileInfo(path);
             return new LocalMediaFileEntry(
                 storageKey,
-                new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero));
+                new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                fileInfo.Length);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

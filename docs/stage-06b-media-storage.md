@@ -1,4 +1,4 @@
-# Etap 6B.1–6B.4 — trwałe przechowywanie i cleanup mediów
+# Etap 6B.1–6B.5 — trwałe przechowywanie, cleanup i diagnostyka mediów
 
 ## Cel i zakres
 
@@ -43,7 +43,11 @@ Sekcja `MediaStorage` w `server/PartyGame.Api/appsettings.json` ma domyślnie:
   "OrphanedGameMediaCleanupBatchSize": 25,
   "UntrackedFileCleanupEnabled": true,
   "UntrackedFileCleanupBatchSize": 25,
-  "UntrackedFileCleanupGracePeriodMinutes": 60
+  "UntrackedFileCleanupGracePeriodMinutes": 60,
+  "DiagnosticsEnabled": true,
+  "DiagnosticsCacheSeconds": 30,
+  "WarningFreePercent": 10,
+  "CriticalFreePercent": 5
 }
 ```
 
@@ -77,6 +81,14 @@ Bezpośrednio przed usunięciem reconciler ponownie odczytuje timestamp pliku i 
 
 Reconciler jest przeznaczony dla obecnej topologii pojedynczego hosta i jednego lokalnego wolumenu. Nie zapewnia koordynacji wielu procesów współdzielących storage. 6B.4 nie zmienia API ani klientów iOS, Display i Admin.
 
+## Storage-aware health i pojemność (6B.5)
+
+`GET /health/storage` oraz nazwany ASP.NET Core health check `media-storage` uruchamiają na żądanie `IMediaStorageDiagnosticsService`. Dla `LocalFileSystem` serwis tworzy unikalny mały plik wyłącznie w `.diagnostics`, zapisuje losowe bajty, odczytuje je, porównuje i usuwa plik; po błędzie podejmuje cleanup. Probe nie używa drzew `profile`, `photo-answer` ani `drawing-answer` i nie zostawia pliku po sukcesie.
+
+Wynik zawiera tylko bezpieczne metryki: status, provider, wynik probe, całkowitą/dostępną/użytą pojemność wolumenu, procent wolnego miejsca, liczbę `MediaAsset`, liczbę i bajty rozpoznanych finalnych plików oraz kody ostrzeżeń. Nie zawiera root path, mount point, storage key, nazw plików, identyfikatorów pokojów lub graczy ani stack trace. `ILocalMediaFileCatalog` nadal liczy wyłącznie dokładne finalne wzorce i pomija `.tmp`, ukryte i nieznane pliki oraz symlinki.
+
+Pomiary są cache’owane przez `DiagnosticsCacheSeconds` (domyślnie 30), aby częste i równoległe health requesty nie skanowały katalogu wielokrotnie; wartość `0` jawnie wyłącza cache. `Healthy` wymaga udanego probe i wolnego miejsca powyżej `WarningFreePercent`; `Degraded` oznacza miejsce nie większe niż warning, ale powyżej `CriticalFreePercent`; `Unhealthy` oznacza błąd probe, brak metryk pojemności albo miejsce nie większe niż critical. Progi są walidowane przy starcie: critical > 0, warning > critical i <= 100, cache >= 0. Nielokalny provider otrzymuje kontrolowany `NotSupported`, nigdy fałszywy `Healthy`.
+
 ## Trwałość i testy
 
 Migracja `Stage6BPersistentMediaStorage` rozszerza `MediaAssets` o typ i kontekst oraz dodaje referencję bieżącego assetu profilu. Zachowane odpowiedzi z 6A są przypisywane do odpowiedniego pokoju, gracza i pytania podczas migracji.
@@ -93,6 +105,6 @@ Skrypt `scripts/test-ios-drawing-answer-integration.sh` wykonuje `build-for-test
 
 ## Granice dalszych prac
 
-Do formalnego domknięcia lokalnego storage 6B pozostaje storage-aware health i podstawowa diagnostyka pojemności. Retencja prawidłowo referencjonowanych odpowiedzi wymaga osobnej polityki lifecycle pokojów i nie jest częścią cleanupów 6B.2–6B.4.
+6B.5 domyka techniczny zakres lokalnego storage; cały etap 6B pozostaje oczekujący na formalny audyt. Retencja prawidłowo referencjonowanych odpowiedzi wymaga osobnej polityki lifecycle pokojów i nie jest częścią cleanupów 6B.2–6B.5.
 
 Backup i restore, provider chmurowy, migracja między providerami, CDN, signed URLs, administracyjne zarządzanie mediami oraz produkcyjny deployment należą do późniejszych prac operations/deployment. Pełne Mixed Client E2E pozostaje osobnym hardeningiem infrastruktury testowej i nie jest częścią storage 6B.

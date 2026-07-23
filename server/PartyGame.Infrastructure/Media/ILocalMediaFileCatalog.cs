@@ -15,4 +15,5 @@ public interface ILocalMediaFileCatalog
 
 public sealed record LocalMediaFileEntry(
     string StorageKey,
-    DateTimeOffset LastWriteTimeUtc);
+    DateTimeOffset LastWriteTimeUtc,
+    long ByteLength = 0);

@@ -96,6 +96,7 @@ Kontrola zdrowia i Swagger:
 
 ```bash
 curl http://localhost:5050/health
+curl http://localhost:5050/health/storage
 open http://localhost:5050/swagger
 ```
 
@@ -104,6 +105,8 @@ Hub SignalR jest dostępny pod `/hubs/game`; metoda diagnostyczna `Ping` zwraca 
 Wszystkie media — ProfilePhoto, PhotoAnswer i DrawingAnswer — korzystają z trwałego `IMediaStorage`. Domyślna konfiguracja `MediaStorage:RootPath` to `data/media`, liczona względem katalogu aplikacji; w hostingu należy wskazać trwały wolumen. Runtime media są ignorowane przez Git. SQLite przechowuje opaque klucze, MIME type, hash, wymiary i kontekst pokoju/gracza, nigdy absolutne ścieżki.
 
 Upload waliduje limit, magic bytes i rzeczywisty format obrazu, usuwa metadane i zapisuje atomowo z kompensacją błędu. Odpowiedzi zdjęciowe oraz profile są normalizowane do JPEG, a DrawingAnswer zachowuje PNG i odrzuca pusty canvas. Media są udostępniane wyłącznie przez `/api/media/{mediaAssetId}/{variant}` albo istniejący endpoint zdjęcia profilu. Szczegóły: [Etap 6B.1](docs/stage-06b-media-storage.md).
+
+`GET /health/storage` wykonuje na żądanie bezpieczną diagnostykę wyłącznie lokalnego providera: krótki write/read/delete probe, pojemność wolumenu oraz liczniki rekordów i rozpoznanych finalnych plików. Wynik ma status `Healthy`, `Degraded` lub `Unhealthy`; domyślne progi wolnego miejsca to odpowiednio 10% (warning) i 5% (critical), a pomiar jest cache’owany przez 30 sekund. Odpowiedź nie zawiera ścieżek, storage keys ani identyfikatorów użytkowników. Wolumen trwały, backup i monitoring pozostają odpowiedzialnością deploymentu/operations.
 
 ## Test z iPhone'a w tej samej sieci Wi-Fi
 
