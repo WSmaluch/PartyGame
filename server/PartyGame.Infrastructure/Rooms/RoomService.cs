@@ -20,6 +20,7 @@ public sealed class RoomService(
     GamePlanner gamePlanner,
     GameStateMachine stateMachine,
     IMediaStorage mediaStorage,
+    IProfilePhotoCleanupService profilePhotoCleanup,
     ILogger<RoomService> logger) : IRoomService
 {
     private static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(30);
@@ -257,9 +258,16 @@ public sealed class RoomService(
             return changed;
         }, cancellationToken);
 
-    public Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default) =>
-        MutateAuthorizedAsync(roomCode, playerId, token, (room, player, now) =>
+    public async Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default)
+    {
+        // The upload endpoint authorizes before it writes the file. A concurrent
+        // replacement can finish during that write, so discard that authorization
+        // read before entering the room lock and loading the authoritative state.
+        dbContext.ChangeTracker.Clear();
+        Guid? previousAssetId = null;
+        var result = await MutateAuthorizedAsync(roomCode, playerId, token, (room, player, now) =>
         {
+            previousAssetId = player.ProfilePhotoMediaAssetId;
             var asset = new MediaAsset
             {
                 Id = mediaAssetId,
@@ -283,6 +291,24 @@ public sealed class RoomService(
             player.HasProfilePhoto = true;
             return true;
         }, cancellationToken);
+
+        if (previousAssetId is { } oldAssetId && oldAssetId != mediaAssetId)
+        {
+            try
+            {
+                await profilePhotoCleanup.CleanupAsync(oldAssetId, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    "Profile photo cleanup failed after committing replacement of media asset {MediaAssetId}; error type {ErrorType}",
+                    oldAssetId,
+                    exception.GetType().Name);
+            }
+        }
+
+        return result;
+    }
 
     public Task<RoomMutationResult> DisconnectPlayerAsync(string roomCode, Guid playerId, CancellationToken cancellationToken = default) =>
         MutateAsync(roomCode, (room, now) =>

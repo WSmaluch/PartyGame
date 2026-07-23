@@ -48,6 +48,7 @@ builder.Services.AddOptions<MediaOptions>()
     .ValidateOnStart();
 builder.Services.Configure<DrawingMediaOptions>(builder.Configuration.GetSection(DrawingMediaOptions.SectionName));
 builder.Services.AddSingleton<IMediaStorage, LocalMediaStorage>();
+builder.Services.AddScoped<IProfilePhotoCleanupService, ProfilePhotoCleanupService>();
 builder.Services.AddSingleton<PartyGame.Api.Contracts.IPhotoMediaUrlProvider, PartyGame.Api.Contracts.PhotoMediaUrlProvider>();
 builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
@@ -116,9 +117,11 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
     var clock = scope.ServiceProvider.GetRequiredService<IGameClock>();
+    var profilePhotoCleanup = scope.ServiceProvider.GetRequiredService<IProfilePhotoCleanupService>();
 
     await PartyGame.Infrastructure.Persistence.Seed.ContentSeeder.SeedAsync(dbContext, clock);
     await BackfillProfilePhotos.RunAsync(scope.ServiceProvider);
+    await profilePhotoCleanup.CleanupUnusedAsync();
 
     var roomsWithLiveConnections = await dbContext.GameRooms
         .Include(room => room.Players)

@@ -5,7 +5,9 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Api.Contracts;
+using PartyGame.Domain.Game;
 using PartyGame.Domain.Rooms;
+using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 
 namespace PartyGame.Tests.Api;
@@ -109,6 +111,12 @@ public sealed class RoomEndpointTests(PartyGameApiFactory factory) : IClassFixtu
         var jpeg = await PhotoAnswerTestHarness.ImageAsync();
         var first = await UploadAsync(host, jpeg, "image/jpeg", "untrusted/../../photo.jpg");
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        MediaAsset firstAsset;
+        await using (var firstScope = factory.Services.CreateAsyncScope())
+        {
+            var firstDb = firstScope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+            firstAsset = await firstDb.MediaAssets.SingleAsync(asset => asset.MediaKind == PartyGame.Domain.Game.MediaKind.ProfilePhoto);
+        }
 
         var png = await PhotoAnswerTestHarness.ImageAsync(png: true);
         var second = await UploadAsync(host, png, "image/png", "photo.png");
@@ -125,7 +133,9 @@ public sealed class RoomEndpointTests(PartyGameApiFactory factory) : IClassFixtu
         var asset = await db.MediaAssets.SingleAsync(asset => asset.Id == player.ProfilePhotoMediaAssetId);
         Assert.Equal(PartyGame.Domain.Game.MediaKind.ProfilePhoto, asset.MediaKind);
         Assert.Equal(host.PlayerId, asset.PlayerId);
-        Assert.Equal(2, await db.MediaAssets.CountAsync(asset => asset.MediaKind == PartyGame.Domain.Game.MediaKind.ProfilePhoto));
+        Assert.Single(await db.MediaAssets.Where(asset => asset.MediaKind == PartyGame.Domain.Game.MediaKind.ProfilePhoto).ToListAsync());
+        Assert.False(File.Exists(MediaStoragePathResolver.ResolveStoragePath(factory.MediaRootPath, firstAsset.DisplayStorageKey)));
+        Assert.False(File.Exists(MediaStoragePathResolver.ResolveStoragePath(factory.MediaRootPath, firstAsset.ThumbnailStorageKey)));
     }
 
     [Fact]

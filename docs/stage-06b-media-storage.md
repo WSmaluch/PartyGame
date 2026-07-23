@@ -1,10 +1,10 @@
-# Etap 6B.1 — trwałe przechowywanie mediów
+# Etap 6B.1–6B.2 — trwałe przechowywanie mediów i cleanup zdjęć profilu
 
 ## Cel i zakres
 
 Etap 6B.1 wprowadza trwały, lokalny provider plikowy oraz metadane SQLite dla zdjęć profilu, odpowiedzi fotograficznych i odpowiedzi rysunkowych. Klient nigdy nie otrzymuje ścieżki systemu plików: operuje wyłącznie na istniejących adresach API i identyfikatorach assetów.
 
-Zakres nie obejmuje dostawców chmurowych, CDN, signed URLs, wdrożenia produkcyjnego, retencji starych plików ani orkiestracji Mixed Client E2E.
+Zakres nie obejmuje dostawców chmurowych, CDN, signed URLs, wdrożenia produkcyjnego, retencji odpowiedzi do gry ani orkiestracji Mixed Client E2E.
 
 ## Przepływy mediów
 
@@ -20,7 +20,7 @@ Display Web i iOS nadal korzystają z tych samych kontraktów URL. Nie znają ka
 
 `IMediaStorage` jest neutralną abstrakcją infrastruktury. Przyjmuje strumień, deklarowany MIME type i kontekst zapisu, a zwraca opaque storage keys, wymiary, długość i SHA-256. Jedyny provider 6B.1, `LocalMediaStorage`, zapisuje dane pod konfigurowanym katalogiem trwałym. Ścieżka względna jest liczona względem katalogu aplikacji; w środowisku produkcyjnym powinna wskazywać wolumen trwały.
 
-Każdy asset ma typ wyliczeniowy `MediaKind` (`ProfilePhoto`, `PhotoAnswer`, `DrawingAnswer`) oraz `RoomId`, `PlayerId` i, gdy dotyczy, `QuestionInstanceId`. Zapis profilu dostaje nowy UUID assetu przed zapisem, dlatego kolejne uploady nie mogą nadpisać starego pliku. Aktualny profil wskazuje `Player.ProfilePhotoMediaAssetId`; stare assety pozostają do przyszłej polityki retencji.
+Każdy asset ma typ wyliczeniowy `MediaKind` (`ProfilePhoto`, `PhotoAnswer`, `DrawingAnswer`) oraz `RoomId`, `PlayerId` i, gdy dotyczy, `QuestionInstanceId`. Zapis profilu dostaje nowy UUID assetu przed zapisem, dlatego kolejne uploady nie mogą nadpisać starego pliku. Aktualny profil wskazuje `Player.ProfilePhotoMediaAssetId`.
 
 Warianty `display` i `thumbnail` mają osobne opaque keys. Endpoint odczytu najpierw wyszukuje metadane w SQLite, a następnie otwiera klucz przez provider; nie przyjmuje ścieżki lokalnej od klienta.
 
@@ -38,11 +38,22 @@ Sekcja `MediaStorage` w `server/PartyGame.Api/appsettings.json` ma domyślnie:
 {
   "Provider": "LocalFileSystem",
   "RootPath": "data/media",
-  "ProfilePhotoMaximumUploadBytes": 5242880
+  "ProfilePhotoMaximumUploadBytes": 5242880,
+  "ProfilePhotoCleanupBatchSize": 25
 }
 ```
 
 `RootPath` nie może wskazywać katalogu tymczasowego procesu. Dla hostingu należy podać katalog na trwałym wolumenie i objąć go backupem zgodnie z polityką środowiska.
+
+## Cleanup zastąpionych zdjęć profilu (6B.2)
+
+Po pomyślnym zapisie nowych wariantów i zatwierdzeniu w SQLite przełączenia `Player.ProfilePhotoMediaAssetId`, aplikacja próbuje usunąć poprzedni asset typu `ProfilePhoto`. Przed każdym usunięciem wariantu oraz bezpośrednio przed usunięciem rekordu sprawdza ponownie, że żaden `Player` nie wskazuje assetu. Dzięki temu równoległe uploady nie usuwają aktualnego zdjęcia.
+
+Cleanup usuwa kolejno warianty `display` i `thumbnail`, a dopiero potem rekord `MediaAsset`. Usunięcie nieistniejącego pliku jest idempotentne. Gdy usunięcie pliku lub rekordu się nie powiedzie, rekord pozostaje w SQLite do ponownej próby; udany upload nie jest cofany. Logi diagnostyczne zawierają identyfikator assetu i typ błędu, nigdy fizyczną ścieżkę pliku.
+
+Przy starcie hosta wykonywana jest ograniczona do `ProfilePhoto` próba ponowienia dla nieużywanych assetów. Pobiera maksymalnie `ProfilePhotoCleanupBatchSize` kandydatów (domyślnie 25), stabilnie według `CreatedAtUtc`, a następnie `Id`. Nie obejmuje to `PhotoAnswer` ani `DrawingAnswer` i nie wprowadza migracji schematu.
+
+Etap 6B.2 nie zmienia klientów iOS, Display ani Admin oraz nie zmienia ich kontraktów API.
 
 ## Trwałość i testy
 
@@ -60,4 +71,4 @@ Skrypt `scripts/test-ios-drawing-answer-integration.sh` wykonuje `build-for-test
 
 ## Kolejne części 6B
 
-Do następnych etapów pozostają provider chmurowy i migracja między providerami, CDN/signed URLs, administracyjne zarządzanie mediami, polityka retencji i usuwania osieroconych plików oraz pełne Mixed Client E2E hardening.
+Do następnych etapów pozostają provider chmurowy i migracja między providerami, CDN/signed URLs, administracyjne zarządzanie mediami, polityka retencji odpowiedzi do gry i innych osieroconych plików oraz pełne Mixed Client E2E hardening.

@@ -16,6 +16,7 @@ public sealed class MediaOptions
     public int JpegQuality { get; set; } = 85;
     public int ThumbnailJpegQuality { get; set; } = 80;
     public int TemporaryFileRetentionMinutes { get; set; } = 60;
+    public int ProfilePhotoCleanupBatchSize { get; set; } = 25;
 }
 
 public sealed class DrawingMediaOptions
