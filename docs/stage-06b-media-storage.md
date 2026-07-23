@@ -39,7 +39,8 @@ Sekcja `MediaStorage` w `server/PartyGame.Api/appsettings.json` ma domyślnie:
   "Provider": "LocalFileSystem",
   "RootPath": "data/media",
   "ProfilePhotoMaximumUploadBytes": 5242880,
-  "ProfilePhotoCleanupBatchSize": 25
+  "ProfilePhotoCleanupBatchSize": 25,
+  "OrphanedGameMediaCleanupBatchSize": 25
 }
 ```
 
@@ -54,6 +55,14 @@ Cleanup usuwa kolejno warianty `display` i `thumbnail`, a dopiero potem rekord `
 Przy starcie hosta wykonywana jest ograniczona do `ProfilePhoto` próba ponowienia dla nieużywanych assetów. Pobiera maksymalnie `ProfilePhotoCleanupBatchSize` kandydatów (domyślnie 25), stabilnie według `CreatedAtUtc`, a następnie `Id`. Nie obejmuje to `PhotoAnswer` ani `DrawingAnswer` i nie wprowadza migracji schematu.
 
 Etap 6B.2 nie zmienia klientów iOS, Display ani Admin oraz nie zmienia ich kontraktów API.
+
+## Cleanup osieroconych mediów gry (6B.3)
+
+6B.3 nie jest retencją poprawnych odpowiedzi. Ograniczony startup batch kwalifikuje wyłącznie rekord `PhotoAnswer`, dla którego nie istnieje `PhotoAnswerSubmission`, albo rekord `DrawingAnswer`, dla którego nie istnieje `DrawingAnswerSubmission`. `ProfilePhoto` pozostaje obsługiwane wyłącznie przez cleanup 6B.2.
+
+Batch pobiera maksymalnie `OrphanedGameMediaCleanupBatchSize` kandydatów (domyślnie 25), stabilnie według `CreatedAtUtc`, a następnie `Id`. Przed usunięciem każdego wariantu i rekordu ponownie sprawdzany jest typ oraz brak submission. Cleanup usuwa idempotentnie `display` i `thumbnail`, a rekord DB dopiero po sukcesie obu operacji. Błąd pozostawia rekord do kolejnego startup retry i jest logowany przez ID, rodzaj oraz typ błędu bez ścieżki fizycznej.
+
+Mechanizm jest DB-led: nie skanuje finalnego filesystemu ani nie usuwa plików bez rekordu DB.
 
 ## Trwałość i testy
 

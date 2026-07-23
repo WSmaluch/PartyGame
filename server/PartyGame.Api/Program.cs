@@ -49,6 +49,7 @@ builder.Services.AddOptions<MediaOptions>()
 builder.Services.Configure<DrawingMediaOptions>(builder.Configuration.GetSection(DrawingMediaOptions.SectionName));
 builder.Services.AddSingleton<IMediaStorage, LocalMediaStorage>();
 builder.Services.AddScoped<IProfilePhotoCleanupService, ProfilePhotoCleanupService>();
+builder.Services.AddScoped<IOrphanedGameMediaCleanupService, OrphanedGameMediaCleanupService>();
 builder.Services.AddSingleton<PartyGame.Api.Contracts.IPhotoMediaUrlProvider, PartyGame.Api.Contracts.PhotoMediaUrlProvider>();
 builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
@@ -118,10 +119,12 @@ await using (var scope = app.Services.CreateAsyncScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
     var clock = scope.ServiceProvider.GetRequiredService<IGameClock>();
     var profilePhotoCleanup = scope.ServiceProvider.GetRequiredService<IProfilePhotoCleanupService>();
+    var orphanedGameMediaCleanup = scope.ServiceProvider.GetRequiredService<IOrphanedGameMediaCleanupService>();
 
     await PartyGame.Infrastructure.Persistence.Seed.ContentSeeder.SeedAsync(dbContext, clock);
     await BackfillProfilePhotos.RunAsync(scope.ServiceProvider);
     await profilePhotoCleanup.CleanupUnusedAsync();
+    await orphanedGameMediaCleanup.CleanupUnusedAsync();
 
     var roomsWithLiveConnections = await dbContext.GameRooms
         .Include(room => room.Players)
