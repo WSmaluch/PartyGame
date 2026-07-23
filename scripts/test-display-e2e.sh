@@ -47,7 +47,7 @@ GameFlow__DrawingAnswerRevealBaseSeconds=8 \
 GameFlow__DrawingAnswerRevealPerDrawingSeconds=0 \
 GameFlow__DrawingAnswerRevealMaximumSeconds=8 \
 GameFlow__DrawingAnswerResultsSeconds=4 \
-dotnet run --project server/PartyGame.Api/PartyGame.Api.csproj --no-restore --no-build --no-launch-profile >"${E2E_TMP}/api.log" 2>&1 &
+dotnet run --project server/PartyGame.Api/PartyGame.Api.csproj --no-restore --no-launch-profile >"${E2E_TMP}/api.log" 2>&1 &
 API_PID=$!
 
 echo "Waiting for API..."

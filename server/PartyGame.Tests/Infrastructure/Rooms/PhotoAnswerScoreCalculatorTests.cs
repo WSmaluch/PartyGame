@@ -67,7 +67,7 @@ public sealed class PhotoAnswerScoreCalculatorTests
 
     private static PhotoAnswerSubmission AddSubmission(PartyGameDbContext db, GameQuestionInstance question, Player author)
     {
-        var asset = new MediaAsset { Id = Guid.NewGuid(), DisplayStorageKey = $"{Guid.NewGuid():N}/display.jpg", ThumbnailStorageKey = $"{Guid.NewGuid():N}/thumbnail.jpg", Sha256 = new string('0', 64) };
+        var asset = new MediaAsset { Id = Guid.NewGuid(), MediaKind = MediaKind.PhotoAnswer, RoomId = question.Round.Session.RoomId, PlayerId = author.Id, QuestionInstanceId = question.Id, DisplayStorageKey = $"{Guid.NewGuid():N}/display.jpg", ThumbnailStorageKey = $"{Guid.NewGuid():N}/thumbnail.jpg", Sha256 = new string('0', 64) };
         var submission = new PhotoAnswerSubmission { Id = Guid.NewGuid(), QuestionInstanceId = question.Id, AuthorPlayerId = author.Id, MediaAssetId = asset.Id, MediaAsset = asset, ClientSubmissionId = Guid.NewGuid() };
         db.AddRange(asset, submission);
         return submission;

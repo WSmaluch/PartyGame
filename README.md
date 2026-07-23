@@ -101,9 +101,9 @@ open http://localhost:5050/swagger
 
 Hub SignalR jest dostępny pod `/hubs/game`; metoda diagnostyczna `Ping` zwraca `status: pong` i czas UTC serwera. REST lobby zaczyna się od `POST /api/rooms`. Pełny scenariusz i przykłady `curl` opisuje [Etap 1A i 1B](docs/stage-01-client-lobby.md).
 
-Zdjęcia profilowe trafiają domyślnie do systemowego katalogu tymczasowego `${TMPDIR}/PartyGame/media`, a nie do drzewa źródeł. Docelowy katalog można ustawić przez `MediaStorage:RootPath` w konfiguracji. Testy używają osobnych katalogów tymczasowych i usuwają je razem z bazą.
+Wszystkie media — ProfilePhoto, PhotoAnswer i DrawingAnswer — korzystają z trwałego `IMediaStorage`. Domyślna konfiguracja `MediaStorage:RootPath` to `data/media`, liczona względem katalogu aplikacji; w hostingu należy wskazać trwały wolumen. Runtime media są ignorowane przez Git. SQLite przechowuje opaque klucze, MIME type, hash, wymiary i kontekst pokoju/gracza, nigdy absolutne ścieżki.
 
-Odpowiedzi zdjęciowe używają `MediaStorage:RootPath` i JPEG. Rysunki DrawingAnswer korzystają z tego samego storage, zachowują PNG i odrzucają pusty canvas. Media są udostępniane wyłącznie przez `/api/media/{mediaAssetId}/{variant}`. Dema regresyjne: `./scripts/demo-player-selection-game.sh`, `./scripts/demo-text-answer-game.sh`, `./scripts/demo-photo-answer-game.sh`, `./scripts/demo-drawing-answer-game.sh` oraz dema mieszane.
+Upload waliduje limit, magic bytes i rzeczywisty format obrazu, usuwa metadane i zapisuje atomowo z kompensacją błędu. Odpowiedzi zdjęciowe oraz profile są normalizowane do JPEG, a DrawingAnswer zachowuje PNG i odrzuca pusty canvas. Media są udostępniane wyłącznie przez `/api/media/{mediaAssetId}/{variant}` albo istniejący endpoint zdjęcia profilu. Szczegóły: [Etap 6B.1](docs/stage-06b-media-storage.md).
 
 ## Test z iPhone'a w tej samej sieci Wi-Fi
 

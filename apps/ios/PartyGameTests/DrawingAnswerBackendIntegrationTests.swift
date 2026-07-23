@@ -52,6 +52,7 @@ final class DrawingAnswerBackendIntegrationTests: XCTestCase {
                 _ = try await realtime.attachPlayer(roomCode: access.roomCode, playerId: access.playerId,
                     reconnectToken: access.reconnectToken)
                 await realtime.disconnect()
+                try await Task.sleep(for: .seconds(1))
                 try await realtime.connect(baseURL: baseURL)
                 _ = try await realtime.attachPlayer(roomCode: access.roomCode, playerId: access.playerId,
                     reconnectToken: access.reconnectToken)

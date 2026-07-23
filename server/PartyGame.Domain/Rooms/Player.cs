@@ -10,6 +10,7 @@ public sealed class Player
     public bool IsReady { get; set; }
     public bool IsConnected { get; set; }
     public bool HasProfilePhoto { get; set; }
+    public Guid? ProfilePhotoMediaAssetId { get; set; }
     public string? ProfilePhotoStorageKey { get; set; }
     public string? ProfilePhotoContentType { get; set; }
     public DateTimeOffset JoinedAtUtc { get; set; }

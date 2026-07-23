@@ -3,7 +3,11 @@ namespace PartyGame.Domain.Game;
 public sealed class MediaAsset
 {
     public Guid Id { get; set; }
+    public MediaKind MediaKind { get; set; }
     public string StorageProvider { get; set; } = "Local";
+    public Guid RoomId { get; set; }
+    public Guid PlayerId { get; set; }
+    public Guid? QuestionInstanceId { get; set; }
     public string DisplayStorageKey { get; set; } = string.Empty;
     public string ThumbnailStorageKey { get; set; } = string.Empty;
     public string ContentType { get; set; } = "image/jpeg";

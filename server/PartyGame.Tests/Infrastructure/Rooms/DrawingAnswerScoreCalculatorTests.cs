@@ -73,7 +73,7 @@ public sealed class DrawingAnswerScoreCalculatorTests
 
     private static DrawingAnswerSubmission AddSubmission(PartyGameDbContext db, GameQuestionInstance question, Player author)
     {
-        var asset = new MediaAsset { Id = Guid.NewGuid(), DisplayStorageKey = $"{Guid.NewGuid():N}/display.png", ThumbnailStorageKey = $"{Guid.NewGuid():N}/thumbnail.png", ContentType = "image/png", Sha256 = new string('0', 64) }; var submission = new DrawingAnswerSubmission { Id = Guid.NewGuid(), QuestionInstanceId = question.Id, AuthorPlayerId = author.Id, MediaAssetId = asset.Id, MediaAsset = asset, ClientSubmissionId = Guid.NewGuid() }; db.AddRange(asset, submission); return submission;
+        var asset = new MediaAsset { Id = Guid.NewGuid(), MediaKind = MediaKind.DrawingAnswer, RoomId = question.Round.Session.RoomId, PlayerId = author.Id, QuestionInstanceId = question.Id, DisplayStorageKey = $"{Guid.NewGuid():N}/display.png", ThumbnailStorageKey = $"{Guid.NewGuid():N}/thumbnail.png", ContentType = "image/png", Sha256 = new string('0', 64) }; var submission = new DrawingAnswerSubmission { Id = Guid.NewGuid(), QuestionInstanceId = question.Id, AuthorPlayerId = author.Id, MediaAssetId = asset.Id, MediaAsset = asset, ClientSubmissionId = Guid.NewGuid() }; db.AddRange(asset, submission); return submission;
     }
 
     private static void AddVote(PartyGameDbContext db, GameQuestionInstance question, Player voter, DrawingAnswerSubmission drawing) => db.DrawingAnswerVotes.Add(new DrawingAnswerVote { Id = Guid.NewGuid(), QuestionInstanceId = question.Id, VoterPlayerId = voter.Id, SelectedDrawingAnswerId = drawing.Id });

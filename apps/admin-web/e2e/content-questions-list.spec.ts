@@ -125,7 +125,9 @@ test('real questions list filters, paginates and mutates content', async ({
     .filter({ hasText: 'question_0_copy' });
   await expect(duplicate).toBeVisible();
   await duplicate.getByRole('button', { name: 'Usuń' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Usuń' }).click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Usunąć to pytanie?' });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog.getByRole('button', { name: 'Usuń' }).click();
   await expect(duplicate).toHaveCount(0);
   await clearFilters();
   await page
@@ -145,7 +147,7 @@ test('real questions list filters, paginates and mutates content', async ({
   );
   const rowB = pageB.getByRole('row').filter({ hasText: 'question_0' });
   await rowB.getByRole('button', { name: 'Wyłącz' }).click();
-  await page.getByRole('button', { name: 'Włącz' }).click();
+  await page.getByRole('row').filter({ hasText: 'question_0' }).getByRole('button', { name: 'Wyłącz' }).click();
   await expect(page.getByRole('alert')).toContainText(
     'zmienione w innej sesji',
   );

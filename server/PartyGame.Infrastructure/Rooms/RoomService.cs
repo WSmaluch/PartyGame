@@ -257,11 +257,29 @@ public sealed class RoomService(
             return changed;
         }, cancellationToken);
 
-    public Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, string storageKey, string contentType, CancellationToken cancellationToken = default) =>
-        MutateAuthorizedAsync(roomCode, playerId, token, (_, player, _) =>
+    public Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default) =>
+        MutateAuthorizedAsync(roomCode, playerId, token, (room, player, now) =>
         {
-            player.ProfilePhotoStorageKey = storageKey;
-            player.ProfilePhotoContentType = contentType;
+            var asset = new MediaAsset
+            {
+                Id = mediaAssetId,
+                MediaKind = MediaKind.ProfilePhoto,
+                StorageProvider = "LocalFileSystem",
+                RoomId = room.Id,
+                PlayerId = player.Id,
+                DisplayStorageKey = storedMedia.DisplayStorageKey,
+                ThumbnailStorageKey = storedMedia.ThumbnailStorageKey,
+                ContentType = storedMedia.ContentType,
+                Width = storedMedia.Width,
+                Height = storedMedia.Height,
+                ByteLength = storedMedia.ByteLength,
+                Sha256 = storedMedia.Sha256,
+                CreatedAtUtc = now
+            };
+            dbContext.MediaAssets.Add(asset);
+            player.ProfilePhotoMediaAssetId = asset.Id;
+            player.ProfilePhotoStorageKey = null;
+            player.ProfilePhotoContentType = storedMedia.ContentType;
             player.HasProfilePhoto = true;
             return true;
         }, cancellationToken);
@@ -486,7 +504,11 @@ public sealed class RoomService(
             var asset = new MediaAsset
             {
                 Id = Guid.NewGuid(),
-                StorageProvider = "Local",
+                MediaKind = MediaKind.PhotoAnswer,
+                StorageProvider = "LocalFileSystem",
+                RoomId = room.Id,
+                PlayerId = player.Id,
+                QuestionInstanceId = questionInstanceId,
                 DisplayStorageKey = stored.DisplayStorageKey,
                 ThumbnailStorageKey = stored.ThumbnailStorageKey,
                 ContentType = stored.ContentType,
@@ -593,7 +615,7 @@ public sealed class RoomService(
                 logger.LogWarning(exception, "Drawing media write failed for room {RoomCode} and answer {DrawingAnswerId}", code, answerId);
                 throw new DrawingAnswerException("drawing_answer_storage_failed", "The drawing could not be stored.");
             }
-            var asset = new MediaAsset { Id = Guid.NewGuid(), StorageProvider = "Local", DisplayStorageKey = stored.DisplayStorageKey, ThumbnailStorageKey = stored.ThumbnailStorageKey, ContentType = stored.ContentType, Width = stored.Width, Height = stored.Height, ByteLength = stored.ByteLength, Sha256 = stored.Sha256, CreatedAtUtc = now };
+            var asset = new MediaAsset { Id = Guid.NewGuid(), MediaKind = MediaKind.DrawingAnswer, StorageProvider = "LocalFileSystem", RoomId = room.Id, PlayerId = player.Id, QuestionInstanceId = questionInstanceId, DisplayStorageKey = stored.DisplayStorageKey, ThumbnailStorageKey = stored.ThumbnailStorageKey, ContentType = stored.ContentType, Width = stored.Width, Height = stored.Height, ByteLength = stored.ByteLength, Sha256 = stored.Sha256, CreatedAtUtc = now };
             dbContext.MediaAssets.Add(asset); dbContext.DrawingAnswerSubmissions.Add(new DrawingAnswerSubmission { Id = answerId, QuestionInstanceId = questionInstanceId, AuthorPlayerId = player.Id, MediaAssetId = asset.Id, MediaAsset = asset, ClientSubmissionId = clientSubmissionId, SubmittedAtUtc = now });
             if (instance.DrawingAnswerSubmissions.Count >= instance.DrawingAnswerEligiblePlayers.Count) await stateMachine.ForceTransitionAsync(room.Session, now, cancellationToken);
             room.PublicStateChanged(now);

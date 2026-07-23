@@ -57,6 +57,37 @@ public sealed class LocalMediaStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveProfilePhotoAsync_NormalizesPngAndPersistsAcrossProviderRestart()
+    {
+        var storage = CreateStorage(minimum: 10);
+        await using var png = new MemoryStream();
+        using (var image = new Image<Rgba32>(480, 360, Color.MediumPurple)) await image.SaveAsPngAsync(png);
+        png.Position = 0;
+
+        var result = await storage.SaveProfilePhotoAsync(new ProfilePhotoMediaWriteRequest(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), png, png.Length, "image/png"));
+
+        Assert.StartsWith("profile/rooms/", result.DisplayStorageKey);
+        Assert.Equal("image/jpeg", result.ContentType);
+        var restarted = CreateStorage(minimum: 10);
+        await using var persisted = await restarted.OpenReadAsync(result.DisplayStorageKey);
+        Assert.NotNull(persisted);
+        Assert.True(persisted!.Length > 0);
+    }
+
+    [Fact]
+    public async Task ValidPngDeclaredAsJpeg_IsRejectedBySignatureBeforeDecode()
+    {
+        var storage = CreateStorage(minimum: 10);
+        await using var png = new MemoryStream();
+        using (var image = new Image<Rgba32>(400, 400, Color.Gold)) await image.SaveAsPngAsync(png);
+        png.Position = 0;
+
+        var exception = await Assert.ThrowsAsync<PhotoMediaException>(() => storage.SavePhotoAsync(Request(png, "image/jpeg")));
+        Assert.Equal("photo_answer_invalid_image", exception.Code);
+    }
+
+    [Fact]
     public async Task InvalidImageAndDimensions_ReturnControlledCodes()
     {
         var storage = CreateStorage();
@@ -81,6 +112,17 @@ public sealed class LocalMediaStorageTests : IDisposable
         Assert.False(await storage.ExistsAsync(result.DisplayStorageKey));
         Assert.Null(await storage.OpenReadAsync(result.DisplayStorageKey));
         await Assert.ThrowsAsync<InvalidOperationException>(() => storage.OpenReadAsync("../../secret"));
+    }
+
+    [Fact]
+    public void StoragePathResolver_UsesOneNormalizedRootAndRejectsTraversal()
+    {
+        var relativeRoot = Path.Combine("media-tests", Guid.NewGuid().ToString("N"));
+        var expected = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativeRoot));
+
+        Assert.Equal(expected, MediaStoragePathResolver.ResolveRootPath(relativeRoot));
+        Assert.Equal(expected, MediaStoragePathResolver.ResolveRootPath(expected));
+        Assert.Throws<InvalidOperationException>(() => MediaStoragePathResolver.ResolveStoragePath(expected, "../outside.jpg"));
     }
 
     [Fact]

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdminContentApiError, adminContentApi, type Category, type ContentPackage, type Question } from '../../api/adminContentApi';
+import { AdminContentApiError, adminContentApi, type Category, type ContentPackage, type Question, type QuestionMutation } from '../../api/adminContentApi';
 import { QuestionListPage } from './QuestionListPage';
 
 vi.mock('../../api/adminContentApi', async original => { const actual = await original<typeof import('../../api/adminContentApi')>(); return { ...actual, adminContentApi: { listQuestions: vi.fn(), getPackage: vi.fn(), listCategories: vi.fn(), updateQuestion: vi.fn(), duplicateQuestion: vi.fn(), deleteQuestion: vi.fn(), reorderQuestions: vi.fn() } }; });
@@ -41,5 +41,30 @@ describe('QuestionListPage', () => {
   it('wyłącza pytanie prawdziwym PATCH i zachowuje tokeny', async () => { vi.mocked(adminContentApi.updateQuestion).mockResolvedValue({ question: { ...question, isActive: false, isEnabled: false, concurrencyToken: 'q2' }, packageConcurrencyToken: 'pt2' }); renderPage(); await screen.findByText('Jak się masz?'); await userEvent.click(screen.getByRole('button', { name: 'Wyłącz' })); await waitFor(() => expect(adminContentApi.updateQuestion).toHaveBeenCalledWith('p1', 'q1', { isActive: false, concurrencyToken: 'q-token', packageConcurrencyToken: 'pt1' })); expect(within(screen.getByRole('row', { name: /Jak się masz/ })).getByText('Wyłączone')).toBeInTheDocument(); });
   it('pokazuje konflikt operacji i umożliwia odświeżenie', async () => { vi.mocked(adminContentApi.duplicateQuestion).mockRejectedValue(new AdminContentApiError(409, 'stare')); renderPage(); await screen.findByText('Jak się masz?'); await userEvent.click(screen.getByRole('button', { name: 'Duplikuj' })); expect(await screen.findByRole('alert')).toHaveTextContent('To pytanie zostało zmienione'); });
   it('otwiera modal usuwania, zachowuje go po błędzie i usuwa po sukcesie', async () => { vi.mocked(adminContentApi.deleteQuestion).mockRejectedValueOnce(new Error('Nie można')).mockResolvedValueOnce({ success: true, packageConcurrencyToken: 'pt2' }); renderPage(); await screen.findByText('Jak się masz?'); await userEvent.click(screen.getByRole('button', { name: 'Usuń' })); const dialog = screen.getByRole('dialog'); expect(dialog).toHaveFocus(); await userEvent.click(within(dialog).getByRole('button', { name: 'Usuń' })); expect(await screen.findByRole('alert')).toHaveTextContent('Nie można'); expect(screen.getByRole('dialog')).toBeInTheDocument(); await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Usuń' })); await waitFor(() => expect(screen.queryByText('Jak się masz?')).not.toBeInTheDocument()); });
+  it('zduplikowanie, usunięcie kopii z właściwym dialogiem i aktualizacja listy', async () => {
+    const duplicated = { ...question, id: 'q2', textPl: 'Kopia pytania', key: 'hello_copy' };
+    vi.mocked(adminContentApi.duplicateQuestion).mockResolvedValue({ question: duplicated, packageConcurrencyToken: 'pt2' } satisfies QuestionMutation);
+    vi.mocked(adminContentApi.deleteQuestion).mockResolvedValue({ success: true, packageConcurrencyToken: 'pt2' });
+    renderPage();
+    await screen.findByText('Jak się masz?');
+    let resolveSearch!: (value: ReturnType<typeof page>) => void;
+    vi.mocked(adminContentApi.listQuestions).mockImplementationOnce(() => new Promise(resolve => { resolveSearch = resolve; }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Duplikuj' }));
+    resolveSearch(page([question, duplicated]));
+
+    const copyRow = await screen.findByRole('row', { name: /Kopia pytania/ });
+    await userEvent.click(within(copyRow).getByRole('button', { name: 'Usuń' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Usunąć to pytanie?' });
+    expect(dialog).toBeVisible();
+
+    const deleteButton = within(dialog).getByRole('button', { name: 'Usuń' });
+    expect(deleteButton).toBeEnabled();
+
+    await userEvent.click(deleteButton);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Usunąć to pytanie?' })).not.toBeInTheDocument());
+    expect(screen.queryByText('Kopia pytania')).not.toBeInTheDocument();
+  });
   it('Published pozostawia filtry, ale ukrywa mutacje i tworzenie', async () => { vi.mocked(adminContentApi.getPackage).mockResolvedValue(pkg('Published')); renderPage(); await screen.findByText('Jak się masz?'); expect(screen.getByText(/tylko do odczytu/)).toBeInTheDocument(); expect(screen.getByLabelText('Wyszukaj')).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Wyłącz' })).not.toBeInTheDocument(); expect(screen.queryByText('Dodaj pytanie')).not.toBeInTheDocument(); });
 });

@@ -27,7 +27,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "$DESTINATION_ID" ]]; then
-  DESTINATION_ID="$(/usr/bin/xcrun simctl list devices available | sed -nE 's/.*iPhone 17 Pro \(([0-9A-F-]{36})\) \(Shutdown\).*/\1/p' | head -1)"
+  DESTINATION_ID="$(/usr/bin/xcrun simctl list devices available | sed -nE 's/.*iPhone 17 Pro \(([0-9A-F-]{36})\).*/\1/p' | head -1)"
 fi
 if [[ -z "$DESTINATION_ID" ]]; then echo "No available iPhone simulator." >&2; exit 1; fi
 
@@ -35,6 +35,13 @@ cd "$REPO_DIR"
 rm -f "$ACCESS_FILE"
 dotnet build server/PartyGame.Api/PartyGame.Api.csproj --no-restore
 dotnet build scripts/PartyGame.DrawingDemoClient/PartyGame.DrawingDemoClient.csproj --no-restore
+
+PARTYGAME_IOS_INTEGRATION_REQUIRED=1 \
+xcodebuild -project apps/ios/PartyGame.xcodeproj -scheme PartyGame \
+  -destination "platform=iOS Simulator,id=${DESTINATION_ID}" build-for-testing
+
+xcrun simctl boot "${DESTINATION_ID}" || true
+xcrun simctl bootstatus "${DESTINATION_ID}" || true
 
 ASPNETCORE_ENVIRONMENT=Development \
 ASPNETCORE_URLS=http://127.0.0.1:5050 \
@@ -61,8 +68,8 @@ DEMO_PID=$!
 
 PARTYGAME_IOS_INTEGRATION_REQUIRED=1 \
 xcodebuild -project apps/ios/PartyGame.xcodeproj -scheme PartyGame \
-  -destination "platform=iOS Simulator,id=${DESTINATION_ID}" test \
-  -only-testing:PartyGameTests/DrawingAnswerBackendIntegrationTests
+  -destination "platform=iOS Simulator,id=${DESTINATION_ID}" test-without-building \
+  -only-testing:PartyGameTests/DrawingAnswerBackendIntegrationTests | tee "${INTEGRATION_TMP}/xcodebuild.log"
 
 wait "$DEMO_PID"
 DEMO_PID=""

@@ -28,6 +28,8 @@ Domyślnie symulator używa `http://localhost:5050`. Na fizycznym iPhonie otwór
 
 SignalR używa pakietu `signalr-client-swift` i implementacji `GameRealtimeClient`. Klient obsługuje lobby, reconnect oraz prywatny stan i wysyłanie odpowiedzi dla czterech typów pytań.
 
+Adresy obrazów w snapshotach są bezpiecznymi URL-ami API: zdjęcia profilowe korzystają z endpointu pokoju, a odpowiedzi z `/api/media/{mediaAssetId}/{variant}`. Aplikacja nie otrzymuje ani nie zapisuje lokalnych ścieżek storage. Backend zapewnia trwałe przechowywanie i walidację obrazów; opis konfiguracji znajduje się w [Etapie 6B.1](../../docs/stage-06b-media-storage.md).
+
 Przy powtarzanych uruchomieniach CI/lokalnych można raz zbudować bundle testowy, a potem rozdzielić testy bez ponownej kompilacji:
 
 ```bash

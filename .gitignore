@@ -18,6 +18,7 @@ artifacts/
 *.sqlite
 *.sqlite3
 logs/
+data/media/
 *.log
 *.tmp
 *.temp
@@ -66,6 +67,8 @@ pnpm-debug.log*
 .AppleDouble
 .LSOverride
 ._*
+Library/
+*.bak
 
 # Editors and IDEs
 .vs/

@@ -157,7 +157,7 @@ public sealed class LobbySignalRTests(PartyGameApiFactory factory) : IClassFixtu
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{access.RoomCode}/players/{access.PlayerId}/profile-photo");
         request.Headers.Add("X-Player-Token", access.ReconnectToken);
-        var content = new ByteArrayContent([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+        var content = new ByteArrayContent(await PhotoAnswerTestHarness.ImageAsync());
         content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
         request.Content = new MultipartFormDataContent { { content, "file", "profile.jpg" } };
         (await _httpClient.SendAsync(request)).EnsureSuccessStatusCode();

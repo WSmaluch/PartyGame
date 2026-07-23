@@ -3,8 +3,9 @@ namespace PartyGame.Infrastructure.Media;
 public sealed class MediaOptions
 {
     public const string SectionName = "MediaStorage";
-    public string Provider { get; set; } = "Local";
-    public string? RootPath { get; set; }
+    public string Provider { get; set; } = "LocalFileSystem";
+    public string RootPath { get; set; } = "data/media";
+    public long ProfilePhotoMaximumUploadBytes { get; set; } = 5_242_880;
     public long MaximumUploadBytes { get; set; } = 10_485_760;
     public int MaximumImageWidth { get; set; } = 6000;
     public int MaximumImageHeight { get; set; } = 6000;

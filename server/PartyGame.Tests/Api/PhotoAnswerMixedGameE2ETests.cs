@@ -158,7 +158,7 @@ public sealed class PhotoAnswerMixedGameE2ETests
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{player.RoomCode}/players/{player.PlayerId}/profile-photo");
         request.Headers.Add("X-Player-Token", player.ReconnectToken);
-        var file = new ByteArrayContent([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+        var file = new ByteArrayContent(await PhotoAnswerTestHarness.ImageAsync());
         file.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
         request.Content = new MultipartFormDataContent { { file, "file", "profile.jpg" } };
         (await harness.Client.SendAsync(request)).EnsureSuccessStatusCode();

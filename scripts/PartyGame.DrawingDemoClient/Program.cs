@@ -213,7 +213,7 @@ static async Task<byte[]> Drawing(bool blank)
 
 static async Task<byte[]> ProfileImage(int index)
 {
-    using var image = new Image<Rgba32>(128, 128, index == 0 ? Color.Blue : index == 1 ? Color.Green : Color.Orange);
+    using var image = new Image<Rgba32>(400, 400, index == 0 ? Color.Blue : index == 1 ? Color.Green : Color.Orange);
     await using var stream = new MemoryStream(); await image.SaveAsync(stream, new JpegEncoder()); return stream.ToArray();
 }
 

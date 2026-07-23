@@ -41,9 +41,12 @@ builder.Services.AddOptions<PartyGame.Infrastructure.Rooms.GameFlowOptions>()
     .Bind(builder.Configuration.GetSection(PartyGame.Infrastructure.Rooms.GameFlowOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.Configure<MediaOptions>(builder.Configuration.GetSection(MediaOptions.SectionName));
+builder.Services.AddOptions<MediaOptions>()
+    .Bind(builder.Configuration.GetSection(MediaOptions.SectionName))
+    .Validate(options => options.Provider == "LocalFileSystem", "Only the LocalFileSystem media provider is available in this release.")
+    .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath), "MediaStorage:RootPath is required.")
+    .ValidateOnStart();
 builder.Services.Configure<DrawingMediaOptions>(builder.Configuration.GetSection(DrawingMediaOptions.SectionName));
-builder.Services.AddSingleton<IProfilePhotoStorage, ProfilePhotoStorage>();
 builder.Services.AddSingleton<IMediaStorage, LocalMediaStorage>();
 builder.Services.AddSingleton<PartyGame.Api.Contracts.IPhotoMediaUrlProvider, PartyGame.Api.Contracts.PhotoMediaUrlProvider>();
 builder.Services.AddSingleton<RoomNotifier>();
@@ -115,6 +118,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     var clock = scope.ServiceProvider.GetRequiredService<IGameClock>();
 
     await PartyGame.Infrastructure.Persistence.Seed.ContentSeeder.SeedAsync(dbContext, clock);
+    await BackfillProfilePhotos.RunAsync(scope.ServiceProvider);
 
     var roomsWithLiveConnections = await dbContext.GameRooms
         .Include(room => room.Players)

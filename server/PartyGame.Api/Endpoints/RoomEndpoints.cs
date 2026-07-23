@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using PartyGame.Api.Contracts;
 using PartyGame.Api.Hubs;
 using PartyGame.Domain.Rooms;
@@ -10,7 +11,6 @@ namespace PartyGame.Api.Endpoints;
 
 public static class RoomEndpoints
 {
-    private const long MaximumPhotoBytes = 5 * 1024 * 1024;
     private const string PlayerTokenHeader = "X-Player-Token";
 
     public static IEndpointRouteBuilder MapRoomEndpoints(this IEndpointRouteBuilder endpoints)
@@ -54,33 +54,29 @@ public static class RoomEndpoints
             HttpRequest request,
             IFormFile file,
             IRoomService roomService,
-            IProfilePhotoStorage storage,
+            IMediaStorage storage,
             RoomNotifier notifier,
             CancellationToken cancellationToken) =>
         {
             var authorization = await roomService.ResumeAsync(roomCode, playerId, ReadToken(request), cancellationToken);
-            var errors = ValidatePhoto(file);
-            if (errors.Count > 0)
+            var mediaAssetId = Guid.NewGuid();
+            await using var stream = file.OpenReadStream();
+            StoredMediaResult stored;
+            try
             {
-                return Results.ValidationProblem(errors);
+                stored = await storage.SaveProfilePhotoAsync(new ProfilePhotoMediaWriteRequest(
+                    mediaAssetId,
+                    authorization.Room.Id,
+                    authorization.Player.Id,
+                    stream,
+                    file.Length,
+                    file.ContentType), cancellationToken);
+            }
+            catch (PhotoMediaException exception)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["file"] = [exception.Message] });
             }
 
-            await using var stream = file.OpenReadStream();
-            if (!await HasValidSignatureAsync(stream, file.ContentType, cancellationToken))
-            {
-                return Results.ValidationProblem(new Dictionary<string, string[]>
-                {
-                    ["file"] = ["The file contents do not match the declared JPEG or PNG type."]
-                });
-            }
-            stream.Position = 0;
-            var previousStorageKey = authorization.Player.ProfilePhotoStorageKey;
-            var storageKey = await storage.SaveAsync(
-                authorization.Room.Code,
-                playerId,
-                stream,
-                file.ContentType,
-                cancellationToken);
             RoomMutationResult result;
             try
             {
@@ -88,18 +84,15 @@ public static class RoomEndpoints
                     authorization.Room.Code,
                     playerId,
                     ReadToken(request),
-                    storageKey,
-                    file.ContentType,
+                    mediaAssetId,
+                    stored,
                     cancellationToken);
             }
             catch
             {
-                await storage.DeleteAsync(storageKey, CancellationToken.None);
+                await storage.DeleteAsync(stored.DisplayStorageKey, CancellationToken.None);
+                await storage.DeleteAsync(stored.ThumbnailStorageKey, CancellationToken.None);
                 throw;
-            }
-            if (previousStorageKey is not null)
-            {
-                await storage.DeleteAsync(previousStorageKey, CancellationToken.None);
             }
             await notifier.NotifyAsync(result, cancellationToken);
             return Results.Ok(result.Room.ToSnapshot());
@@ -111,22 +104,31 @@ public static class RoomEndpoints
             Guid playerId,
             HttpResponse response,
             IRoomService roomService,
-            IProfilePhotoStorage storage,
+            PartyGame.Infrastructure.Persistence.PartyGameDbContext db,
+            IMediaStorage storage,
             CancellationToken cancellationToken) =>
         {
             var room = await roomService.GetAsync(roomCode, cancellationToken);
             var player = room.Players.SingleOrDefault(candidate => candidate.Id == playerId);
-            if (player is null || !player.HasProfilePhoto || player.ProfilePhotoStorageKey is null || player.ProfilePhotoContentType is null)
+            if (player is null || !player.HasProfilePhoto || player.ProfilePhotoMediaAssetId is null)
             {
                 return Results.NotFound();
             }
-            var stream = await storage.OpenReadAsync(player.ProfilePhotoStorageKey, cancellationToken);
+            var asset = await db.MediaAssets.AsNoTracking().SingleOrDefaultAsync(asset =>
+                asset.Id == player.ProfilePhotoMediaAssetId &&
+                asset.MediaKind == PartyGame.Domain.Game.MediaKind.ProfilePhoto &&
+                asset.RoomId == room.Id &&
+                asset.PlayerId == player.Id,
+                cancellationToken);
+            if (asset is null) return Results.NotFound();
+            var stream = await storage.OpenReadAsync(asset.DisplayStorageKey, cancellationToken);
             if (stream is null)
             {
                 return Results.NotFound();
             }
             response.Headers.CacheControl = "no-store";
-            return Results.Stream(stream, player.ProfilePhotoContentType);
+            response.ContentLength = stream.Length;
+            return Results.Stream(stream, asset.ContentType, enableRangeProcessing: true);
         });
 
         rooms.MapPost("/{roomCode}/questions/{questionInstanceId:guid}/photo-answers", async (
@@ -170,35 +172,6 @@ public static class RoomEndpoints
 
     private static string? ReadToken(HttpRequest request) => request.Headers[PlayerTokenHeader].FirstOrDefault();
 
-    private static Dictionary<string, string[]> ValidatePhoto(IFormFile file)
-    {
-        var errors = new Dictionary<string, string[]>();
-        if (file.Length == 0)
-        {
-            errors["file"] = ["The profile photo cannot be empty."];
-        }
-        else if (file.Length > MaximumPhotoBytes)
-        {
-            errors["file"] = ["The profile photo cannot exceed 5 MB."];
-        }
-        else if (file.ContentType is not ("image/jpeg" or "image/png"))
-        {
-            errors["file"] = ["Only JPEG and PNG profile photos are accepted."];
-        }
-        return errors;
-    }
-
-    private static async Task<bool> HasValidSignatureAsync(Stream stream, string contentType, CancellationToken cancellationToken)
-    {
-        var signature = new byte[8];
-        var read = await stream.ReadAsync(signature, cancellationToken);
-        return contentType switch
-        {
-            "image/jpeg" => read >= 3 && signature[0] == 0xff && signature[1] == 0xd8 && signature[2] == 0xff,
-            "image/png" => read == 8 && signature.AsSpan().SequenceEqual(new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }),
-            _ => false
-        };
-    }
 }
 
 public sealed record PhotoAnswerUploadResponse(Guid PhotoAnswerId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);

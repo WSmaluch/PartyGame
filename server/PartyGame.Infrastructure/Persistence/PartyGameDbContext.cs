@@ -101,6 +101,7 @@ public sealed class PartyGameDbContext(DbContextOptions<PartyGameDbContext> opti
             entity.Property(player => player.NormalizedNickname).HasMaxLength(Nickname.MaximumLength).IsRequired().UseCollation("NOCASE");
             entity.Property(player => player.ProfilePhotoStorageKey).HasMaxLength(120);
             entity.Property(player => player.ProfilePhotoContentType).HasMaxLength(32);
+            entity.HasOne<MediaAsset>().WithMany().HasForeignKey(player => player.ProfilePhotoMediaAssetId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(player => new { player.RoomId, player.NormalizedNickname }).IsUnique();
             entity.HasOne(player => player.Session)
                 .WithOne(session => session.Player)
@@ -279,11 +280,16 @@ public sealed class PartyGameDbContext(DbContextOptions<PartyGameDbContext> opti
         {
             entity.ToTable("MediaAssets");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.MediaKind).IsRequired();
             entity.Property(e => e.StorageProvider).HasMaxLength(32).IsRequired();
             entity.Property(e => e.DisplayStorageKey).HasMaxLength(320).IsRequired();
             entity.Property(e => e.ThumbnailStorageKey).HasMaxLength(320).IsRequired();
             entity.Property(e => e.ContentType).HasMaxLength(32).IsRequired();
             entity.Property(e => e.Sha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.HasIndex(e => e.DisplayStorageKey).IsUnique();
+            entity.HasOne<GameRoom>().WithMany().HasForeignKey(e => e.RoomId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Player>().WithMany().HasForeignKey(e => e.PlayerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GameQuestionInstance>().WithMany().HasForeignKey(e => e.QuestionInstanceId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PhotoAnswerEligiblePlayer>(entity =>

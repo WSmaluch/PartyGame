@@ -119,9 +119,9 @@ test.describe('Display DrawingAnswer E2E', () => {
           headers: { 'X-Player-Token': player.token },
           multipart: {
             file: {
-              name: 'profile.jpg',
-              mimeType: 'image/jpeg',
-              buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+              name: 'profile.png',
+              mimeType: 'image/png',
+              buffer: drawingPng(),
             },
           },
         },

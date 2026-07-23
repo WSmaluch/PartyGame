@@ -12,7 +12,7 @@ public interface IRoomService
     Task<RoomMutationResult> AttachPlayerAsync(string roomCode, Guid playerId, string? token, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> AttachDisplayAsync(string roomCode, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> SetReadyAsync(string roomCode, Guid playerId, string? token, bool isReady, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, string storageKey, string contentType, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> DisconnectPlayerAsync(string roomCode, Guid playerId, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> DisconnectDisplayAsync(string roomCode, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> SubmitSelectionAsync(string roomCode, Guid playerId, string? token, Guid selectedPlayerId, CancellationToken cancellationToken = default);

@@ -106,19 +106,26 @@ public sealed class RoomEndpointTests(PartyGameApiFactory factory) : IClassFixtu
     public async Task ProfilePhoto_AcceptsJpegAndPngReplacesAndReturnsNoStore()
     {
         var host = (await CreateRoomAsync("PhotoHost")).Body;
-        var jpeg = new byte[] { 0xff, 0xd8, 0xff, 0xe0, 1, 2, 3 };
+        var jpeg = await PhotoAnswerTestHarness.ImageAsync();
         var first = await UploadAsync(host, jpeg, "image/jpeg", "untrusted/../../photo.jpg");
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
 
-        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 4, 5, 6 };
+        var png = await PhotoAnswerTestHarness.ImageAsync(png: true);
         var second = await UploadAsync(host, png, "image/png", "photo.png");
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
         var photoResponse = await _client.GetAsync($"/api/rooms/{host.RoomCode}/players/{host.PlayerId}/profile-photo");
         Assert.Equal(HttpStatusCode.OK, photoResponse.StatusCode);
-        Assert.Equal("image/png", photoResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("image/jpeg", photoResponse.Content.Headers.ContentType?.MediaType);
         Assert.Contains("no-store", photoResponse.Headers.CacheControl?.ToString());
-        Assert.Equal(png, await photoResponse.Content.ReadAsByteArrayAsync());
+        Assert.True((await photoResponse.Content.ReadAsByteArrayAsync()).AsSpan().StartsWith(new byte[] { 0xff, 0xd8, 0xff }));
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+        var player = await db.Players.SingleAsync(player => player.Id == host.PlayerId);
+        var asset = await db.MediaAssets.SingleAsync(asset => asset.Id == player.ProfilePhotoMediaAssetId);
+        Assert.Equal(PartyGame.Domain.Game.MediaKind.ProfilePhoto, asset.MediaKind);
+        Assert.Equal(host.PlayerId, asset.PlayerId);
+        Assert.Equal(2, await db.MediaAssets.CountAsync(asset => asset.MediaKind == PartyGame.Domain.Game.MediaKind.ProfilePhoto));
     }
 
     [Fact]

@@ -22,18 +22,28 @@ public sealed class LocalMediaStorage : IMediaStorage
     public LocalMediaStorage(IOptions<MediaOptions> options, IOptions<DrawingMediaOptions> drawingOptions)
     {
         this.options = options.Value;
-        rootPath = string.IsNullOrWhiteSpace(this.options.RootPath)
-            ? Path.Combine(Path.GetTempPath(), "PartyGame", "media")
-            : Path.GetFullPath(this.options.RootPath);
+        rootPath = MediaStoragePathResolver.ResolveRootPath(this.options.RootPath);
         this.drawingOptions = drawingOptions.Value;
+        Directory.CreateDirectory(rootPath);
         CleanupTemporaryFiles();
     }
+
+    public Task<StoredMediaResult> SaveProfilePhotoAsync(ProfilePhotoMediaWriteRequest request, CancellationToken cancellationToken = default) =>
+        SaveJpegMediaAsync(
+            request.Content,
+            request.ByteLength,
+            request.ContentType,
+            $"profile/rooms/{request.RoomId:N}/players/{request.PlayerId:N}/{request.MediaAssetId:N}",
+            "profile_photo",
+            options.ProfilePhotoMaximumUploadBytes,
+            cancellationToken);
 
     public async Task<StoredMediaResult> SaveDrawingAsync(DrawingMediaWriteRequest request, CancellationToken cancellationToken = default)
     {
         if (request.ByteLength <= 0) throw new PhotoMediaException("drawing_answer_file_empty", "The drawing cannot be empty.");
         if (request.ByteLength > drawingOptions.MaximumUploadBytes) throw new PhotoMediaException("drawing_answer_file_too_large", "The drawing exceeds the upload limit.");
         if (!string.Equals(request.ContentType, "image/png", StringComparison.OrdinalIgnoreCase)) throw new PhotoMediaException("drawing_answer_invalid_content_type", "Only PNG drawings are accepted.");
+        await EnsureSignatureAsync(request.Content, request.ContentType, "drawing_answer", cancellationToken);
         Image image;
         try { image = await Image.LoadAsync(request.Content, cancellationToken); }
         catch (Exception exception) when (exception is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
@@ -54,7 +64,7 @@ public sealed class LocalMediaStorage : IMediaStorage
             image.Metadata.IptcProfile = null;
             ResizeDown(image, drawingOptions.NormalizedMaximumLongEdge);
             var width = image.Width; var height = image.Height;
-            var directoryKey = $"rooms/{request.RoomId:N}/questions/{request.QuestionInstanceId:N}/drawings/{request.DrawingAnswerId:N}";
+            var directoryKey = $"drawing-answer/rooms/{request.RoomId:N}/questions/{request.QuestionInstanceId:N}/{request.DrawingAnswerId:N}";
             var displayKey = $"{directoryKey}/display.png"; var thumbnailKey = $"{directoryKey}/thumbnail.png";
             var displayPath = Resolve(displayKey); var thumbnailPath = Resolve(thumbnailKey); Directory.CreateDirectory(Path.GetDirectoryName(displayPath)!);
             try
@@ -63,40 +73,58 @@ public sealed class LocalMediaStorage : IMediaStorage
                 using var thumbnail = image.CloneAs<Rgba32>();
                 ResizeDown(thumbnail, drawingOptions.ThumbnailMaximumLongEdge);
                 await SavePngAtomicAsync(thumbnail, thumbnailPath, cancellationToken);
-                var bytes = await File.ReadAllBytesAsync(displayPath, cancellationToken);
-                return new StoredMediaResult(displayKey, thumbnailKey, width, height, bytes.LongLength, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), "image/png");
+                var (byteLength, sha256) = await CalculateHashAsync(displayPath, cancellationToken);
+                return new StoredMediaResult(displayKey, thumbnailKey, width, height, byteLength, sha256, "image/png");
             }
             catch { TryDelete(displayPath); TryDelete(thumbnailPath); throw; }
         }
     }
 
-    public async Task<StoredMediaResult> SavePhotoAsync(PhotoMediaWriteRequest request, CancellationToken cancellationToken = default)
+    public Task<StoredMediaResult> SavePhotoAsync(PhotoMediaWriteRequest request, CancellationToken cancellationToken = default) =>
+        SaveJpegMediaAsync(
+            request.Content,
+            request.ByteLength,
+            request.ContentType,
+            $"photo-answer/rooms/{request.RoomId:N}/questions/{request.QuestionInstanceId:N}/{request.PhotoAnswerId:N}",
+            "photo_answer",
+            options.MaximumUploadBytes,
+            cancellationToken);
+
+    private async Task<StoredMediaResult> SaveJpegMediaAsync(
+        Stream content,
+        long byteLength,
+        string contentType,
+        string directoryKey,
+        string errorPrefix,
+        long maximumUploadBytes,
+        CancellationToken cancellationToken)
     {
-        if (request.ByteLength <= 0) throw new PhotoMediaException("photo_answer_file_empty", "The photo cannot be empty.");
-        if (request.ByteLength > options.MaximumUploadBytes) throw new PhotoMediaException("photo_answer_file_too_large", "The photo exceeds the upload limit.");
-        if (request.ContentType is not ("image/jpeg" or "image/png")) throw new PhotoMediaException("photo_answer_invalid_content_type", "Only JPEG and PNG photos are accepted.");
+        if (byteLength <= 0) throw new PhotoMediaException($"{errorPrefix}_file_empty", "The image cannot be empty.");
+        if (byteLength > maximumUploadBytes) throw new PhotoMediaException($"{errorPrefix}_file_too_large", "The image exceeds the upload limit.");
+        if (contentType is not ("image/jpeg" or "image/png")) throw new PhotoMediaException($"{errorPrefix}_invalid_content_type", "Only JPEG and PNG images are accepted.");
+        await EnsureSignatureAsync(content, contentType, errorPrefix, cancellationToken);
 
         Image image;
         try
         {
-            image = await Image.LoadAsync(request.Content, cancellationToken);
+            image = await Image.LoadAsync(content, cancellationToken);
         }
         catch (Exception exception) when (exception is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
         {
-            throw new PhotoMediaException("photo_answer_invalid_image", "The uploaded file is not a valid supported image.");
+            throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file is not a valid supported image.");
         }
 
         using (image)
         {
             var decodedContentType = image.Metadata.DecodedImageFormat?.DefaultMimeType;
-            if (!string.Equals(decodedContentType, request.ContentType, StringComparison.OrdinalIgnoreCase))
-                throw new PhotoMediaException("photo_answer_invalid_image", "The uploaded file contents do not match its declared image type.");
+            if (!string.Equals(decodedContentType, contentType, StringComparison.OrdinalIgnoreCase))
+                throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file contents do not match its declared image type.");
 
             image.Mutate(context => context.AutoOrient());
             if (image.Width < options.MinimumImageWidth || image.Height < options.MinimumImageHeight)
-                throw new PhotoMediaException("photo_answer_dimensions_too_small", "The photo dimensions are too small.");
+                throw new PhotoMediaException($"{errorPrefix}_dimensions_too_small", "The image dimensions are too small.");
             if (image.Width > options.MaximumImageWidth || image.Height > options.MaximumImageHeight)
-                throw new PhotoMediaException("photo_answer_dimensions_too_large", "The photo dimensions are too large.");
+                throw new PhotoMediaException($"{errorPrefix}_dimensions_too_large", "The image dimensions are too large.");
 
             image.Metadata.ExifProfile = null;
             image.Metadata.IccProfile = null;
@@ -106,7 +134,6 @@ public sealed class LocalMediaStorage : IMediaStorage
             ResizeDown(image, options.NormalizedMaximumLongEdge);
             var width = image.Width;
             var height = image.Height;
-            var directoryKey = $"rooms/{request.RoomId:N}/questions/{request.QuestionInstanceId:N}/{request.PhotoAnswerId:N}";
             var displayKey = $"{directoryKey}/display.jpg";
             var thumbnailKey = $"{directoryKey}/thumbnail.jpg";
             var displayPath = Resolve(displayKey);
@@ -115,12 +142,12 @@ public sealed class LocalMediaStorage : IMediaStorage
 
             try
             {
-                await SaveJpegAsync(image, displayPath, options.JpegQuality, cancellationToken);
+                await SaveJpegAtomicAsync(image, displayPath, options.JpegQuality, cancellationToken);
                 using var thumbnail = image.CloneAs<Rgba32>();
                 ResizeDown(thumbnail, options.ThumbnailMaximumLongEdge);
-                await SaveJpegAsync(thumbnail, thumbnailPath, options.ThumbnailJpegQuality, cancellationToken);
-                var bytes = await File.ReadAllBytesAsync(displayPath, cancellationToken);
-                return new StoredMediaResult(displayKey, thumbnailKey, width, height, bytes.LongLength, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+                await SaveJpegAtomicAsync(thumbnail, thumbnailPath, options.ThumbnailJpegQuality, cancellationToken);
+                var (storedLength, sha256) = await CalculateHashAsync(displayPath, cancellationToken);
+                return new StoredMediaResult(displayKey, thumbnailKey, width, height, storedLength, sha256);
             }
             catch
             {
@@ -180,13 +207,15 @@ public sealed class LocalMediaStorage : IMediaStorage
         }
     }
 
-    private static async Task SaveJpegAsync(Image image, string path, int quality, CancellationToken cancellationToken)
-    {
-        await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
-        await image.SaveAsJpegAsync(stream, new JpegEncoder { Quality = quality }, cancellationToken);
-    }
+    private Task SaveJpegAtomicAsync(Image image, string path, int quality, CancellationToken cancellationToken) =>
+        SaveAtomicAsync(path, async stream => await image.SaveAsJpegAsync(stream, new JpegEncoder { Quality = quality }, cancellationToken), cancellationToken);
 
     private async Task SavePngAtomicAsync(Image image, string path, CancellationToken cancellationToken)
+    {
+        await SaveAtomicAsync(path, async stream => await image.SaveAsPngAsync(stream, new PngEncoder(), cancellationToken), cancellationToken);
+    }
+
+    private async Task SaveAtomicAsync(string path, Func<Stream, Task> writeAsync, CancellationToken cancellationToken)
     {
         var temporaryDirectory = Path.Combine(rootPath, ".tmp");
         Directory.CreateDirectory(temporaryDirectory);
@@ -195,7 +224,7 @@ public sealed class LocalMediaStorage : IMediaStorage
         {
             await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true))
             {
-                await image.SaveAsPngAsync(stream, new PngEncoder(), cancellationToken);
+                await writeAsync(stream);
             }
             File.Move(temporaryPath, path);
         }
@@ -205,13 +234,40 @@ public sealed class LocalMediaStorage : IMediaStorage
         }
     }
 
+    private static async Task EnsureSignatureAsync(Stream content, string contentType, string errorPrefix, CancellationToken cancellationToken)
+    {
+        if (!content.CanSeek)
+            throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded image stream cannot be validated.");
+
+        var position = content.Position;
+        try
+        {
+            var signature = new byte[8];
+            var read = await content.ReadAsync(signature.AsMemory(), cancellationToken);
+            var valid = contentType switch
+            {
+                "image/jpeg" => read >= 3 && signature[0] == 0xff && signature[1] == 0xd8 && signature[2] == 0xff,
+                "image/png" => read == 8 && signature.AsSpan().SequenceEqual(new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }),
+                _ => false
+            };
+            if (!valid) throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file signature does not match its declared image type.");
+        }
+        finally
+        {
+            content.Position = position;
+        }
+    }
+
+    private static async Task<(long ByteLength, string Sha256)> CalculateHashAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+        var hash = await SHA256.HashDataAsync(stream, cancellationToken);
+        return (stream.Length, Convert.ToHexString(hash).ToLowerInvariant());
+    }
+
     private string Resolve(string storageKey)
     {
-        if (string.IsNullOrWhiteSpace(storageKey) || Path.IsPathRooted(storageKey)) throw new InvalidOperationException("The media storage key is invalid.");
-        var normalizedRoot = Path.GetFullPath(rootPath) + Path.DirectorySeparatorChar;
-        var resolved = Path.GetFullPath(Path.Combine(rootPath, storageKey));
-        if (!resolved.StartsWith(normalizedRoot, StringComparison.Ordinal)) throw new InvalidOperationException("The media storage key is invalid.");
-        return resolved;
+        return MediaStoragePathResolver.ResolveStoragePath(rootPath, storageKey);
     }
 
     private static void TryDelete(string path)
