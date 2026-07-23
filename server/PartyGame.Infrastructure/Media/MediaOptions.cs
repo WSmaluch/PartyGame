@@ -18,6 +18,9 @@ public sealed class MediaOptions
     public int TemporaryFileRetentionMinutes { get; set; } = 60;
     public int ProfilePhotoCleanupBatchSize { get; set; } = 25;
     public int OrphanedGameMediaCleanupBatchSize { get; set; } = 25;
+    public bool UntrackedFileCleanupEnabled { get; set; } = true;
+    public int UntrackedFileCleanupBatchSize { get; set; } = 25;
+    public int UntrackedFileCleanupGracePeriodMinutes { get; set; } = 60;
 }
 
 public sealed class DrawingMediaOptions

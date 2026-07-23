@@ -45,11 +45,14 @@ builder.Services.AddOptions<MediaOptions>()
     .Bind(builder.Configuration.GetSection(MediaOptions.SectionName))
     .Validate(options => options.Provider == "LocalFileSystem", "Only the LocalFileSystem media provider is available in this release.")
     .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath), "MediaStorage:RootPath is required.")
+    .Validate(options => options.UntrackedFileCleanupGracePeriodMinutes > 0, "MediaStorage:UntrackedFileCleanupGracePeriodMinutes must be greater than zero.")
     .ValidateOnStart();
 builder.Services.Configure<DrawingMediaOptions>(builder.Configuration.GetSection(DrawingMediaOptions.SectionName));
 builder.Services.AddSingleton<IMediaStorage, LocalMediaStorage>();
+builder.Services.AddSingleton<ILocalMediaFileCatalog, LocalMediaFileCatalog>();
 builder.Services.AddScoped<IProfilePhotoCleanupService, ProfilePhotoCleanupService>();
 builder.Services.AddScoped<IOrphanedGameMediaCleanupService, OrphanedGameMediaCleanupService>();
+builder.Services.AddScoped<IUntrackedMediaFileCleanupService, UntrackedMediaFileCleanupService>();
 builder.Services.AddSingleton<PartyGame.Api.Contracts.IPhotoMediaUrlProvider, PartyGame.Api.Contracts.PhotoMediaUrlProvider>();
 builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
@@ -120,11 +123,31 @@ await using (var scope = app.Services.CreateAsyncScope())
     var clock = scope.ServiceProvider.GetRequiredService<IGameClock>();
     var profilePhotoCleanup = scope.ServiceProvider.GetRequiredService<IProfilePhotoCleanupService>();
     var orphanedGameMediaCleanup = scope.ServiceProvider.GetRequiredService<IOrphanedGameMediaCleanupService>();
+    var untrackedMediaFileCleanup = scope.ServiceProvider.GetRequiredService<IUntrackedMediaFileCleanupService>();
 
     await PartyGame.Infrastructure.Persistence.Seed.ContentSeeder.SeedAsync(dbContext, clock);
     await BackfillProfilePhotos.RunAsync(scope.ServiceProvider);
     await profilePhotoCleanup.CleanupUnusedAsync();
     await orphanedGameMediaCleanup.CleanupUnusedAsync();
+    try
+    {
+        var cleanupResult = await untrackedMediaFileCleanup.CleanupAsync();
+        app.Logger.LogInformation(
+            "Untracked media file startup cleanup completed: {Scanned} scanned, {Candidates} candidates, {Deleted} deleted, {SkippedReferenced} referenced, {SkippedTooYoung} too young, {Missing} missing, {Failed} failed",
+            cleanupResult.Scanned,
+            cleanupResult.Candidates,
+            cleanupResult.Deleted,
+            cleanupResult.SkippedReferenced,
+            cleanupResult.SkippedTooYoung,
+            cleanupResult.Missing,
+            cleanupResult.Failed);
+    }
+    catch (Exception exception)
+    {
+        app.Logger.LogWarning(
+            "Untracked media file startup cleanup failed; error type {ErrorType}",
+            exception.GetType().Name);
+    }
 
     var roomsWithLiveConnections = await dbContext.GameRooms
         .Include(room => room.Players)

@@ -1,4 +1,4 @@
-# Etap 6B.1–6B.2 — trwałe przechowywanie mediów i cleanup zdjęć profilu
+# Etap 6B.1–6B.4 — trwałe przechowywanie i cleanup mediów
 
 ## Cel i zakres
 
@@ -40,7 +40,10 @@ Sekcja `MediaStorage` w `server/PartyGame.Api/appsettings.json` ma domyślnie:
   "RootPath": "data/media",
   "ProfilePhotoMaximumUploadBytes": 5242880,
   "ProfilePhotoCleanupBatchSize": 25,
-  "OrphanedGameMediaCleanupBatchSize": 25
+  "OrphanedGameMediaCleanupBatchSize": 25,
+  "UntrackedFileCleanupEnabled": true,
+  "UntrackedFileCleanupBatchSize": 25,
+  "UntrackedFileCleanupGracePeriodMinutes": 60
 }
 ```
 
@@ -64,6 +67,16 @@ Batch pobiera maksymalnie `OrphanedGameMediaCleanupBatchSize` kandydatów (domy�
 
 Mechanizm jest DB-led: nie skanuje finalnego filesystemu ani nie usuwa plików bez rekordu DB.
 
+## Cleanup finalnych plików bez rekordu DB (6B.4)
+
+6B.4 uzupełnia DB-led cleanup osobnym, filesystem-led reconcilerem dla lokalnego providera. Przy jednym starcie hosta wykonywany jest jeden batch starych finalnych plików, których względny storage key nie występuje ani jako `MediaAsset.DisplayStorageKey`, ani jako `MediaAsset.ThumbnailStorageKey`. Domyślny limit wynosi 25, jest ograniczony do zakresu 1–100, a domyślny grace period wynosi 60 minut.
+
+Lokalna abstrakcja katalogu enumeruje wyłącznie dokładne struktury tworzone przez `LocalMediaStorage` pod drzewami `profile`, `photo-answer` i `drawing-answer`, z wariantami `display` i `thumbnail` oraz właściwym rozszerzeniem JPEG albo PNG. Nie rozszerza ogólnego `IMediaStorage` o enumerację filesystemu. Nie podąża za symlinkami i pozostawia nietknięte `.tmp`, ukryte pliki, nieznane nazwy, rozszerzenia, głębokości oraz katalogi.
+
+Bezpośrednio przed usunięciem reconciler ponownie odczytuje timestamp pliku i wykonuje świeże zapytanie do SQLite dla obu kolumn storage key. Plik odświeżony w grace period albo wskazany w międzyczasie przez `MediaAsset` pozostaje. Brak pliku jest idempotentny; błąd pojedynczego delete nie zatrzymuje batcha, pozostawia plik do retry i jest logowany przez względny key oraz typ błędu bez fizycznego root path.
+
+Reconciler jest przeznaczony dla obecnej topologii pojedynczego hosta i jednego lokalnego wolumenu. Nie zapewnia koordynacji wielu procesów współdzielących storage. 6B.4 nie zmienia API ani klientów iOS, Display i Admin.
+
 ## Trwałość i testy
 
 Migracja `Stage6BPersistentMediaStorage` rozszerza `MediaAssets` o typ i kontekst oraz dodaje referencję bieżącego assetu profilu. Zachowane odpowiedzi z 6A są przypisywane do odpowiedniego pokoju, gracza i pytania podczas migracji.
@@ -78,6 +91,8 @@ Migracja SQLite może na czas kontrolowanego przebudowania tabel wyłączyć spr
 
 Skrypt `scripts/test-ios-drawing-answer-integration.sh` wykonuje `build-for-testing` przed uruchomieniem API. Następnie uruchamia API z unikalną bazą SQLite i storage root, czeka na health-check, uruchamia klienta demonstracyjnego i wykonuje `test-without-building`. Jednosekundowy `Task.sleep` występuje wyłącznie w `DrawingAnswerBackendIntegrationTests` bezpośrednio po świadomym `disconnect()`; jest cooldownem fixture symulatora, a nie produkcyjną naprawą lifecycle SignalR.
 
-## Kolejne części 6B
+## Granice dalszych prac
 
-Do następnych etapów pozostają provider chmurowy i migracja między providerami, CDN/signed URLs, administracyjne zarządzanie mediami, polityka retencji odpowiedzi do gry i innych osieroconych plików oraz pełne Mixed Client E2E hardening.
+Do formalnego domknięcia lokalnego storage 6B pozostaje storage-aware health i podstawowa diagnostyka pojemności. Retencja prawidłowo referencjonowanych odpowiedzi wymaga osobnej polityki lifecycle pokojów i nie jest częścią cleanupów 6B.2–6B.4.
+
+Backup i restore, provider chmurowy, migracja między providerami, CDN, signed URLs, administracyjne zarządzanie mediami oraz produkcyjny deployment należą do późniejszych prac operations/deployment. Pełne Mixed Client E2E pozostaje osobnym hardeningiem infrastruktury testowej i nie jest częścią storage 6B.
