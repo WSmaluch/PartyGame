@@ -111,7 +111,16 @@ configure_xctestrun() {
     return 1
   }
 
-  /usr/libexec/PlistBuddy -c 'Add :PartyGameUITests:EnvironmentVariables dict' "$XCTESTRUN_FILE" 2>/dev/null || true
+  # Xcode 16 writes the test target below TestConfigurations, while older
+  # generated files use the target name at the plist root. Keep both layouts
+  # configured so the UI-test runner, not only the launched app, receives E2E
+  # configuration before it evaluates its guard.
+  local target_path
+  for target_path in \
+    ':PartyGameUITests:EnvironmentVariables' \
+    ':TestConfigurations:0:TestTargets:0:EnvironmentVariables'; do
+    /usr/libexec/PlistBuddy -c "Add ${target_path} dict" "$XCTESTRUN_FILE" 2>/dev/null || true
+  done
   local key
   for key in \
     PARTYGAME_E2E_MODE \
@@ -120,8 +129,12 @@ configure_xctestrun() {
     PARTYGAME_E2E_PLAYER_NICKNAME \
     PARTYGAME_E2E_COORDINATION_DIR \
     PARTYGAME_E2E_REQUIRE_GAME_STARTED; do
-    /usr/libexec/PlistBuddy -c "Delete :PartyGameUITests:EnvironmentVariables:${key}" "$XCTESTRUN_FILE" 2>/dev/null || true
-    /usr/libexec/PlistBuddy -c "Add :PartyGameUITests:EnvironmentVariables:${key} string ${!key}" "$XCTESTRUN_FILE"
+    for target_path in \
+      ':PartyGameUITests:EnvironmentVariables' \
+      ':TestConfigurations:0:TestTargets:0:EnvironmentVariables'; do
+      /usr/libexec/PlistBuddy -c "Delete ${target_path}:${key}" "$XCTESTRUN_FILE" 2>/dev/null || true
+      /usr/libexec/PlistBuddy -c "Add ${target_path}:${key} string ${!key}" "$XCTESTRUN_FILE" 2>/dev/null || true
+    done
   done
 }
 
@@ -340,6 +353,20 @@ PLAYWRIGHT_PID=""
 
 STAGE="cleanup-pass"
 jq -e \
-  '.status == "passed" and .roomStartedEvents == 1 and .ios == "ready" and .display == "attached" and .scriptedPlayers == "ready"' \
+  '.status == "passed"
+    and .roomPhase == "Completed"
+    and .roomStartedEvents == 1
+    and .playedQuestionCount == 4
+    and .uniqueQuestionIdCount == 4
+    and .playerSelectionCount == 1
+    and .textAnswerCount == 1
+    and .photoAnswerCount == 1
+    and .drawingAnswerCount == 1
+    and .rankingCount == 3
+    and .stateVersionMonotonic == true
+    and .ios == "completed"
+    and .display == "completed"
+    and .scriptedPlayers == "completed"
+    and (.questions | length == 4)' \
   "${COORDINATION_DIR}/outcome.json" >/dev/null
-printf 'PASS: deterministic Mixed Client E2E orchestration completed for room %s.\n' "$ROOM_CODE"
+printf 'PASS: full Mixed Client E2E completed for room %s.\n' "$ROOM_CODE"

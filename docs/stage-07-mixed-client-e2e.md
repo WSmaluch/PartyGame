@@ -5,7 +5,7 @@ Status całego Etapu 7: w toku.
 | Podetap                                     | Status        |
 | ------------------------------------------- | ------------- |
 | 7.1 — deterministyczna orkiestracja         | ukończony     |
-| 7.2 — pełny przebieg czterech typów pytań   | nierozpoczęty |
+| 7.2 — pełny przebieg czterech typów pytań   | gotowy do audytu |
 | 7.3 — reconnect i `stateVersion`            | nierozpoczęty |
 | 7.4 — stabilizacja wielokrotnych przebiegów | nierozpoczęty |
 
@@ -93,8 +93,35 @@ jeśli zmienna nie jest podana.
 `PARTYGAME_E2E_RUN_MODE=ios-only` uruchamia przygotowany backend i pokój oraz tylko
 XCUITest do profilu i Ready; tryb domyślny pozostaje pełnym przebiegiem 7.1.
 
-## Granica 7.2
+## Etap 7.2 — pełny przebieg czterech typów
 
-7.1 kończy się po potwierdzeniu pojedynczego automatycznego startu. Nie przesyła odpowiedzi,
-nie prowadzi głosowań ani nie dochodzi do `Completed`. Pełna rozgrywka PlayerSelection,
-TextAnswer, PhotoAnswer i DrawingAnswer pozostaje zakresem 7.2.
+7.2 rozszerza ten sam izolowany przebieg do `Completed`. Fixture Published package zawiera
+dokładnie po jednym pytaniu `PlayerSelection`, `TextAnswer`, `PhotoAnswer` i `DrawingAnswer`.
+Nie wymusza ich kolejności: produkcyjny `GamePlanner` zachowuje własne tasowanie wzorca pytań.
+
+Orkiestrator zapisuje typ każdego pytania z odpowiedzi Admin REST podczas tworzenia fixture,
+a następnie odczytuje ze snapshotu aktywne `questionId`, fazę oraz `stateVersion`. Typ aktywnego
+pytania ustala przez mapę opublikowanego pakietu i dodatkowo sprawdza jego zgodność z produkcyjną
+fazą. Odrzuca obce lub ponownie użyte ID pytania i uruchamia odpowiednią akcję dopiero po
+obserwacji Display. iOS korzysta z normalnych ekranów wyboru gracza, odpowiedzi tekstowej,
+PhotosPicker, gestu rysowania i głosowania. Dwaj scripted players używają wyłącznie istniejących
+REST uploadów oraz metod produkcyjnego SignalR. Do `coordination` trafiają jedynie bezpieczne
+markery etapów i aktywny publiczny stan pytania, nigdy tokeny ani prywatne ID odpowiedzi.
+Podstawowe markery iOS to `ios-player-selection-submitted`, `ios-text-submitted`,
+`ios-photo-submitted`, `ios-drawing-submitted` i `ios-completed-observed`.
+
+iOS wybiera obraz przez normalny PhotosPicker i przesyła JPEG przygotowany przez produkcyjny
+pipeline klienta. Scripted players tworzą rozróżnialne, poprawne JPEG dla PhotoAnswer oraz PNG
+dla DrawingAnswer i wysyłają je istniejącymi endpointami multipart. Rysunek iOS powstaje przez
+rzeczywisty gest XCUITest na produkcyjnym canvasie.
+
+Deterministyczność 7.2 oznacza stały skład pakietu, kompletność przebiegu i mierzalne asercje,
+a nie stałą kolejność pytań. Każda z 24 permutacji czterech typów jest prawidłowa.
+
+Po zakończeniu orkiestrator wymaga: czterech unikalnych `questionId`, dokładnie jednego pytania
+każdego typu, braku piątego pytania, monotonicznego `stateVersion`, pojedynczego `RoomStarted`,
+`RoomPhase = Completed` oraz rankingu z wszystkimi trzema graczami. Display obserwuje realne
+ekrany zbierania, ujawniania, głosowania i wyników właściwe dla aktualnie wylosowanego typu oraz
+końcowy ranking.
+
+Reconnect i odtwarzanie stanu po zerwaniu połączenia pozostają poza 7.2 i są zakresem 7.3.

@@ -36,21 +36,28 @@ export interface PlayerScoreSnapshot {
   score: number;
 }
 
-export type LocalizedText = string | { pl?: string; en?: string; defaultText?: string };
+export type LocalizedText =
+  string | { pl?: string; en?: string; defaultText?: string };
 export function localizedText(value?: LocalizedText | null): string {
   if (!value) return '';
   if (typeof value === 'string') return value;
-  return (navigator.language.toLowerCase().startsWith('pl') ? value.pl : value.en) ?? value.en ?? value.pl ?? value.defaultText ?? '';
+  return (
+    (navigator.language.toLowerCase().startsWith('pl') ? value.pl : value.en) ??
+    value.en ??
+    value.pl ??
+    value.defaultText ??
+    ''
+  );
 }
 
-export type GameStage = 
-  | 'NotStarted' 
-  | 'CategoryIntro' 
-  | 'QuestionIntro' 
-  | 'CollectingPlayerSelections' 
-  | 'ShowingQuestionResults' 
-  | 'RoundSummary' 
-  | 'Completed' 
+export type GameStage =
+  | 'NotStarted'
+  | 'CategoryIntro'
+  | 'QuestionIntro'
+  | 'CollectingPlayerSelections'
+  | 'ShowingQuestionResults'
+  | 'RoundSummary'
+  | 'Completed'
   | 'PausedForDisplay'
   | 'CollectingTextAnswers'
   | 'RevealingTextAnswers'
@@ -243,7 +250,7 @@ export interface GameSnapshot {
   pausedStage?: string | null;
   pausedRemainingMilliseconds?: number | null;
   scores: PlayerScoreSnapshot[];
-  
+
   currentCategory?: GameCategorySnapshot | null;
   category?: GameCategorySnapshot | null;
   currentQuestion?: GameQuestionSnapshot | null;
@@ -257,13 +264,18 @@ export interface GameSnapshot {
   photoAnswerResults?: PhotoAnswerResults | null;
   drawingAnswerResults?: DrawingAnswerResultsSnapshot | null;
   roundSummary?: RoundSummarySnapshot | null;
+  ranking?: RankingEntry[] | null;
 }
 
-export function gameQuestion(game: GameSnapshot): GameQuestionSnapshot | undefined {
+export function gameQuestion(
+  game: GameSnapshot,
+): GameQuestionSnapshot | undefined {
   return game.question ?? game.currentQuestion ?? undefined;
 }
 
-export function gameCategory(game: GameSnapshot): GameCategorySnapshot | undefined {
+export function gameCategory(
+  game: GameSnapshot,
+): GameCategorySnapshot | undefined {
   return game.category ?? game.currentCategory ?? undefined;
 }
 
