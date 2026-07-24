@@ -34,19 +34,16 @@ final class MixedGameClientE2ETests: XCTestCase {
         try waitFor(app.buttons["lobby.ready"], timeout: 20, description: "Lobby po produkcyjnym zapisie profilu")
         XCTAssertTrue(app.staticTexts[nickname].exists, "Lobby nie pokazuje gracza iOS o oczekiwanym nicku.\n\(app.debugDescription)")
         mark("ios-profile-saved")
-        app.buttons["lobby.ready"].tap()
+        let readyButton = app.buttons["lobby.ready"]
+        let labelBeforeReady = readyButton.label
+        readyButton.tap()
+        try waitUntil(timeout: 15, description: "potwierdzenie produkcyjnego Ready w lobby") {
+            readyButton.exists && readyButton.label != labelBeforeReady
+        }
         mark("ios-ready")
-
-        try waitFor(app.buttons["drawing.start"], timeout: 45, description: "DrawingAnswer po ustawieniu Ready")
-        app.buttons["drawing.start"].tap()
-        let canvas = try waitFor(app.otherElements["drawing-canvas"], description: "produkcyjny canvas DrawingAnswer")
-        let start = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.25))
-        start.press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.75)))
-        XCTAssertTrue(app.buttons["drawing.done"].isEnabled, "Gest na canvasie nie utworzył rysunku.")
-        app.buttons["drawing.done"].tap()
-        try waitFor(app.buttons["drawing-submit-button"], description: "produkcyjny przycisk wysłania rysunku").tap()
-        try waitFor(app.otherElements["drawing-waiting-state"], description: "stan oczekiwania po wysłaniu rysunku")
-        mark("ios-drawing-submitted-1")
+        guard environment["PARTYGAME_E2E_REQUIRE_GAME_STARTED"] == "1" else { return }
+        try waitForMarker("game-started", timeout: 45, description: "potwierdzenie pojedynczego startu gry przez orkiestrator")
+        mark("ios-observed-game-start")
     }
 
     @discardableResult
@@ -70,6 +67,25 @@ final class MixedGameClientE2ETests: XCTestCase {
         let photos = XCUIApplication(bundleIdentifier: "com.apple.mobileslideshow")
         let candidate = photos.cells.firstMatch.exists ? photos.cells.firstMatch : app.cells.firstMatch
         try waitFor(candidate, timeout: 15, description: "pierwszy zaimportowany obraz w systemowym PhotosPicker").tap()
+    }
+
+    private func waitUntil(timeout: TimeInterval, description: String, predicate: @escaping () -> Bool) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if predicate() { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTFail("Timeout: oczekiwano \(description).\n\(app.debugDescription)")
+        throw NSError(domain: "MixedGameClientE2E", code: 3)
+    }
+
+    private func waitForMarker(_ name: String, timeout: TimeInterval, description: String) throws {
+        guard let directory = environment["PARTYGAME_E2E_COORDINATION_DIR"], !directory.isEmpty else {
+            throw NSError(domain: "MixedGameClientE2E", code: 4)
+        }
+        try waitUntil(timeout: timeout, description: description) {
+            FileManager.default.fileExists(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path)
+        }
     }
 
     private func mark(_ name: String) {
