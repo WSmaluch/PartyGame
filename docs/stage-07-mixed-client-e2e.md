@@ -9,6 +9,7 @@ Status całego Etapu 7: w toku.
 | 7.3 — reconnect i `stateVersion`            | w toku |
 | 7.3A.1 — rzeczywiste obserwacje iOS          | ukończony |
 | 7.3A.2 — obserwacje scripted players/backend | ukończony |
+| 7.3A.3 — agregator ledgeru pięciu klientów    | ukończony |
 | 7.4 — stabilizacja wielokrotnych przebiegów | nierozpoczęty |
 
 ## Cel 7.1
@@ -208,3 +209,37 @@ Completed z regresją. Wynik: 10/10 PASS. `dotnet build` orkiestratora zakończy
 Displaya w czystej kopii poza repozytorium przeszedł: `npm ci` i `npm run build` exit 0.
 
 Status: 7.3A.1 — ukończony; 7.3A.2 — ukończony; 7.3A — nadal nieukończony; 7.3 — nadal nieukończony.
+
+## Etap 7.3A.3 — agregator ledgeru pięciu klientów
+
+`StateVersionLedgerAggregator` odczytuje wyłącznie rzeczywiste pliki obserwacji pięciu
+klientów: `ios`, `display`, `scripted-player-a`, `scripted-player-b` i `backend`. Wzorzec
+każdego producenta to `<client>-observation-<numer>.json`; pliki tymczasowe są pomijane,
+numer jest parsowany liczbowo, a sekwencja musi zaczynać się od 1 i nie może zawierać luk
+ani kolizji. Dzięki temu kolejność nie zależy od listowania systemu plików ani timestampu.
+
+Każdy JSON jest odczytywany dokładnie raz i rygorystycznie walidowany: dozwolone są dokładnie
+`client`, `event`, `stateVersion`, `phase`, `questionId` i `timestampUtc`. Brak pola,
+nieznane pole, ujemna wersja, klient niezgodny z nazwą pliku lub czas niebędący UTC oznaczają
+FAIL. Agregator zachowuje rzeczywiste obserwacje i per klient oblicza ich liczbę, minimum,
+maximum, pierwszą/ostatnią wersję i czas, eventy, regresje oraz diagnostykę błędów.
+
+Monotoniczność jest oceniana w kolejności numerów plików; wersje równe są dozwolone,
+a malejące powodują `state-version-regression`. Cofnięcie `timestampUtc` także jest FAIL.
+iOS musi mieć dokładnie po jednym `snapshot-before-disconnect` i
+`snapshot-after-recovery`, a Display `snapshot-before-reload` i
+`snapshot-after-reconnect`; odzyskana wersja nie może być starsza. Ostatnia rzeczywista
+obserwacja backendu jest `finalBackendStateVersion`, a żadna końcowa wersja klienta nie może
+być od niej większa.
+
+Wynik jest zapisywany atomowo jako `state-version-ledger.json` (schemaVersion 1, status,
+deterministyczna lista failures, finalna wersja backendu oraz ledger każdego klienta).
+`outcome.json` dostaje z niego faktyczne liczniki obserwacji i regresji, wersje reconnectu,
+`finalBackendStateVersion` oraz status i liczbę błędów ledgeru; nie używa stałych zastępczych.
+
+Testy agregatora obejmują pełny PASS pięciu klientów, brak każdego klienta, regresje wszystkich
+producentów, reconnecty, wersje wyprzedzające backend, niepoprawny JSON i pola, kolizje/luki,
+sortowanie po sekwencji, cofnięcie timestampu i atomowy zapis ledgeru. Pełny projekt testowy
+orkiestratora: 37 PASS. Status: 7.3A.1, 7.3A.2 i 7.3A.3 — ukończone; 7.3A oraz 7.3 — nadal
+nieukończone. Następny zakres: 7.3A.4 — trwałe dowody PASS/FAIL, kody procesów i jeden pełny
+przebieg integracyjny.

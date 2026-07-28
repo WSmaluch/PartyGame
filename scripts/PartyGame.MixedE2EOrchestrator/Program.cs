@@ -208,23 +208,21 @@ try
     await WaitForMarker("ios-completed-observed", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-recovered-state", TimeSpan.FromSeconds(30));
     await WaitForMarker("display-reconnected", TimeSpan.FromSeconds(30));
-    var iosBefore = await ReadObservedVersion("ios-reconnect-before.json");
-    var iosRecovered = await ReadObservedVersion("ios-reconnect-after.json");
-    var displayBefore = await ReadObservedVersion("display-reconnect-before.json");
-    var displayRecovered = await ReadObservedVersion("display-reconnect-after.json");
-    if (iosRecovered < iosBefore) throw new InvalidOperationException("iOS odzyskał starszy stateVersion po reconnect.");
-    if (displayRecovered < displayBefore) throw new InvalidOperationException("Display odzyskał starszy stateVersion po reconnect.");
+    var ledger = new StateVersionLedgerAggregator().Aggregate(coordinationDir);
+    StateVersionLedgerAggregator.Write(coordinationDir, ledger);
+    if (!ledger.Passed) throw new InvalidOperationException($"Ledger stateVersion nie przeszedł: {string.Join(", ", ledger.Failures.Select(failure => failure.Code))}.");
+    var iosLedger = ledger.Clients["ios"];
+    var displayLedger = ledger.Clients["display"];
+    var playerALedger = ledger.Clients["scripted-player-a"];
+    var playerBLedger = ledger.Clients["scripted-player-b"];
+    var backendLedger = ledger.Clients["backend"];
+    var iosBefore = iosLedger.VersionBeforeDisconnect ?? throw new InvalidOperationException("Brak wersji iOS sprzed reconnect.");
+    var iosRecovered = iosLedger.RecoveredVersion ?? throw new InvalidOperationException("Brak wersji iOS po reconnect.");
+    var displayBefore = displayLedger.VersionBeforeDisconnect ?? throw new InvalidOperationException("Brak wersji Display sprzed reconnect.");
+    var displayRecovered = displayLedger.RecoveredVersion ?? throw new InvalidOperationException("Brak wersji Display po reconnect.");
     var finalPlayers = completed.GetProperty("players");
     if (finalPlayers.GetArrayLength() != 3 || !finalPlayers.EnumerateArray().Any(player => player.GetProperty("id").GetGuid() == iosPlayerId))
         throw new InvalidOperationException("Reconnect iOS nie odzyskał tego samego gracza w pokoju trzech graczy.");
-    await WriteJson("state-version-ledger.json", new
-    {
-        backend = new { acceptedStateVersion = backendObservations.Tracker.LastAcceptedStateVersion, regressionCount = backendObservations.Tracker.RegressionCount, observationCount = backendObservations.Tracker.ObservationCount },
-        ios = new { beforeDisconnect = iosBefore, recoveredVersion = iosRecovered, regressionCount = 0 },
-        display = new { beforeDisconnect = displayBefore, recoveredVersion = displayRecovered, regressionCount = 0 },
-        scriptedPlayerA = new { acceptedStateVersion = hostObservations.Tracker.LastAcceptedStateVersion, regressionCount = hostObservations.Tracker.RegressionCount, observationCount = hostObservations.Tracker.ObservationCount },
-        scriptedPlayerB = new { acceptedStateVersion = nodeObservations.Tracker.LastAcceptedStateVersion, regressionCount = nodeObservations.Tracker.RegressionCount, observationCount = nodeObservations.Tracker.ObservationCount }
-    });
     await WriteJson("outcome.json", new
     {
         status = "passed",
@@ -240,17 +238,28 @@ try
         photoAnswerCount = tracker.Count("PhotoAnswer"),
         drawingAnswerCount = tracker.Count("DrawingAnswer"),
         rankingCount = tracker.RankingCount(completed),
-        stateVersion = backendObservations.Tracker.LastAcceptedStateVersion,
-        stateVersionMonotonic = true,
+        stateVersion = ledger.FinalBackendStateVersion,
+        stateVersionMonotonic = ledger.Clients.Values.All(client => client.RegressionCount == 0),
         iosReconnectCount = 1,
         iosSamePlayerRecovered = true,
         iosVersionBeforeDisconnect = iosBefore,
         iosRecoveredVersion = iosRecovered,
-        iosVersionRegressionCount = 0,
+        iosVersionRegressionCount = iosLedger.RegressionCount,
         displayReconnectCount = 1,
         displayVersionBeforeDisconnect = displayBefore,
         displayRecoveredVersion = displayRecovered,
-        displayVersionRegressionCount = 0,
+        displayVersionRegressionCount = displayLedger.RegressionCount,
+        iosObservationCount = iosLedger.ObservationCount,
+        displayObservationCount = displayLedger.ObservationCount,
+        scriptedPlayerAObservationCount = playerALedger.ObservationCount,
+        scriptedPlayerAVersionRegressionCount = playerALedger.RegressionCount,
+        scriptedPlayerBObservationCount = playerBLedger.ObservationCount,
+        scriptedPlayerBVersionRegressionCount = playerBLedger.RegressionCount,
+        backendObservationCount = backendLedger.ObservationCount,
+        backendVersionRegressionCount = backendLedger.RegressionCount,
+        finalBackendStateVersion = ledger.FinalBackendStateVersion,
+        stateVersionLedgerPassed = ledger.Passed,
+        stateVersionLedgerFailureCount = ledger.FailureCount,
         duplicateResponseCount = 0,
         duplicateVoteCount = 0,
         questions = tracker.Questions,
@@ -296,13 +305,6 @@ async Task WaitForPrivateAnswer(Func<Guid?> value, string description) => await 
 async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Func<Guid?> answerId, string description) { await WaitForPrivateAnswer(answerId, description); await connection.InvokeAsync(method, roomCode, voter.Id, voter.Token, questionId, answerId()!.Value); }
 static async Task WaitUntil(Func<bool> predicate, TimeSpan timeout, string description) { var deadline = DateTimeOffset.UtcNow + timeout; while (DateTimeOffset.UtcNow < deadline) { if (predicate()) return; await Task.Delay(100); } throw new TimeoutException($"Timeout: {description}"); }
 async Task WriteJson(string fileName, object value) { var path = Path.Combine(coordinationDir, fileName); var temporaryPath = path + ".tmp"; await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(value, json)); File.Move(temporaryPath, path, true); }
-async Task<long> ReadObservedVersion(string fileName)
-{
-    var path = Path.Combine(coordinationDir, fileName);
-    await WaitUntil(() => File.Exists(path), TimeSpan.FromSeconds(30), fileName);
-    using var document = JsonDocument.Parse(await File.ReadAllTextAsync(path));
-    return document.RootElement.GetProperty("stateVersion").GetInt64();
-}
 void Mark(string name) => File.WriteAllText(Path.Combine(coordinationDir, name), string.Empty);
 void Observe(ClientStateVersionRecorder recorder, JsonElement snapshot, string @event)
 {
