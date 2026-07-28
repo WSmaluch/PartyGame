@@ -88,8 +88,14 @@ struct GameRouterView: View {
                 .accessibilityElement()
                 .accessibilityIdentifier("game.started")
         }
+        .accessibilityIdentifier(snapshotIdentifier)
         .task(id: store.snapshot?.game?.resolvedQuestionInstanceId) {
             await PhotoAnswerImageCache.shared.clear()
         }
+    }
+
+    private var snapshotIdentifier: String {
+        guard let snapshot = store.snapshot, let game = snapshot.game else { return "game.snapshot.unavailable" }
+        return SnapshotAccessibilityMetadata.identifier(snapshot: snapshot, phase: String(describing: game.stage), questionId: game.resolvedQuestionInstanceId)
     }
 }

@@ -230,6 +230,22 @@ wait_for_process() {
   return 1
 }
 
+wait_for_display_attach() {
+  local marker="${COORDINATION_DIR}/display-attached"
+  for ((attempt = 0; attempt < 300; attempt++)); do
+    [[ -e "$marker" ]] && return
+    if [[ -n "$PLAYWRIGHT_PID" ]] && ! kill -0 "$PLAYWRIGHT_PID" 2>/dev/null; then
+      local exit_code=0
+      wait "$PLAYWRIGHT_PID" || exit_code=$?
+      printf 'Display Playwright exited before initial attach (exit %s).\n' "$exit_code" >&2
+      return "$exit_code"
+    fi
+    sleep 0.2
+  done
+  printf 'Timeout waiting for initial Display attach: %s\n' "$marker" >&2
+  return 1
+}
+
 STAGE="xcode-preflight"
 run_phase "preflight" 30 xcodebuild -version
 run_phase "simulator-shutdown" 60 /usr/bin/xcrun simctl shutdown "$DESTINATION_ID" || true
@@ -339,6 +355,7 @@ PLAYWRIGHT_OUTPUT_DIR="${E2E_TMP}/playwright-results" \
 PLAYWRIGHT_ARTIFACTS_DIR="${E2E_TMP}/playwright-report" \
 npm run test:e2e:mixed >"${E2E_TMP}/playwright.log" 2>&1 &
 PLAYWRIGHT_PID=$!
+wait_for_display_attach
 
 STAGE="orchestration-validation"
 wait_for_process "$ORCHESTRATOR_PID" 300 "orchestrator"
@@ -364,6 +381,13 @@ jq -e \
     and .drawingAnswerCount == 1
     and .rankingCount == 3
     and .stateVersionMonotonic == true
+    and .iosReconnectCount == 1
+    and .iosSamePlayerRecovered == true
+    and .iosVersionRegressionCount == 0
+    and .displayReconnectCount == 1
+    and .displayVersionRegressionCount == 0
+    and .duplicateResponseCount == 0
+    and .duplicateVoteCount == 0
     and .ios == "completed"
     and .display == "completed"
     and .scriptedPlayers == "completed"

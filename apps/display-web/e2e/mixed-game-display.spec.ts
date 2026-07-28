@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 type Coordination = {
@@ -61,9 +61,17 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
       await expect(page.getByText(name).first()).toBeVisible({
         timeout: 30_000,
       });
-    await writeFile(join(coordinationDir, 'display-attached'), '');
+    await writeMarker(coordinationDir, 'display-attached');
+    console.log('display-attached marker written');
+    await recordDisplayObservation(
+      page,
+      coordinationDir,
+      'snapshot-initial-attach',
+      1,
+    );
 
     const observed = new Set<string>();
+    let displayReconnected = false;
     const deadline = Date.now() + 240_000;
     while (
       Date.now() < deadline &&
@@ -74,6 +82,52 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
         if (!observed.has(key) && (await page.locator(selector).isVisible())) {
           observed.add(key);
           await writeFile(join(coordinationDir, `display-${key}`), '');
+          if (
+            !displayReconnected &&
+            (await fileExists(join(coordinationDir, 'ios-recovered-state')))
+          ) {
+            const before = await displayStateVersion(page);
+            await recordDisplayObservation(
+              page,
+              coordinationDir,
+              'snapshot-before-reload',
+              2,
+            );
+            await writeFile(
+              join(coordinationDir, 'display-reconnect-before.json'),
+              JSON.stringify({
+                client: 'display',
+                stateVersion: before,
+                timestampUtc: new Date().toISOString(),
+              }),
+            );
+            await writeFile(
+              join(coordinationDir, 'display-reconnect-requested'),
+              '',
+            );
+            await page.reload();
+            await expect(
+              page.getByText(coordination.roomCode).first(),
+            ).toBeVisible({ timeout: 30_000 });
+            const recovered = await displayStateVersion(page);
+            expect(recovered).toBeGreaterThanOrEqual(before);
+            await recordDisplayObservation(
+              page,
+              coordinationDir,
+              'snapshot-after-reconnect',
+              3,
+            );
+            await writeFile(
+              join(coordinationDir, 'display-reconnect-after.json'),
+              JSON.stringify({
+                client: 'display',
+                stateVersion: recovered,
+                timestampUtc: new Date().toISOString(),
+              }),
+            );
+            await writeFile(join(coordinationDir, 'display-reconnected'), '');
+            displayReconnected = true;
+          }
         }
       }
       await page.waitForTimeout(100);
@@ -98,6 +152,67 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
     }
     for (const type of ['textanswer', 'photoanswer', 'drawinganswer'])
       expect(observed.has(`${type}-voting`)).toBe(true);
-    await writeFile(join(coordinationDir, 'display-completed'), '');
+    await writeMarker(coordinationDir, 'display-completed');
+    await recordDisplayObservation(
+      page,
+      coordinationDir,
+      'snapshot-completed',
+      4,
+    );
+    expect(displayReconnected).toBe(true);
   });
 });
+
+async function displayStateVersion(
+  page: import('@playwright/test').Page,
+): Promise<number> {
+  const value = await page
+    .getByTestId('display-state-version')
+    .getAttribute('data-state-version');
+  if (!value || !/^\d+$/.test(value))
+    throw new Error(
+      `Invalid accepted Display stateVersion: ${value ?? '<missing>'}`,
+    );
+  return Number(value);
+}
+
+async function recordDisplayObservation(
+  page: import('@playwright/test').Page,
+  directory: string,
+  event: string,
+  sequence: number,
+): Promise<void> {
+  const version = await displayStateVersion(page);
+  const value = {
+    client: 'display',
+    event,
+    stateVersion: version,
+    phase: 'rendered',
+    questionId: '',
+    timestampUtc: new Date().toISOString(),
+  };
+  const path = join(
+    directory,
+    `display-observation-${String(sequence).padStart(6, '0')}.json`,
+  );
+  const temporaryPath = `${path}.tmp`;
+  await writeFile(temporaryPath, JSON.stringify(value));
+  await rename(temporaryPath, path);
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await readFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeMarker(directory: string, name: string): Promise<void> {
+  const path = join(directory, name);
+  const temporaryPath = `${path}.tmp`;
+  await writeFile(temporaryPath, '');
+  await rename(temporaryPath, path);
+  await readFile(path);
+}

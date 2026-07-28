@@ -3,6 +3,7 @@ import XCTest
 final class MixedGameClientE2ETests: XCTestCase {
     private var app: XCUIApplication!
     private var environment: [String: String]!
+    private var observationWriter: IOSObservationWriter!
 
     func testMixedGameClientE2E() throws {
         guard ProcessInfo.processInfo.environment["PARTYGAME_E2E_MODE"] == "1" else { return }
@@ -14,6 +15,7 @@ final class MixedGameClientE2ETests: XCTestCase {
         app = XCUIApplication()
         app.launchEnvironment = ["PARTYGAME_E2E_BACKEND_URL": backend]
         app.launch()
+        observationWriter = try IOSObservationWriter(directory: coordinationDirectory())
         mark("ios-launched")
 
         try waitFor(app.buttons["home.joinGame"], description: "normalny przycisk Dołącz na ekranie startowym").tap()
@@ -32,6 +34,8 @@ final class MixedGameClientE2ETests: XCTestCase {
         mark("ios-profile-selected")
 
         try waitFor(app.buttons["lobby.ready"], timeout: 20, description: "Lobby po produkcyjnym zapisie profilu")
+        let lobby = try recordCurrentSnapshot(event: "snapshot-lobby-accepted", stage: "lobby")
+        XCTAssertEqual(lobby.phase, "Lobby")
         XCTAssertTrue(app.staticTexts[nickname].exists, "Lobby nie pokazuje gracza iOS o oczekiwanym nicku.\n\(app.debugDescription)")
         mark("ios-profile-saved")
         let readyButton = app.buttons["lobby.ready"]
@@ -43,6 +47,8 @@ final class MixedGameClientE2ETests: XCTestCase {
         mark("ios-ready")
         guard environment["PARTYGAME_E2E_REQUIRE_GAME_STARTED"] == "1" else { return }
         try waitForMarker("game-started", timeout: 45, description: "potwierdzenie pojedynczego startu gry przez orkiestrator")
+        let started = try recordCurrentSnapshot(event: "snapshot-game-started", stage: "game-started")
+        XCTAssertNotEqual(started.phase, "Lobby")
         mark("ios-observed-game-start")
         try playFullGame()
     }
@@ -73,18 +79,23 @@ final class MixedGameClientE2ETests: XCTestCase {
     private func playFullGame() throws {
         var submitted = Set<String>()
         var voted = Set<String>()
+        var didReconnect = false
+        var mustRecordPostReconnectAction = false
         let deadline = Date().addingTimeInterval(240)
 
         while Date() < deadline {
             if app.otherElements["game-completed-view"].exists {
+                _ = try recordCurrentSnapshot(event: "snapshot-completed", stage: "completed")
                 mark("ios-completed-observed")
                 return
             }
 
+            var performedAction = false
             if !submitted.contains("playerselection"), app.buttons["E2E Host"].exists {
                 app.buttons["E2E Host"].tap()
                 try waitUntil(timeout: 10, description: "zapis wyboru gracza") { !self.app.buttons["E2E Host"].isEnabled }
                 submitted.insert("playerselection")
+                performedAction = true
                 mark("ios-player-selection-submitted")
             } else if !submitted.contains("textanswer"), app.textViews["textanswer.input"].exists {
                 let input = app.textViews["textanswer.input"]
@@ -93,9 +104,11 @@ final class MixedGameClientE2ETests: XCTestCase {
                 app.buttons["textanswer.submit"].tap()
                 if app.staticTexts["textanswer.waiting"].waitForExistence(timeout: 5) {
                     submitted.insert("textanswer")
+                    performedAction = true
                     mark("ios-text-submitted")
                 } else {
                     submitted.insert("textanswer")
+                    performedAction = true
                     mark("ios-text-subject-observed")
                 }
             } else if !submitted.contains("photoanswer"), app.buttons["photoAnswer.chooseLibrary"].exists {
@@ -104,6 +117,7 @@ final class MixedGameClientE2ETests: XCTestCase {
                 try waitFor(app.buttons["photoAnswer.usePhoto"], timeout: 15, description: "przycisk wysłania zdjęcia odpowiedzi").tap()
                 try waitFor(app.otherElements["photoAnswer.waiting"], timeout: 15, description: "zapis zdjęcia odpowiedzi")
                 submitted.insert("photoanswer")
+                performedAction = true
                 mark("ios-photo-submitted")
             } else if !submitted.contains("drawinganswer"), app.buttons["drawing.start"].exists {
                 app.buttons["drawing.start"].tap()
@@ -114,6 +128,7 @@ final class MixedGameClientE2ETests: XCTestCase {
                 try waitFor(app.buttons["drawing-submit-button"], timeout: 10, description: "wysłanie rysunku").tap()
                 try waitFor(app.otherElements["drawing-waiting-state"], timeout: 15, description: "zapis rysunku")
                 submitted.insert("drawinganswer")
+                performedAction = true
                 mark("ios-drawing-submitted")
             } else if !voted.contains("textanswer"), let option = firstEnabled(prefix: "textanswer.vote_option") {
                 option.tap()
@@ -121,6 +136,7 @@ final class MixedGameClientE2ETests: XCTestCase {
                     !self.app.buttons.matching(identifier: "textanswer.vote_option").firstMatch.exists
                 }
                 voted.insert("textanswer")
+                performedAction = true
                 mark("ios-text-voted")
             } else if !voted.contains("photoanswer"), firstEnabled(prefix: "photoAnswer.option.") != nil {
                 try submitFirstAcceptedVote(
@@ -129,6 +145,7 @@ final class MixedGameClientE2ETests: XCTestCase {
                     description: "głos na zdjęcie"
                 )
                 voted.insert("photoanswer")
+                performedAction = true
                 mark("ios-photo-voted")
             } else if !voted.contains("drawinganswer"), firstEnabled(prefix: "drawing-voting-option-") != nil {
                 try submitFirstAcceptedVote(
@@ -137,7 +154,31 @@ final class MixedGameClientE2ETests: XCTestCase {
                     description: "głos na rysunek"
                 )
                 voted.insert("drawinganswer")
+                performedAction = true
                 mark("ios-drawing-voted")
+            }
+            if !didReconnect, !submitted.isEmpty {
+                let before = try recordCurrentSnapshot(event: "snapshot-before-disconnect", stage: "before-disconnect")
+                mark("ios-reconnect-requested")
+                app.terminate()
+                mark("ios-terminated")
+                app.launch()
+                mark("ios-relaunched")
+                try waitUntil(timeout: 45, description: "production resume tego samego gracza") {
+                    guard let recovered = try? self.snapshot(from: self.app, event: "snapshot-after-recovery") else { return false }
+                    return recovered.stateVersion >= before.stateVersion
+                }
+                let recovered = try recordCurrentSnapshot(event: "snapshot-after-recovery", stage: "after-recovery")
+                XCTAssertGreaterThanOrEqual(recovered.stateVersion, before.stateVersion)
+                mark("ios-reconnected")
+                mark("ios-recovered-state")
+                didReconnect = true
+                mustRecordPostReconnectAction = true
+                continue
+            }
+            if mustRecordPostReconnectAction && performedAction {
+                _ = try recordCurrentSnapshot(event: "snapshot-after-post-reconnect-action", stage: "post-reconnect-action")
+                mustRecordPostReconnectAction = false
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.15))
         }
@@ -201,5 +242,30 @@ final class MixedGameClientE2ETests: XCTestCase {
     private func mark(_ name: String) {
         guard let directory = environment["PARTYGAME_E2E_COORDINATION_DIR"], !directory.isEmpty else { return }
         FileManager.default.createFile(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path, contents: Data())
+    }
+
+    private func coordinationDirectory() throws -> URL {
+        guard let path = environment["PARTYGAME_E2E_COORDINATION_DIR"], !path.isEmpty else {
+            throw NSError(domain: "MixedGameClientE2E", code: 6, userInfo: [NSLocalizedDescriptionKey: "Brak PARTYGAME_E2E_COORDINATION_DIR dla ledgeru iOS."])
+        }
+        return URL(fileURLWithPath: path)
+    }
+
+    private func snapshot(from app: XCUIApplication, event: String) throws -> IOSStateVersionObservation {
+        let prefix = "game.snapshot|"
+        let elements = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
+        let count = elements.count
+        guard count == 1 else {
+            throw NSError(domain: "MixedGameClientE2E", code: 7, userInfo: [NSLocalizedDescriptionKey: "\(event): oczekiwano dokładnie jednego accessibility identifiera snapshotu, znaleziono \(count)."])
+        }
+        let element = elements.element(boundBy: 0)
+        guard element.exists else { throw NSError(domain: "MixedGameClientE2E", code: 7, userInfo: [NSLocalizedDescriptionKey: "\(event): brak accessibility identifier snapshotu."]) }
+        return try IOSStateVersionObservation.parse(identifier: element.identifier, event: event)
+    }
+
+    private func recordCurrentSnapshot(event: String, stage: String) throws -> IOSStateVersionObservation {
+        do { let value = try snapshot(from: app, event: event); try observationWriter.record(value); return value }
+        catch { XCTFail("\(stage): \(error.localizedDescription)"); throw error }
     }
 }

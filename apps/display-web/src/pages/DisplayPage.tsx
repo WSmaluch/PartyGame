@@ -111,7 +111,11 @@ export function DisplayPage() {
     <main className="display-shell">
       <div className="confetti confetti--one" aria-hidden="true" />
       <div className="confetti confetti--two" aria-hidden="true" />
-      <section className="hero-card">
+      <section
+        className="hero-card"
+        data-testid="display-state-version"
+        data-state-version={snapshot?.stateVersion ?? ''}
+      >
         <p className="eyebrow">Ekran gry</p>
         <h1>PartyGame</h1>
 

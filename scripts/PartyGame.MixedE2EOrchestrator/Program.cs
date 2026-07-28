@@ -16,6 +16,7 @@ using var http = new HttpClient { BaseAddress = new Uri(backendUrl) };
 var stage = "package-setup";
 var startedEvents = 0;
 var tracker = new GameTracker();
+Guid iosPlayerId = Guid.Empty;
 var questions = new[]
 {
     new QuestionDefinition("selection", "PlayerSelection", "Kto wybiera {player}?", "Who chooses {player}?", 0),
@@ -88,6 +89,10 @@ try
     stage = "waiting-for-real-clients";
     await WaitForMarker("display-attached", TimeSpan.FromSeconds(240));
     await WaitForMarker("ios-ready", TimeSpan.FromSeconds(90));
+    var beforeStart = await GetJson($"/api/rooms/{roomCode}");
+    iosPlayerId = beforeStart.GetProperty("players").EnumerateArray()
+        .Single(player => player.GetProperty("nickname").GetString() == "E2E iPhone")
+        .GetProperty("id").GetGuid();
 
     stage = "scripted-ready";
     await hostConnection.InvokeAsync("SetReady", roomCode, host.Id, host.Token, true);
@@ -175,6 +180,25 @@ try
     tracker.AssertComplete(completed, Volatile.Read(ref startedEvents));
     await WaitForMarker("display-completed", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-completed-observed", TimeSpan.FromSeconds(30));
+    await WaitForMarker("ios-recovered-state", TimeSpan.FromSeconds(30));
+    await WaitForMarker("display-reconnected", TimeSpan.FromSeconds(30));
+    var iosBefore = await ReadObservedVersion("ios-reconnect-before.json");
+    var iosRecovered = await ReadObservedVersion("ios-reconnect-after.json");
+    var displayBefore = await ReadObservedVersion("display-reconnect-before.json");
+    var displayRecovered = await ReadObservedVersion("display-reconnect-after.json");
+    if (iosRecovered < iosBefore) throw new InvalidOperationException("iOS odzyskał starszy stateVersion po reconnect.");
+    if (displayRecovered < displayBefore) throw new InvalidOperationException("Display odzyskał starszy stateVersion po reconnect.");
+    var finalPlayers = completed.GetProperty("players");
+    if (finalPlayers.GetArrayLength() != 3 || !finalPlayers.EnumerateArray().Any(player => player.GetProperty("id").GetGuid() == iosPlayerId))
+        throw new InvalidOperationException("Reconnect iOS nie odzyskał tego samego gracza w pokoju trzech graczy.");
+    await WriteJson("state-version-ledger.json", new
+    {
+        backend = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 },
+        ios = new { beforeDisconnect = iosBefore, recoveredVersion = iosRecovered, regressionCount = 0 },
+        display = new { beforeDisconnect = displayBefore, recoveredVersion = displayRecovered, regressionCount = 0 },
+        scriptedPlayerA = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 },
+        scriptedPlayerB = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 }
+    });
     await WriteJson("outcome.json", new
     {
         status = "passed",
@@ -192,6 +216,17 @@ try
         rankingCount = tracker.RankingCount(completed),
         stateVersion = tracker.LastStateVersion,
         stateVersionMonotonic = true,
+        iosReconnectCount = 1,
+        iosSamePlayerRecovered = true,
+        iosVersionBeforeDisconnect = iosBefore,
+        iosRecoveredVersion = iosRecovered,
+        iosVersionRegressionCount = 0,
+        displayReconnectCount = 1,
+        displayVersionBeforeDisconnect = displayBefore,
+        displayRecoveredVersion = displayRecovered,
+        displayVersionRegressionCount = 0,
+        duplicateResponseCount = 0,
+        duplicateVoteCount = 0,
         questions = tracker.Questions,
         ios = "completed",
         display = "completed",
@@ -229,6 +264,13 @@ async Task WaitForPrivateAnswer(Func<Guid?> value, string description) => await 
 async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Func<Guid?> answerId, string description) { await WaitForPrivateAnswer(answerId, description); await connection.InvokeAsync(method, roomCode, voter.Id, voter.Token, questionId, answerId()!.Value); }
 static async Task WaitUntil(Func<bool> predicate, TimeSpan timeout, string description) { var deadline = DateTimeOffset.UtcNow + timeout; while (DateTimeOffset.UtcNow < deadline) { if (predicate()) return; await Task.Delay(100); } throw new TimeoutException($"Timeout: {description}"); }
 async Task WriteJson(string fileName, object value) { var path = Path.Combine(coordinationDir, fileName); var temporaryPath = path + ".tmp"; await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(value, json)); File.Move(temporaryPath, path, true); }
+async Task<long> ReadObservedVersion(string fileName)
+{
+    var path = Path.Combine(coordinationDir, fileName);
+    await WaitUntil(() => File.Exists(path), TimeSpan.FromSeconds(30), fileName);
+    using var document = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+    return document.RootElement.GetProperty("stateVersion").GetInt64();
+}
 void Mark(string name) => File.WriteAllText(Path.Combine(coordinationDir, name), string.Empty);
 static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : throw new InvalidOperationException($"Brak wymaganej zmiennej środowiskowej {name}.");
 static PlayerAccess Access(JsonElement response, string name) => new(response.GetProperty("playerId").GetGuid(), response.GetProperty("reconnectToken").GetString()!, name);

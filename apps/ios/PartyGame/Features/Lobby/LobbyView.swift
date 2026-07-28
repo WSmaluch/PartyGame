@@ -36,6 +36,13 @@ struct LobbyView: View {
         }
         .navigationTitle("lobby.title")
         .navigationBarBackButtonHidden()
+        .overlay(alignment: .topLeading) {
+            if let snapshot = store.snapshot {
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityIdentifier(SnapshotAccessibilityMetadata.identifier(snapshot: snapshot, phase: snapshot.phase.rawValue, questionId: nil))
+            }
+        }
         .alert("session.forget.title", isPresented: $confirmsForget) {
             Button("common.cancel", role: .cancel) {}
             Button("session.forget", role: .destructive) { Task { await store.forgetSession() } }

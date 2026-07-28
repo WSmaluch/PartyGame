@@ -5,8 +5,9 @@ Status całego Etapu 7: w toku.
 | Podetap                                     | Status        |
 | ------------------------------------------- | ------------- |
 | 7.1 — deterministyczna orkiestracja         | ukończony     |
-| 7.2 — pełny przebieg czterech typów pytań   | gotowy do audytu |
-| 7.3 — reconnect i `stateVersion`            | nierozpoczęty |
+| 7.2 — pełny przebieg czterech typów pytań   | ukończony |
+| 7.3 — reconnect i `stateVersion`            | w toku |
+| 7.3A.1 — rzeczywiste obserwacje iOS          | ukończony |
 | 7.4 — stabilizacja wielokrotnych przebiegów | nierozpoczęty |
 
 ## Cel 7.1
@@ -124,4 +125,55 @@ każdego typu, braku piątego pytania, monotonicznego `stateVersion`, pojedyncze
 ekrany zbierania, ujawniania, głosowania i wyników właściwe dla aktualnie wylosowanego typu oraz
 końcowy ranking.
 
-Reconnect i odtwarzanie stanu po zerwaniu połączenia pozostają poza 7.2 i są zakresem 7.3.
+## Etap 7.3 — reconnect i monotoniczny `stateVersion`
+
+W tym samym pełnym przebiegu iOS wykonuje dokładnie jedno kontrolowane zakończenie
+aplikacji po pierwszej zaakceptowanej akcji. Po zwykłym ponownym uruchomieniu używa
+istniejącego zapisu Keychain oraz produkcyjnego `resume` i `AttachPlayer`; test nie
+wstrzykuje tokenu ani nie tworzy nowego gracza. Display później przeładowuje produkcyjną
+stronę i odzyskuje pokój przez zapisany kod oraz normalny `AttachDisplay`.
+
+Koordynacja zapisuje bezpieczne markery reconnectu i wersje przed/po w osobnych plikach.
+Końcowy ledger obejmuje backend/orkiestrator, iOS, Display i obu scripted players. Dla
+każdego klienta zaakceptowany `stateVersion` nie może maleć; wersja po recovery musi być
+co najmniej wersją sprzed rozłączenia. `outcome.json` potwierdza jeden reconnect każdego
+klienta, tego samego gracza iOS, brak duplikatów odpowiedzi/głosów, cztery typy pytań,
+`Completed` i ranking trzech graczy. Diagnostyka awarii zachowuje wyłącznie bezpieczny
+ledger, fazę i wersje — bez tokenów ani danych mediów.
+
+Etap 7.4 pozostaje zakresem stabilizacji wielokrotnych przebiegów (w tym seria 5/5).
+
+## Etap 7.3A.1 — rzeczywiste obserwacje iOS
+
+`LobbyView` i `GameRouterView` wystawiają niewidoczny element dostępności wyłącznie z
+aktualnie zaakceptowanego `RoomSnapshot`. Oba widoki korzystają ze wspólnego formattera
+`SnapshotAccessibilityMetadata`; element nie zmienia wyglądu ani routingu i nie zawiera
+tokenu, kodu sekretnego ani danych prywatnych. Identifier ma dokładnie format:
+
+```text
+game.snapshot|stateVersion=<liczba>|phase=<faza>|questionId=<UUID-lub-pusty>
+```
+
+`MixedGameClientE2ETests` wymaga dokładnie jednego takiego elementu i zapisuje atomowo
+obserwacje po sześciu rzeczywistych punktach przebiegu: `snapshot-lobby-accepted`,
+`snapshot-game-started`, `snapshot-before-disconnect`, `snapshot-after-recovery`,
+`snapshot-after-post-reconnect-action` oraz `snapshot-completed`. Recovery wymaga wersji
+co najmniej takiej jak przed rozłączeniem; obserwacja po reconnect następuje dopiero po
+potwierdzonej akcji iOS oraz ponownym wyrenderowaniu stanu.
+
+Parser identifiera odrzuca niepełny, zduplikowany i niejednoznaczny format. Wspólny tracker
+akceptuje niemalejące `stateVersion` (w tym duplikaty), zlicza zaakceptowane obserwacje i
+odrzuca regresję bez zmiany ostatniej zaakceptowanej wersji. Writer sprawdza katalog
+koordynacji, numeruje pliki `ios-observation-000001.json`, zapisuje przez plik tymczasowy
+i rename, nie nadpisuje kolizji oraz po zapisie dekoduje JSON ponownie.
+
+Testy obejmują formatter dla Lobby, aktywnej gry i Completed oraz jego deterministyczność;
+parser poprawnego i błędnych formatów; tracker dla sekwencji `10, 11, 11, 12` i regresji
+`10, 12, 11`; a także writer dla numeracji, dekodowalności, braku artefaktu tymczasowego,
+kolizji i brakującego katalogu. Kontrolowany `resolvePackageDependencies` zakończył się
+kodem `0` dla `SignalRClient 1.0.0`, a kontrolowany `build-for-testing` tym samym
+DerivedData i SourcePackages — `TEST BUILD SUCCEEDED`. Formatter (4), parser (2), tracker
+(2) i writer (3) przeszły jako celowane `test-without-building`. Pełny Mixed Client E2E oraz
+seria 5/5 pozostają poza 7.3A.1.
+
+Status: 7.3A.1 — ukończony; 7.3A — nadal nieukończony; 7.3 — nadal nieukończony.
