@@ -8,6 +8,7 @@ Status całego Etapu 7: w toku.
 | 7.2 — pełny przebieg czterech typów pytań   | ukończony |
 | 7.3 — reconnect i `stateVersion`            | w toku |
 | 7.3A.1 — rzeczywiste obserwacje iOS          | ukończony |
+| 7.3A.2 — obserwacje scripted players/backend | ukończony |
 | 7.4 — stabilizacja wielokrotnych przebiegów | nierozpoczęty |
 
 ## Cel 7.1
@@ -177,3 +178,33 @@ DerivedData i SourcePackages — `TEST BUILD SUCCEEDED`. Formatter (4), parser (
 seria 5/5 pozostają poza 7.3A.1.
 
 Status: 7.3A.1 — ukończony; 7.3A — nadal nieukończony; 7.3 — nadal nieukończony.
+
+## Etap 7.3A.2 — obserwacje scripted players i backendu
+
+Orkiestrator zapisuje wspólny, bezpieczny model obserwacji z polami `client`, `event`,
+`stateVersion`, `phase`, `questionId` i czasem UTC. Nie zawiera on tokenów, sekretów,
+mediów ani danych profili. Każdy zapis jest osobnym plikiem JSON w katalogu koordynacji,
+ma własną sekwencję per klient i jest wykonywany przez plik tymczasowy, atomowy rename,
+sprawdzenie istnienia oraz ponowne dekodowanie.
+
+Player A i Player B mają całkowicie niezależne rekordery: osobny tracker, ostatnią
+zaakceptowaną wersję, liczniki obserwacji/regresji, sekwencję i pliki odpowiednio
+`scripted-player-a-observation-*.json` oraz `scripted-player-b-observation-*.json`.
+Snapshot jest rejestrowany dopiero po akceptacji odpowiedzi `AttachPlayer` albo zdarzeń
+SignalR `RoomSnapshotUpdated` i `RoomStarted`. Następna akcja scripted players wymaga,
+aby obaj posiadali zgodny zaakceptowany snapshot aktywnego pytania. Wersja starsza jest
+odrzucana, zwiększa licznik regresji i kończy scenariusz błędem; duplikat tej samej
+wersji nie jest regresją ani nową obserwacją.
+
+Backendowy recorder obserwuje snapshot utworzenia pokoju oraz odpowiedzi `GET /api/rooms`,
+z których orkiestrator faktycznie podejmuje decyzje. Obejmuje to Lobby, start gry, kolejne
+pytania i fazy oraz Completed. `state-version-ledger.json` i końcowy `stateVersion` korzystają
+z ostatniej zaakceptowanej obserwacji backendu, nie z wartości syntetycznej.
+
+Celowane testy C# obejmują monotoniczność i regresję trackera, niezależność A/B, numerację,
+dekodowanie i kolizje writera, walidację modelu oraz ścieżkę backendu Lobby → Started →
+Completed z regresją. Wynik: 10/10 PASS. `dotnet build` orkiestratora zakończył się PASS
+(ostrzeżenie NU1900 o niedostępnej usłudze podatności nie wpływa na wynik). Izolowany build
+Displaya w czystej kopii poza repozytorium przeszedł: `npm ci` i `npm run build` exit 0.
+
+Status: 7.3A.1 — ukończony; 7.3A.2 — ukończony; 7.3A — nadal nieukończony; 7.3 — nadal nieukończony.

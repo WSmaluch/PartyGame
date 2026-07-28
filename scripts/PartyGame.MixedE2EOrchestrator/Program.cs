@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR.Client;
+using PartyGame.MixedE2EOrchestrator;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
@@ -16,6 +18,10 @@ using var http = new HttpClient { BaseAddress = new Uri(backendUrl) };
 var stage = "package-setup";
 var startedEvents = 0;
 var tracker = new GameTracker();
+var observationFailures = new ConcurrentQueue<Exception>();
+var backendObservations = new ClientStateVersionRecorder("backend", coordinationDir);
+var hostObservations = new ClientStateVersionRecorder("scripted-player-a", coordinationDir);
+var nodeObservations = new ClientStateVersionRecorder("scripted-player-b", coordinationDir);
 Guid iosPlayerId = Guid.Empty;
 var questions = new[]
 {
@@ -66,6 +72,7 @@ try
         settings = new { roundCount = 1, questionsPerRound = 4, playerSelectionSeconds = 30, textAnswerSeconds = 30, votingSeconds = 20, photoSeconds = 30, drawingSeconds = 30, resultPresentationSeconds = 5, finalRoundEnabled = false, finalDrawingPasses = 1 }
     });
     var roomCode = roomAccess.GetProperty("roomCode").GetString()!;
+    Observe(backendObservations, roomAccess.GetProperty("snapshot"), "room-created");
     var host = Access(roomAccess, "E2E Host");
     var node = Access(await PostJson($"/api/rooms/{roomCode}/players", new { nickname = "E2E Node" }), "E2E Node");
     if (roomAccess.GetProperty("snapshot").GetProperty("contentPackageVersionId").GetGuid() != packageId)
@@ -77,12 +84,19 @@ try
     var nodePrivate = new PrivateState();
     await using var hostConnection = Connection();
     await using var nodeConnection = Connection();
-    hostConnection.On<JsonElement>("RoomStarted", _ => Interlocked.Increment(ref startedEvents));
+    hostConnection.On<JsonElement>("RoomSnapshotUpdated", value => Observe(hostObservations, value, "snapshot-accepted"));
+    nodeConnection.On<JsonElement>("RoomSnapshotUpdated", value => Observe(nodeObservations, value, "snapshot-accepted"));
+    hostConnection.On<JsonElement>("RoomStarted", value =>
+    {
+        Interlocked.Increment(ref startedEvents);
+        Observe(hostObservations, value, "room-started");
+    });
+    nodeConnection.On<JsonElement>("RoomStarted", value => Observe(nodeObservations, value, "room-started"));
     hostConnection.On<JsonElement>("PlayerPrivateGameStateUpdated", value => hostPrivate = Private(value));
     nodeConnection.On<JsonElement>("PlayerPrivateGameStateUpdated", value => nodePrivate = Private(value));
     await hostConnection.StartAsync(); await nodeConnection.StartAsync();
-    await hostConnection.InvokeAsync("AttachPlayer", roomCode, host.Id, host.Token);
-    await nodeConnection.InvokeAsync("AttachPlayer", roomCode, node.Id, node.Token);
+    Observe(hostObservations, await hostConnection.InvokeAsync<JsonElement>("AttachPlayer", roomCode, host.Id, host.Token), "attach-player-response");
+    Observe(nodeObservations, await nodeConnection.InvokeAsync<JsonElement>("AttachPlayer", roomCode, node.Id, node.Token), "attach-player-response");
 
     await WriteJson("coordination.json", new { backendUrl, roomCode, contentPackageVersionId = packageId, iosNickname = "E2E iPhone", displayExpected = true, scriptedPlayers = new[] { host.Name, node.Name } });
     Mark("orchestrator-ready");
@@ -113,10 +127,21 @@ try
     while (DateTimeOffset.UtcNow < deadline)
     {
         var room = await GetJson($"/api/rooms/{roomCode}");
+        ThrowObservationFailure();
         tracker.Observe(room);
         if (room.GetProperty("phase").GetString() == "Completed") break;
-        var active = Active(room, questionTypes);
-        if (active is null) { await Task.Delay(100); continue; }
+        if (!hostObservations.TryGetLatestSnapshot(out var hostSnapshot) || !nodeObservations.TryGetLatestSnapshot(out var nodeSnapshot))
+        {
+            await Task.Delay(100);
+            continue;
+        }
+        var active = Active(hostSnapshot, questionTypes);
+        var nodeActive = Active(nodeSnapshot, questionTypes);
+        if (active is null || nodeActive is null || active.Id != nodeActive.Id || active.Stage != nodeActive.Stage || active.StateVersion != nodeActive.StateVersion)
+        {
+            await Task.Delay(100);
+            continue;
+        }
         tracker.ObserveQuestion(active);
         await WriteJson("active-question.json", new { questionId = active.Id, questionType = active.Type, stage = active.Stage, stateVersion = active.StateVersion });
         var key = $"{active.Id}:{active.Stage}";
@@ -174,6 +199,7 @@ try
     }
 
     var completed = await GetJson($"/api/rooms/{roomCode}");
+    ThrowObservationFailure();
     tracker.Observe(completed);
     if (completed.GetProperty("phase").GetString() != "Completed")
         throw new TimeoutException($"Gra nie doszła do Completed przed limitem 6 minut. Ostatnie pytanie: {tracker.LastQuestionType ?? "brak"}, faza: {tracker.LastPhase ?? "brak"}, stateVersion: {tracker.LastStateVersion}.");
@@ -193,11 +219,11 @@ try
         throw new InvalidOperationException("Reconnect iOS nie odzyskał tego samego gracza w pokoju trzech graczy.");
     await WriteJson("state-version-ledger.json", new
     {
-        backend = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 },
+        backend = new { acceptedStateVersion = backendObservations.Tracker.LastAcceptedStateVersion, regressionCount = backendObservations.Tracker.RegressionCount, observationCount = backendObservations.Tracker.ObservationCount },
         ios = new { beforeDisconnect = iosBefore, recoveredVersion = iosRecovered, regressionCount = 0 },
         display = new { beforeDisconnect = displayBefore, recoveredVersion = displayRecovered, regressionCount = 0 },
-        scriptedPlayerA = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 },
-        scriptedPlayerB = new { acceptedStateVersion = tracker.LastStateVersion, regressionCount = 0 }
+        scriptedPlayerA = new { acceptedStateVersion = hostObservations.Tracker.LastAcceptedStateVersion, regressionCount = hostObservations.Tracker.RegressionCount, observationCount = hostObservations.Tracker.ObservationCount },
+        scriptedPlayerB = new { acceptedStateVersion = nodeObservations.Tracker.LastAcceptedStateVersion, regressionCount = nodeObservations.Tracker.RegressionCount, observationCount = nodeObservations.Tracker.ObservationCount }
     });
     await WriteJson("outcome.json", new
     {
@@ -214,7 +240,7 @@ try
         photoAnswerCount = tracker.Count("PhotoAnswer"),
         drawingAnswerCount = tracker.Count("DrawingAnswer"),
         rankingCount = tracker.RankingCount(completed),
-        stateVersion = tracker.LastStateVersion,
+        stateVersion = backendObservations.Tracker.LastAcceptedStateVersion,
         stateVersionMonotonic = true,
         iosReconnectCount = 1,
         iosSamePlayerRecovered = true,
@@ -252,7 +278,13 @@ catch (Exception exception)
 
 HubConnection Connection() => new HubConnectionBuilder().WithUrl($"{backendUrl}/hubs/game").Build();
 async Task<JsonElement> PostJson(string path, object body) { using var response = await http.PostAsJsonAsync(path, body, json); return await ReadSuccess(response); }
-async Task<JsonElement> GetJson(string path) { using var response = await http.GetAsync(path); return await ReadSuccess(response); }
+async Task<JsonElement> GetJson(string path)
+{
+    using var response = await http.GetAsync(path);
+    var value = await ReadSuccess(response);
+    if (path.StartsWith("/api/rooms/", StringComparison.Ordinal)) Observe(backendObservations, value, "snapshot-accepted");
+    return value;
+}
 static async Task<JsonElement> ReadSuccess(HttpResponseMessage response) { var content = await response.Content.ReadAsStringAsync(); if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {content}"); return JsonDocument.Parse(content).RootElement.Clone(); }
 async Task UploadProfile(string roomCode, PlayerAccess player, byte[] image) { using var form = new MultipartFormDataContent(); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg"); form.Add(content, "file", "profile.jpg"); using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{roomCode}/players/{player.Id}/profile-photo") { Content = form }; request.Headers.Add("X-Player-Token", player.Token); using var response = await http.SendAsync(request); _ = await ReadSuccess(response); }
 async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType) { using var form = new MultipartFormDataContent(); form.Add(new StringContent(player.Id.ToString()), "playerId"); form.Add(new StringContent(player.Token), "reconnectToken"); form.Add(new StringContent(Guid.NewGuid().ToString()), "clientSubmissionId"); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType); form.Add(content, field, $"{field}.{(contentType == "image/png" ? "png" : "jpg")}"); using var response = await http.PostAsync($"/api/rooms/{roomCode}/questions/{questionId}/{field}-answers", form); _ = await ReadSuccess(response); }
@@ -272,6 +304,15 @@ async Task<long> ReadObservedVersion(string fileName)
     return document.RootElement.GetProperty("stateVersion").GetInt64();
 }
 void Mark(string name) => File.WriteAllText(Path.Combine(coordinationDir, name), string.Empty);
+void Observe(ClientStateVersionRecorder recorder, JsonElement snapshot, string @event)
+{
+    try { recorder.Observe(snapshot, @event); }
+    catch (Exception exception) { observationFailures.Enqueue(exception); }
+}
+void ThrowObservationFailure()
+{
+    if (observationFailures.TryDequeue(out var failure)) throw new InvalidOperationException("Błąd obserwacji stateVersion.", failure);
+}
 static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : throw new InvalidOperationException($"Brak wymaganej zmiennej środowiskowej {name}.");
 static PlayerAccess Access(JsonElement response, string name) => new(response.GetProperty("playerId").GetGuid(), response.GetProperty("reconnectToken").GetString()!, name);
 static PrivateState Private(JsonElement value) => new(ReadGuid(value, "ownTextAnswerId"), ReadGuid(value, "ownPhotoAnswerId"), ReadGuid(value, "ownDrawingAnswerId"));
