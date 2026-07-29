@@ -83,7 +83,7 @@ public static class RoomContractMapper
             var currentInstance = currentRound.Questions.FirstOrDefault(q => q.Id == session.CurrentQuestionInstanceId);
             if (currentInstance != null && currentInstance.Question != null)
             {
-                question = new GameQuestionSnapshot(currentInstance.Question.Id, new LocalizedText(currentInstance.Question.TextPl, currentInstance.Question.TextEn));
+                question = new GameQuestionSnapshot(currentInstance.Question.Id, new LocalizedText(currentInstance.Question.TextPl, currentInstance.Question.TextEn), currentInstance.Id);
 
                 if (session.Stage == GameStage.CollectingPlayerSelections)
                 {

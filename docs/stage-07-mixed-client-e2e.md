@@ -243,3 +243,34 @@ sortowanie po sekwencji, cofnięcie timestampu i atomowy zapis ledgeru. Pełny p
 orkiestratora: 37 PASS. Status: 7.3A.1, 7.3A.2 i 7.3A.3 — ukończone; 7.3A oraz 7.3 — nadal
 nieukończone. Następny zakres: 7.3A.4 — trwałe dowody PASS/FAIL, kody procesów i jeden pełny
 przebieg integracyjny.
+
+## Etap 7.3A.4 — trwałe dowody i pełny PASS
+
+Kontrakt snapshotu rozdziela ID definicji pytania (`question.id`) od ID uruchomionej instancji
+(`question.instanceId`). API propaguje oba pola, a iOS zachowuje kompatybilny fallback tylko dla
+starszych serwerów. Wszystkie operacje zależne od aktywnego pytania medialnego — upload zdjęcia,
+upload rysunku, głosowanie na zdjęcie i rysunek, private state oraz markery orkiestratora — używają
+tego samego `question.instanceId`; nie ma translacji opartej na kolejności fixture ani na ID
+szablonu.
+
+Przy wejściu w `CollectingDrawingAnswers` iOS odświeża private state, dzięki czemu ekran rysowania
+nie opiera się na przestarzałej odpowiedzi po reconnect. Dostępność SwiftUI pozostawia identyfikator
+rootu widoku na właściwym elemencie; XCUITest obserwuje końcowy `Completed` jako `StaticText`.
+Orkiestrator traktuje zakończenie gry zgodnie z publicznym `game.stage = Completed` (techniczna
+faza pokoju pozostaje `Started`) i zapisuje w outcome semantyczne `RoomPhase = Completed`.
+
+Skrypt E2E rejestruje PID i status backendu, Vite, Playwright, orkiestratora oraz Xcode, nie myli
+poprawnie ukończonego klienta pomocniczego z awarią i zawsze zachowuje bezpieczny bundle dowodowy
+poza repozytorium. Bundle zawiera `outcome.json`, `state-version-ledger.json`,
+`process-exit-codes.json`, `run-summary.txt`, logi pięciu procesów oraz obserwacje pięciu klientów.
+
+Pełny przebieg PASS z 2026-07-29 jest zachowany w
+`/private/tmp/partygame-mixed-e2e-pass.tyMGUy`. Outcome potwierdza `RoomStartedCount = 1`,
+cztery pytania (po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer`, `DrawingAnswer`),
+`RoomPhase = Completed`, ranking 3, finalne `stateVersion = 52`, brak duplikatów odpowiedzi i
+głosów. Ledger przeszedł bez błędów: iOS 6 obserwacji (17 → 21 po reconnect), Display 4 (22 → 24),
+scripted player A 44, scripted player B 43, backend 29; regresje każdego klienta wynoszą 0.
+Playwright, orkiestrator, Xcodebuild i główny skrypt zakończyły się kodem 0, a cleanup również 0.
+
+Status: 7.3A.1 — ukończony; 7.3A.2 — ukończony; 7.3A.3 — ukończony; 7.3A.4 — ukończony;
+7.3A — ukończony; 7.3B — niewykonany; 7.3 — nadal nieukończony.

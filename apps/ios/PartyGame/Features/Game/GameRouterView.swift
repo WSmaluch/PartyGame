@@ -50,8 +50,9 @@ struct GameRouterView: View {
                     PhotoAnswerResultsView(store: store, game: game)
                 case .collectingDrawingAnswers:
                     if store.privateGameState?.questionInstanceId != game.resolvedQuestionInstanceId {
-                        DrawingPrivateStateLoader()
-                    } else if store.privateGameState?.hasSubmittedDrawingAnswer == true {
+                        DrawingPrivateStateLoader(store: store, questionId: game.resolvedQuestionInstanceId)
+                    } else if store.privateGameState?.hasSubmittedDrawingAnswer == true ||
+                                store.privateGameState?.isEligibleForDrawingAnswer == false {
                         DrawingWaitingView(game: game)
                     } else {
                         DrawingAnswerTaskView(store: store, game: game)
@@ -60,7 +61,7 @@ struct GameRouterView: View {
                     DrawingRevealWaitingView(game: game)
                 case .collectingDrawingAnswerVotes:
                     if store.privateGameState?.questionInstanceId != game.resolvedQuestionInstanceId {
-                        DrawingPrivateStateLoader()
+                        DrawingPrivateStateLoader(store: store, questionId: game.resolvedQuestionInstanceId)
                     } else if store.privateGameState?.hasSubmittedDrawingAnswerVote == true {
                         DrawingVoteWaitingView(game: game)
                     } else {
@@ -84,11 +85,15 @@ struct GameRouterView: View {
         }
         .padding(28).navigationBarBackButtonHidden()
         .overlay(alignment: .topLeading) {
-            Color.clear.frame(width: 1, height: 1)
-                .accessibilityElement()
-                .accessibilityIdentifier("game.started")
+            ZStack {
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("game.started")
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityIdentifier(snapshotIdentifier)
+            }
         }
-        .accessibilityIdentifier(snapshotIdentifier)
         .task(id: store.snapshot?.game?.resolvedQuestionInstanceId) {
             await PhotoAnswerImageCache.shared.clear()
         }

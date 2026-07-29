@@ -827,6 +827,10 @@ public sealed class RoomService(
                 .ThenInclude(s => s!.Rounds)
                     .ThenInclude(r => r.Questions)
                         .ThenInclude(i => i.EligiblePlayers)
+            .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.TextAnswerEligiblePlayers)
+            .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.TextAnswerSubmissions)
+            .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.TextAnswerVoteEligiblePlayers)
+            .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.TextAnswerVotes)
             .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.PhotoAnswerEligiblePlayers)
             .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.PhotoAnswerSubmissions).ThenInclude(s => s.MediaAsset)
             .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.PhotoAnswerVoteEligiblePlayers)
@@ -853,10 +857,15 @@ public sealed class RoomService(
                 .ThenInclude(s => s!.Rounds)
                     .ThenInclude(r => r.Questions)
                         .ThenInclude(q => q.TextAnswerVotes)
+            .Include(r => r.Session)
+                .ThenInclude(s => s!.Rounds)
+                    .ThenInclude(r => r.Questions)
+                        .ThenInclude(q => q.TextAnswerVoteEligiblePlayers)
             .Include(r => r.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(q => q.PhotoAnswerSubmissions)
             .Include(r => r.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(q => q.PhotoAnswerVotes)
             .Include(r => r.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(q => q.DrawingAnswerSubmissions)
             .Include(r => r.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(q => q.DrawingAnswerVotes)
+            .Include(r => r.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(q => q.DrawingAnswerEligiblePlayers)
             .FirstOrDefaultAsync(r => r.Code == code, cancellationToken);
 
         if (room == null || room.Session == null) return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, null, false, null, false);
@@ -870,11 +879,13 @@ public sealed class RoomService(
         var hasSubmittedAnswer = currentInstance.TextAnswerSubmissions.Any(s => s.AuthorPlayerId == playerId);
         var ownAnswerId = currentInstance.TextAnswerSubmissions.FirstOrDefault(s => s.AuthorPlayerId == playerId)?.Id;
         var hasSubmittedVote = currentInstance.TextAnswerVotes.Any(v => v.VoterPlayerId == playerId);
+        var isEligibleForTextAnswerVote = currentInstance.TextAnswerVoteEligiblePlayers.Any(e => e.PlayerId == playerId);
 
         var ownPhoto = currentInstance.PhotoAnswerSubmissions.FirstOrDefault(s => s.AuthorPlayerId == playerId);
         var hasPhotoVote = currentInstance.PhotoAnswerVotes.Any(v => v.VoterPlayerId == playerId);
         var ownDrawing = currentInstance.DrawingAnswerSubmissions.FirstOrDefault(s => s.AuthorPlayerId == playerId);
         var hasDrawingVote = currentInstance.DrawingAnswerVotes.Any(v => v.VoterPlayerId == playerId);
-        return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, currentInstanceId, hasSubmittedAnswer, ownAnswerId, hasSubmittedVote, ownPhoto != null, ownPhoto?.Id, hasPhotoVote, ownDrawing != null, ownDrawing?.Id, hasDrawingVote);
+        var isEligibleForDrawingAnswer = currentInstance.DrawingAnswerEligiblePlayers.Any(e => e.PlayerId == playerId);
+        return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, currentInstanceId, hasSubmittedAnswer, ownAnswerId, hasSubmittedVote, isEligibleForTextAnswerVote, ownPhoto != null, ownPhoto?.Id, hasPhotoVote, ownDrawing != null, ownDrawing?.Id, hasDrawingVote, isEligibleForDrawingAnswer);
     }
 }

@@ -487,12 +487,14 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
     let hasSubmittedTextAnswer: Bool
     let ownTextAnswerId: UUID?
     let hasSubmittedTextAnswerVote: Bool
+    let isEligibleForTextAnswerVote: Bool
     let hasSubmittedPhotoAnswer: Bool
     let ownPhotoAnswerId: UUID?
     let hasSubmittedPhotoAnswerVote: Bool
     let hasSubmittedDrawingAnswer: Bool
     let ownDrawingAnswerId: UUID?
     let hasSubmittedDrawingAnswerVote: Bool
+    let isEligibleForDrawingAnswer: Bool
 
     init(
         playerId: UUID,
@@ -500,30 +502,34 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
         hasSubmittedTextAnswer: Bool,
         ownTextAnswerId: UUID?,
         hasSubmittedTextAnswerVote: Bool,
+        isEligibleForTextAnswerVote: Bool = false,
         hasSubmittedPhotoAnswer: Bool = false,
         ownPhotoAnswerId: UUID? = nil,
         hasSubmittedPhotoAnswerVote: Bool = false,
         hasSubmittedDrawingAnswer: Bool = false,
         ownDrawingAnswerId: UUID? = nil,
-        hasSubmittedDrawingAnswerVote: Bool = false
+        hasSubmittedDrawingAnswerVote: Bool = false,
+        isEligibleForDrawingAnswer: Bool = false
     ) {
         self.playerId = playerId
         self.questionInstanceId = questionInstanceId
         self.hasSubmittedTextAnswer = hasSubmittedTextAnswer
         self.ownTextAnswerId = ownTextAnswerId
         self.hasSubmittedTextAnswerVote = hasSubmittedTextAnswerVote
+        self.isEligibleForTextAnswerVote = isEligibleForTextAnswerVote
         self.hasSubmittedPhotoAnswer = hasSubmittedPhotoAnswer
         self.ownPhotoAnswerId = ownPhotoAnswerId
         self.hasSubmittedPhotoAnswerVote = hasSubmittedPhotoAnswerVote
         self.hasSubmittedDrawingAnswer = hasSubmittedDrawingAnswer
         self.ownDrawingAnswerId = ownDrawingAnswerId
         self.hasSubmittedDrawingAnswerVote = hasSubmittedDrawingAnswerVote
+        self.isEligibleForDrawingAnswer = isEligibleForDrawingAnswer
     }
 
     private enum CodingKeys: String, CodingKey {
-        case playerId, questionInstanceId, hasSubmittedTextAnswer, ownTextAnswerId, hasSubmittedTextAnswerVote
+        case playerId, questionInstanceId, hasSubmittedTextAnswer, ownTextAnswerId, hasSubmittedTextAnswerVote, isEligibleForTextAnswerVote
         case hasSubmittedPhotoAnswer, ownPhotoAnswerId, hasSubmittedPhotoAnswerVote
-        case hasSubmittedDrawingAnswer, ownDrawingAnswerId, hasSubmittedDrawingAnswerVote
+        case hasSubmittedDrawingAnswer, ownDrawingAnswerId, hasSubmittedDrawingAnswerVote, isEligibleForDrawingAnswer
     }
 
     init(from decoder: Decoder) throws {
@@ -533,12 +539,14 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
         hasSubmittedTextAnswer = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedTextAnswer) ?? false
         ownTextAnswerId = try values.decodeIfPresent(UUID.self, forKey: .ownTextAnswerId)
         hasSubmittedTextAnswerVote = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedTextAnswerVote) ?? false
+        isEligibleForTextAnswerVote = try values.decodeIfPresent(Bool.self, forKey: .isEligibleForTextAnswerVote) ?? false
         hasSubmittedPhotoAnswer = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedPhotoAnswer) ?? false
         ownPhotoAnswerId = try values.decodeIfPresent(UUID.self, forKey: .ownPhotoAnswerId)
         hasSubmittedPhotoAnswerVote = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedPhotoAnswerVote) ?? false
         hasSubmittedDrawingAnswer = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedDrawingAnswer) ?? false
         ownDrawingAnswerId = try values.decodeIfPresent(UUID.self, forKey: .ownDrawingAnswerId)
         hasSubmittedDrawingAnswerVote = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedDrawingAnswerVote) ?? false
+        isEligibleForDrawingAnswer = try values.decodeIfPresent(Bool.self, forKey: .isEligibleForDrawingAnswer) ?? false
     }
 }
 
@@ -632,8 +640,9 @@ struct GameSnapshot: Codable, Equatable, Sendable {
 }
 
 extension GameSnapshot {
-    /// PhotoAnswer transport actions use the persisted question-instance id,
-    /// not the public question-definition id exposed as `question.id`.
+    /// Transport actions use the persisted game-question instance id. Older
+    /// servers exposed only the question-definition id as `question.id`, so
+    /// media-result snapshots remain a backwards-compatible fallback.
     var resolvedQuestionInstanceId: UUID? {
         photoAnswerResults?.questionInstanceId ?? drawingAnswerResults?.questionInstanceId ?? currentQuestion?.instanceId
     }

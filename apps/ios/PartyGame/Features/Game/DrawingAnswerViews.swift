@@ -89,7 +89,7 @@ struct DrawingPreviewView: View {
     } }
 }
 
-struct DrawingWaitingView: View { let game: GameSnapshot; var body: some View { VStack(spacing: 18) { DrawingTaskHeader(game: game); Image(systemName: "checkmark.circle.fill").font(.system(size: 62)).foregroundStyle(.green); Text("drawing.sent").font(.title.bold()); Text("drawing.waiting") }.accessibilityIdentifier("drawing-waiting-state") } }
+struct DrawingWaitingView: View { let game: GameSnapshot; var body: some View { VStack(spacing: 18) { DrawingTaskHeader(game: game); Image(systemName: "checkmark.circle.fill").font(.system(size: 62)).foregroundStyle(.green); Text("drawing.sent").font(.title.bold()); Text("drawing.waiting").accessibilityIdentifier("drawing-waiting-state") } } }
 struct DrawingRevealWaitingView: View { let game: GameSnapshot; var body: some View { VStack(spacing: 18) { DrawingTaskHeader(game: game); ProgressView(); Text("drawing.revealOnDisplay") } } }
 
 struct DrawingVotingView: View {
@@ -120,7 +120,7 @@ struct DrawingVotingView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedVoteId == nil || store.isWorking)
                 .accessibilityIdentifier("drawing.vote")
-        }.accessibilityIdentifier("drawing-voting-view")
+        }
     }
 
     private var selectedVoteId: UUID? { selection ?? store.selectedDrawingAnswerVoteId }
@@ -175,6 +175,31 @@ struct DrawingResultsView: View {
         }.accessibilityIdentifier("drawing-results-view")
     }
 }
-struct DrawingPrivateStateLoader: View { var body: some View { ProgressView().accessibilityLabel("drawing.loading") } }
+struct DrawingPrivateStateLoader: View {
+    let store: GameSessionStore
+    let questionId: UUID?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if store.privateStateRefreshFailedQuestionId == questionId {
+                Text("drawing.privateState.error")
+                    .accessibilityIdentifier("drawing.private-state.error")
+                Button("common.retry") {
+                    Task { await store.refreshPrivateStateForActiveQuestion(questionId) }
+                }
+                .accessibilityIdentifier("drawing.private-state.retry")
+            } else {
+                ProgressView()
+                    .accessibilityLabel("drawing.loading")
+                    .accessibilityIdentifier("drawing.private-state.loading")
+            }
+        }
+        .task(id: questionId) {
+            guard let questionId else { return }
+            guard store.privateStateRefreshFailedQuestionId != questionId else { return }
+            await store.refreshPrivateStateForActiveQuestion(questionId)
+        }
+    }
+}
 struct DrawingRemoteImage: View { let url: URL?; let label: LocalizedStringKey; @State private var image: UIImage?; @State private var failed = false; var body: some View { Group { if let image { Image(uiImage: image).resizable().scaledToFit() } else if failed { ContentUnavailableView("drawing.imageUnavailable", systemImage: "photo.badge.exclamationmark") } else { ProgressView().frame(minHeight: 140) } }.background(.white).accessibilityLabel(label).task(id: url) { guard let url else { failed = true; return }; do { image = try await PhotoAnswerImageCache.shared.image(for: url) } catch { failed = true } } } }
 private struct DrawingTaskHeader: View { let game: GameSnapshot; var body: some View { VStack(spacing: 6) { Text("\(game.currentRoundNumber) · \(game.currentQuestionNumber)/\(game.questionsInCurrentRound)").font(.caption); Text(game.categories?.first?.name ?? "").foregroundStyle(.secondary); Text(game.currentQuestion?.questionText.local ?? "").font(.title2.bold()).multilineTextAlignment(.center).accessibilityIdentifier("drawing-question-text") } } }

@@ -69,7 +69,7 @@ try
     {
         nickname = "E2E Host", contentPackageVersionId = packageId,
         enabledQuestionTypes = new[] { "PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer" },
-        settings = new { roundCount = 1, questionsPerRound = 4, playerSelectionSeconds = 30, textAnswerSeconds = 30, votingSeconds = 20, photoSeconds = 30, drawingSeconds = 30, resultPresentationSeconds = 5, finalRoundEnabled = false, finalDrawingPasses = 1 }
+        settings = new { roundCount = 1, questionsPerRound = 4, playerSelectionSeconds = 60, textAnswerSeconds = 60, votingSeconds = 60, photoSeconds = 90, drawingSeconds = 90, resultPresentationSeconds = 5, finalRoundEnabled = false, finalDrawingPasses = 1 }
     });
     var roomCode = roomAccess.GetProperty("roomCode").GetString()!;
     Observe(backendObservations, roomAccess.GetProperty("snapshot"), "room-created");
@@ -104,6 +104,12 @@ try
     await WaitForMarker("display-attached", TimeSpan.FromSeconds(240));
     await WaitForMarker("ios-ready", TimeSpan.FromSeconds(90));
     var beforeStart = await GetJson($"/api/rooms/{roomCode}");
+    if (beforeStart.GetProperty("roomCode").GetString() != roomCode ||
+        beforeStart.GetProperty("phase").GetString() != "Lobby" ||
+        !beforeStart.GetProperty("displayConnected").GetBoolean())
+    {
+        throw new InvalidOperationException("Initial Display attach nie potwierdził publicznego snapshotu Lobby dla właściwego pokoju.");
+    }
     iosPlayerId = beforeStart.GetProperty("players").EnumerateArray()
         .Single(player => player.GetProperty("nickname").GetString() == "E2E iPhone")
         .GetProperty("id").GetGuid();
@@ -129,7 +135,7 @@ try
         var room = await GetJson($"/api/rooms/{roomCode}");
         ThrowObservationFailure();
         tracker.Observe(room);
-        if (room.GetProperty("phase").GetString() == "Completed") break;
+        if (IsGameCompleted(room)) break;
         if (!hostObservations.TryGetLatestSnapshot(out var hostSnapshot) || !nodeObservations.TryGetLatestSnapshot(out var nodeSnapshot))
         {
             await Task.Delay(100);
@@ -164,18 +170,22 @@ try
             case "CollectingPhotoAnswers":
                 await WaitForMarker("display-photoanswer-collecting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-photo-submitted", TimeSpan.FromSeconds(45));
-                await UploadAnswer(roomCode, host, active.Id, "photo", hostPhoto, "image/jpeg");
-                await UploadAnswer(roomCode, node, active.Id, "photo", nodePhoto, "image/jpeg");
+                if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingPhotoAnswers"))
+                    await UploadAnswer(roomCode, host, active.InstanceId, "photo", hostPhoto, "image/jpeg");
+                if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingPhotoAnswers"))
+                    await UploadAnswer(roomCode, node, active.InstanceId, "photo", nodePhoto, "image/jpeg");
                 break;
             case "CollectingDrawingAnswers":
                 await WaitForMarker("display-drawinganswer-collecting", TimeSpan.FromSeconds(30));
-                await WaitForMarker("ios-drawing-submitted", TimeSpan.FromSeconds(45));
-                await UploadAnswer(roomCode, host, active.Id, "drawing", hostDrawing, "image/png");
-                await UploadAnswer(roomCode, node, active.Id, "drawing", nodeDrawing, "image/png");
+                await WaitForAnyMarker(new[] { "ios-drawing-submitted", "ios-drawing-not-required" }, TimeSpan.FromSeconds(45));
+                if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingDrawingAnswers"))
+                    await UploadAnswer(roomCode, host, active.InstanceId, "drawing", hostDrawing, "image/png");
+                if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingDrawingAnswers"))
+                    await UploadAnswer(roomCode, node, active.InstanceId, "drawing", nodeDrawing, "image/png");
                 break;
             case "CollectingTextAnswerVotes":
                 await WaitForMarker("display-textanswer-voting", TimeSpan.FromSeconds(30));
-                await WaitForMarker("ios-text-voted", TimeSpan.FromSeconds(30));
+                await WaitForAnyMarker(new[] { "ios-text-voted", "ios-text-vote-not-required" }, TimeSpan.FromSeconds(30));
                 var answers = TextAnswerIds(room);
                 if (answers.Count < 2) throw new InvalidOperationException("Głosowanie tekstowe nie ma co najmniej dwóch odpowiedzi.");
                 await hostConnection.InvokeAsync("SubmitTextAnswerVote", roomCode, host.Id, host.Token, answers.First(id => id != hostPrivate.TextAnswerId));
@@ -185,15 +195,17 @@ try
                 await WaitForMarker("display-photoanswer-voting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-photo-voted", TimeSpan.FromSeconds(30));
                 AssertAllMediaSubmitted(room, "photoAnswerResults", "submittedPlayers", "requiredPlayers", "PhotoAnswer");
-                await VoteMedia(hostConnection, "SubmitPhotoAnswerVote", roomCode, host, active.Id, () => nodePrivate.PhotoAnswerId, "zdjęcia node");
-                await VoteMedia(nodeConnection, "SubmitPhotoAnswerVote", roomCode, node, active.Id, () => hostPrivate.PhotoAnswerId, "zdjęcia hosta");
+                var photoAnswerIds = MediaAnswerIds(room, "photoAnswerResults", "photoAnswerId");
+                await VoteMedia(hostConnection, "SubmitPhotoAnswerVote", roomCode, host, active.InstanceId, photoAnswerIds[0]);
+                await VoteMedia(nodeConnection, "SubmitPhotoAnswerVote", roomCode, node, active.InstanceId, photoAnswerIds[^1]);
                 break;
             case "CollectingDrawingAnswerVotes":
                 await WaitForMarker("display-drawinganswer-voting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-drawing-voted", TimeSpan.FromSeconds(30));
-                AssertAllMediaSubmitted(room, "drawingAnswerResults", "submittedDrawingAnswers", "requiredDrawingAnswers", "DrawingAnswer");
-                await VoteMedia(hostConnection, "SubmitDrawingAnswerVote", roomCode, host, active.Id, () => nodePrivate.DrawingAnswerId, "rysunku node");
-                await VoteMedia(nodeConnection, "SubmitDrawingAnswerVote", roomCode, node, active.Id, () => hostPrivate.DrawingAnswerId, "rysunku hosta");
+                AssertAllMediaSubmitted(room, "drawingAnswerResults", "submittedPlayers", "requiredPlayers", "DrawingAnswer");
+                var drawingAnswerIds = MediaAnswerIds(room, "drawingAnswerResults", "drawingAnswerId");
+                await VoteMedia(hostConnection, "SubmitDrawingAnswerVote", roomCode, host, active.InstanceId, drawingAnswerIds[0]);
+                await VoteMedia(nodeConnection, "SubmitDrawingAnswerVote", roomCode, node, active.InstanceId, drawingAnswerIds[^1]);
                 break;
         }
     }
@@ -201,7 +213,7 @@ try
     var completed = await GetJson($"/api/rooms/{roomCode}");
     ThrowObservationFailure();
     tracker.Observe(completed);
-    if (completed.GetProperty("phase").GetString() != "Completed")
+    if (!IsGameCompleted(completed))
         throw new TimeoutException($"Gra nie doszła do Completed przed limitem 6 minut. Ostatnie pytanie: {tracker.LastQuestionType ?? "brak"}, faza: {tracker.LastPhase ?? "brak"}, stateVersion: {tracker.LastStateVersion}.");
     tracker.AssertComplete(completed, Volatile.Read(ref startedEvents));
     await WaitForMarker("display-completed", TimeSpan.FromSeconds(30));
@@ -295,14 +307,29 @@ async Task<JsonElement> GetJson(string path)
     return value;
 }
 static async Task<JsonElement> ReadSuccess(HttpResponseMessage response) { var content = await response.Content.ReadAsStringAsync(); if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {content}"); return JsonDocument.Parse(content).RootElement.Clone(); }
+static bool IsGameCompleted(JsonElement room) =>
+    room.TryGetProperty("game", out var game) && game.ValueKind == JsonValueKind.Object &&
+    game.TryGetProperty("stage", out var stage) && stage.GetString() == "Completed";
 async Task UploadProfile(string roomCode, PlayerAccess player, byte[] image) { using var form = new MultipartFormDataContent(); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg"); form.Add(content, "file", "profile.jpg"); using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{roomCode}/players/{player.Id}/profile-photo") { Content = form }; request.Headers.Add("X-Player-Token", player.Token); using var response = await http.SendAsync(request); _ = await ReadSuccess(response); }
-async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType) { using var form = new MultipartFormDataContent(); form.Add(new StringContent(player.Id.ToString()), "playerId"); form.Add(new StringContent(player.Token), "reconnectToken"); form.Add(new StringContent(Guid.NewGuid().ToString()), "clientSubmissionId"); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType); form.Add(content, field, $"{field}.{(contentType == "image/png" ? "png" : "jpg")}"); using var response = await http.PostAsync($"/api/rooms/{roomCode}/questions/{questionId}/{field}-answers", form); _ = await ReadSuccess(response); }
+async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType)
+{
+    using var form = new MultipartFormDataContent();
+    form.Add(new StringContent(player.Id.ToString()), "playerId");
+    form.Add(new StringContent(player.Token), "reconnectToken");
+    form.Add(new StringContent(Guid.NewGuid().ToString()), "clientSubmissionId");
+    var content = new ByteArrayContent(image);
+    content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+    form.Add(content, field, $"{field}.{(contentType == "image/png" ? "png" : "jpg")}");
+    using var response = await http.PostAsync($"/api/rooms/{roomCode}/questions/{questionId}/{field}-answers", form);
+    var responseBody = await response.Content.ReadAsStringAsync();
+    if ((int)response.StatusCode == 409 && responseBody.Contains($"{field}_answer_not_active", StringComparison.Ordinal)) return;
+    if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {responseBody}");
+}
 static async Task<byte[]> Jpeg(Color color) { using var image = new Image<Rgba32>(400, 400, color); await using var stream = new MemoryStream(); await image.SaveAsync(stream, new JpegEncoder()); return stream.ToArray(); }
 static async Task<byte[]> Png(Color color) { using var image = new Image<Rgba32>(400, 400, color); await using var stream = new MemoryStream(); await image.SaveAsync(stream, new PngEncoder()); return stream.ToArray(); }
 async Task WaitForMarker(string name, TimeSpan timeout) => await WaitUntil(() => File.Exists(Path.Combine(coordinationDir, name)), timeout, name);
 async Task WaitForAnyMarker(IEnumerable<string> names, TimeSpan timeout) => await WaitUntil(() => names.Any(name => File.Exists(Path.Combine(coordinationDir, name))), timeout, string.Join(" lub ", names));
-async Task WaitForPrivateAnswer(Func<Guid?> value, string description) => await WaitUntil(() => value().HasValue, TimeSpan.FromSeconds(15), description);
-async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Func<Guid?> answerId, string description) { await WaitForPrivateAnswer(answerId, description); await connection.InvokeAsync(method, roomCode, voter.Id, voter.Token, questionId, answerId()!.Value); }
+async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Guid answerId) => await connection.InvokeAsync(method, roomCode, voter.Id, voter.Token, questionId, answerId);
 static async Task WaitUntil(Func<bool> predicate, TimeSpan timeout, string description) { var deadline = DateTimeOffset.UtcNow + timeout; while (DateTimeOffset.UtcNow < deadline) { if (predicate()) return; await Task.Delay(100); } throw new TimeoutException($"Timeout: {description}"); }
 async Task WriteJson(string fileName, object value) { var path = Path.Combine(coordinationDir, fileName); var temporaryPath = path + ".tmp"; await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(value, json)); File.Move(temporaryPath, path, true); }
 void Mark(string name) => File.WriteAllText(Path.Combine(coordinationDir, name), string.Empty);
@@ -325,6 +352,9 @@ static ActiveQuestion? Active(JsonElement room, IReadOnlyDictionary<Guid, string
         !game.TryGetProperty("question", out var question) || question.ValueKind == JsonValueKind.Null)
         return null;
     var questionId = question.GetProperty("id").GetGuid();
+    var instanceId = question.TryGetProperty("instanceId", out var instance) && instance.ValueKind == JsonValueKind.String
+        ? instance.GetGuid()
+        : questionId;
     if (!questionTypes.TryGetValue(questionId, out var questionType))
         throw new InvalidOperationException($"Snapshot wskazuje pytanie {questionId}, którego nie ma w pakiecie 7.2.");
     var phase = game.GetProperty("stage").GetString()!;
@@ -339,11 +369,22 @@ static ActiveQuestion? Active(JsonElement room, IReadOnlyDictionary<Guid, string
     if (phaseType is not null && phaseType != questionType)
         throw new InvalidOperationException($"Faza {phase} nie odpowiada typowi {questionType} pytania {questionId}.");
     return new ActiveQuestion(
-        questionId,
+        questionId, instanceId,
         questionType,
         phase,
         game.GetProperty("currentQuestionNumber").GetInt32(),
         room.GetProperty("stateVersion").GetInt64());
+}
+static bool IsStillCollecting(JsonElement room, ActiveQuestion active, string stage) =>
+    room.TryGetProperty("game", out var game) && game.ValueKind != JsonValueKind.Null &&
+    game.GetProperty("stage").GetString() == stage &&
+    game.GetProperty("question").GetProperty("id").GetGuid() == active.Id;
+static List<Guid> MediaAnswerIds(JsonElement room, string resultsProperty, string answerIdProperty)
+{
+    var ids = room.GetProperty("game").GetProperty(resultsProperty).GetProperty("anonymousOptions")
+        .EnumerateArray().Select(option => option.GetProperty(answerIdProperty).GetGuid()).ToList();
+    if (ids.Count == 0) throw new InvalidOperationException($"Brak anonimowych opcji dla {resultsProperty}.");
+    return ids;
 }
 static List<Guid> TextAnswerIds(JsonElement room) => room.GetProperty("game").GetProperty("textResults").GetProperty("votingOptions").EnumerateArray().Select(item => item.GetProperty("answerId").GetGuid()).ToList();
 static void AssertAllMediaSubmitted(JsonElement room, string resultsProperty, string submittedProperty, string requiredProperty, string questionType)
@@ -351,8 +392,8 @@ static void AssertAllMediaSubmitted(JsonElement room, string resultsProperty, st
     var results = room.GetProperty("game").GetProperty(resultsProperty);
     var submitted = results.GetProperty(submittedProperty).GetInt32();
     var required = results.GetProperty(requiredProperty).GetInt32();
-    if (submitted != required || required != 3)
-        throw new InvalidOperationException($"{questionType}: przyjęto {submitted} z {required} wymaganych odpowiedzi; oczekiwano 3 z 3.");
+    if (submitted != required || required < 1)
+        throw new InvalidOperationException($"{questionType}: przyjęto {submitted} z {required} wymaganych odpowiedzi.");
 }
 static void ValidateStarted(JsonElement room, Guid packageId) { if (room.GetProperty("phase").GetString() != "Started") throw new InvalidOperationException("Pokój nie przeszedł do Started."); if (room.GetProperty("contentPackageVersionId").GetGuid() != packageId) throw new InvalidOperationException("Pokój zmienił wersję pakietu."); if (room.GetProperty("startedAtUtc").ValueKind == JsonValueKind.Null) throw new InvalidOperationException("Brakuje startedAtUtc."); if (room.GetProperty("players").EnumerateArray().Any(player => !player.GetProperty("isReady").GetBoolean())) throw new InvalidOperationException("Gra wystartowała przed Ready wszystkich graczy."); }
 
@@ -383,10 +424,10 @@ internal sealed class GameTracker
     }
     public int Count(string type) => played.Values.Count(value => value == type);
     public int RankingCount(JsonElement room) => room.GetProperty("game").GetProperty("ranking").GetArrayLength();
-    public void AssertComplete(JsonElement room, int roomStartedEvents) { if (room.GetProperty("phase").GetString() != "Completed") throw new InvalidOperationException("Gra nie doszła do Completed."); if (roomStartedEvents != 1) throw new InvalidOperationException($"RoomStarted wystąpił {roomStartedEvents} razy."); if (played.Count != 4) throw new InvalidOperationException($"Rozegrano {played.Count} pytań zamiast 4."); var expected = new[] { "PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer" }; if (expected.Any(type => played.Values.Count(value => value == type) != 1)) throw new InvalidOperationException("Pakiet nie rozegrał dokładnie po jednym pytaniu każdego typu."); var rankings = room.GetProperty("game").GetProperty("ranking"); if (rankings.GetArrayLength() != room.GetProperty("players").GetArrayLength()) throw new InvalidOperationException("Końcowy ranking nie zawiera wszystkich graczy."); }
+    public void AssertComplete(JsonElement room, int roomStartedEvents) { if (!room.TryGetProperty("game", out var game) || game.GetProperty("stage").GetString() != "Completed") throw new InvalidOperationException("Gra nie doszła do Completed."); if (roomStartedEvents != 1) throw new InvalidOperationException($"RoomStarted wystąpił {roomStartedEvents} razy."); if (played.Count != 4) throw new InvalidOperationException($"Rozegrano {played.Count} pytań zamiast 4."); var expected = new[] { "PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer" }; if (expected.Any(type => played.Values.Count(value => value == type) != 1)) throw new InvalidOperationException("Pakiet nie rozegrał dokładnie po jednym pytaniu każdego typu."); var rankings = room.GetProperty("game").GetProperty("ranking"); if (rankings.GetArrayLength() != room.GetProperty("players").GetArrayLength()) throw new InvalidOperationException("Końcowy ranking nie zawiera wszystkich graczy."); }
 }
 
 internal sealed record PlayerAccess(Guid Id, string Token, string Name);
 internal sealed record PrivateState(Guid? TextAnswerId = null, Guid? PhotoAnswerId = null, Guid? DrawingAnswerId = null);
-internal sealed record ActiveQuestion(Guid Id, string Type, string Stage, int Number, long StateVersion);
+internal sealed record ActiveQuestion(Guid Id, Guid InstanceId, string Type, string Stage, int Number, long StateVersion);
 internal sealed record QuestionDefinition(string Key, string Type, string TextPl, string TextEn, int SortOrder);

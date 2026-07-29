@@ -8,10 +8,12 @@ public sealed record PlayerPrivateGameState(
     bool HasSubmittedTextAnswer,
     Guid? OwnTextAnswerId,
     bool HasSubmittedTextAnswerVote,
+    bool IsEligibleForTextAnswerVote = false,
     bool HasSubmittedPhotoAnswer = false,
     Guid? OwnPhotoAnswerId = null,
     bool HasSubmittedPhotoAnswerVote = false,
     bool HasSubmittedDrawingAnswer = false,
     Guid? OwnDrawingAnswerId = null,
-    bool HasSubmittedDrawingAnswerVote = false
+    bool HasSubmittedDrawingAnswerVote = false,
+    bool IsEligibleForDrawingAnswer = false
 );

@@ -25,6 +25,8 @@ final class GameSessionStore {
     private var drawingUploadTask: Task<Void, Never>?
     private var privateStateRefreshTask: Task<Void, Never>?
     private var activeQuestionInstanceId: UUID?
+    private var privateStateRefreshInFlightQuestionId: UUID?
+    private(set) var privateStateRefreshFailedQuestionId: UUID?
 
     private(set) var screen: GameScreen = .idle
     private(set) var session: LocalPlayerSession?
@@ -420,9 +422,11 @@ final class GameSessionStore {
         // We'll leave the variable updated if we had a way.
         
         guard accumulator.accept(candidate) else { return }
+        let enteredDrawingAnswerCollection = candidate.game?.stage == .collectingDrawingAnswers &&
+            snapshot?.game?.stage != .collectingDrawingAnswers
         snapshot = candidate
         let nextQuestion = candidate.game?.resolvedQuestionInstanceId
-        let questionChanged = activeQuestionInstanceId != nil && nextQuestion != activeQuestionInstanceId
+        let questionChanged = nextQuestion != activeQuestionInstanceId
         if questionChanged {
             photoUploadTask?.cancel()
             photoUploadTask = nil
@@ -437,16 +441,25 @@ final class GameSessionStore {
             drawingUploadPhase = .idle
             selectedDrawingAnswerVoteId = nil
             privateGameState = nil
+            privateStateRefreshFailedQuestionId = nil
         }
         activeQuestionInstanceId = nextQuestion
-        if questionChanged, nextQuestion != nil {
+        if (questionChanged || enteredDrawingAnswerCollection), nextQuestion != nil {
+            // Drawing eligibility is created with the transition to this stage.
+            // A private state fetched during the preceding intro has the same
+            // question id but predates that eligibility list, so it cannot be
+            // used to decide that a player is waiting rather than eligible.
+            if enteredDrawingAnswerCollection {
+                privateGameState = nil
+                privateStateRefreshFailedQuestionId = nil
+            }
             // A public stage transition never carries player-private fields. Refreshing through
             // the existing resume contract prevents a new answer/vote screen from waiting for a
             // private event that belonged to the preceding question.
             privateStateRefreshTask?.cancel()
             privateStateRefreshTask = Task { [weak self] in
                 guard !Task.isCancelled else { return }
-                await self?.refreshPrivateStateAfterStaleResponse()
+                await self?.refreshPrivateStateForActiveQuestion(nextQuestion)
             }
         }
         
@@ -779,12 +792,48 @@ final class GameSessionStore {
     }
 
     private func refreshPrivateStateAfterStaleResponse() async {
-        guard !Task.isCancelled else { return }
-        guard let session, let reconnectToken, let baseURL,
-              let resumed = try? await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken) else { return }
-        guard !Task.isCancelled else { return }
-        apply(resumed.snapshot)
-        applyPrivateGameState(resumed.privateState)
+        await refreshPrivateStateForActiveQuestion(snapshot?.game?.resolvedQuestionInstanceId)
+    }
+
+    func refreshPrivateStateForActiveQuestion(_ expectedQuestionId: UUID?) async {
+        guard let expectedQuestionId else { return }
+        guard privateStateRefreshInFlightQuestionId != expectedQuestionId else { return }
+        privateStateRefreshInFlightQuestionId = expectedQuestionId
+        defer {
+            if privateStateRefreshInFlightQuestionId == expectedQuestionId {
+                privateStateRefreshInFlightQuestionId = nil
+            }
+        }
+        // A room-stage event and its player-private counterpart can cross on a
+        // reconnect. Retry the bounded resume read only while the same question
+        // is still active; a response for Q1 must never populate Q2.
+        for attempt in 0 ..< 5 {
+            guard !Task.isCancelled,
+                  snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId,
+                  let session, let reconnectToken, let baseURL else { return }
+            do {
+                let resumed = try await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken)
+                guard !Task.isCancelled else { return }
+                // The public SignalR snapshot that started this refresh stays authoritative.
+                // Applying the auxiliary resume snapshot here can move a just-entered
+                // answer screen back to an older public representation of the question.
+                guard snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
+                if resumed.privateState.questionInstanceId == expectedQuestionId {
+                    applyPrivateGameState(resumed.privateState)
+                    privateStateRefreshFailedQuestionId = nil
+                    return
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                if attempt < 4 { try? await Task.sleep(for: .milliseconds(500)) }
+                continue
+            }
+            if attempt < 4 { try? await Task.sleep(for: .milliseconds(500)) }
+        }
+        guard !Task.isCancelled,
+              snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
+        privateStateRefreshFailedQuestionId = expectedQuestionId
     }
 
     /// Ends asynchronous work owned by the store. App lifecycle code may use this when
@@ -819,12 +868,14 @@ final class GameSessionStore {
                 hasSubmittedTextAnswer: current.hasSubmittedTextAnswer || candidate.hasSubmittedTextAnswer,
                 ownTextAnswerId: candidate.ownTextAnswerId ?? current.ownTextAnswerId,
                 hasSubmittedTextAnswerVote: current.hasSubmittedTextAnswerVote || candidate.hasSubmittedTextAnswerVote,
+                isEligibleForTextAnswerVote: candidate.isEligibleForTextAnswerVote,
                 hasSubmittedPhotoAnswer: current.hasSubmittedPhotoAnswer || candidate.hasSubmittedPhotoAnswer,
                 ownPhotoAnswerId: candidate.ownPhotoAnswerId ?? current.ownPhotoAnswerId,
                 hasSubmittedPhotoAnswerVote: current.hasSubmittedPhotoAnswerVote || candidate.hasSubmittedPhotoAnswerVote,
                 hasSubmittedDrawingAnswer: current.hasSubmittedDrawingAnswer || candidate.hasSubmittedDrawingAnswer,
                 ownDrawingAnswerId: candidate.ownDrawingAnswerId ?? current.ownDrawingAnswerId,
-                hasSubmittedDrawingAnswerVote: current.hasSubmittedDrawingAnswerVote || candidate.hasSubmittedDrawingAnswerVote
+                hasSubmittedDrawingAnswerVote: current.hasSubmittedDrawingAnswerVote || candidate.hasSubmittedDrawingAnswerVote,
+                isEligibleForDrawingAnswer: candidate.isEligibleForDrawingAnswer
             )
         } else { privateGameState = candidate }
     }

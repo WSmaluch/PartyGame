@@ -241,6 +241,61 @@ final class GameSessionStoreTests: XCTestCase {
             hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false, hasSubmittedPhotoAnswer: true))
         XCTAssertNil(store.privateGameState)
     }
+
+    func testPrivateStateRefreshRetriesAfterTransientResumeFailure() async {
+        let playerId = UUID(), questionId = UUID()
+        let lobby = roomSnapshot(playerId: playerId, version: 1, game: nil)
+        let active = roomSnapshot(playerId: playerId, version: 2, game: drawingGame(questionId: questionId))
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: lobby,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = lobby
+        api.resumeResults = [
+            .failure(MockError.missingStub("transient")),
+            .success(ResumePlayerResponse(player: active.players[0], snapshot: active,
+                privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: questionId, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false)))
+        ]
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+        store.apply(active)
+        try? await Task.sleep(for: .seconds(2))
+
+        XCTAssertGreaterThanOrEqual(api.resumeCallCount, 2)
+        XCTAssertEqual(store.privateGameState?.questionInstanceId, questionId)
+        XCTAssertNil(store.privateStateRefreshFailedQuestionId)
+    }
+
+    func testPrivateStateRefreshStopsAfterBoundedFailures() async {
+        let playerId = UUID(), questionId = UUID()
+        let lobby = roomSnapshot(playerId: playerId, version: 1, game: nil)
+        let active = roomSnapshot(playerId: playerId, version: 2, game: drawingGame(questionId: questionId))
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: lobby,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = lobby
+        api.resumeResults = Array(repeating: .failure(MockError.missingStub("unavailable")), count: 8)
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+        store.apply(active)
+        try? await Task.sleep(for: .seconds(3))
+
+        XCTAssertEqual(store.privateStateRefreshFailedQuestionId, questionId)
+        XCTAssertNil(store.privateGameState)
+        XCTAssertGreaterThanOrEqual(api.resumeCallCount, 5)
+    }
+
+    private func roomSnapshot(playerId: UUID, version: Int64, game: GameSnapshot?) -> RoomSnapshot {
+        RoomSnapshot(roomCode: "TEST", phase: game == nil ? .lobby : .started, stateVersion: version, displayConnected: true,
+            minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(),
+            players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: true, isConnected: true,
+                                 hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)],
+            createdAtUtc: "", startedAtUtc: game == nil ? nil : "", game: game)
+    }
+
+    private func drawingGame(questionId: UUID) -> GameSnapshot {
+        GameSnapshot(stage: .collectingDrawingAnswers, currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1,
+            questionsInCurrentRound: 4, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil,
+            scores: [], categories: nil, currentQuestion: nil, playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil,
+            drawingAnswerResults: DrawingAnswerResultsSnapshot(questionInstanceId: questionId, submittedDrawingAnswers: 0,
+                requiredDrawingAnswers: 3, submittedDrawingAnswerPlayerIds: nil, votedPlayers: nil, requiredVoters: nil,
+                highestVoteCount: nil, options: nil, anonymousOptions: nil))
+    }
 }
 
 private final class MockRoomAPIClient: RoomAPIClientProtocol, @unchecked Sendable {
@@ -265,7 +320,11 @@ private final class MockRoomAPIClient: RoomAPIClientProtocol, @unchecked Sendabl
     }
 
     var resumeResult: ResumePlayerResponse?
+    var resumeResults: [Result<ResumePlayerResponse, Error>] = []
+    private(set) var resumeCallCount = 0
     func resume(baseURL: URL, session: LocalPlayerSession, reconnectToken: String) async throws -> ResumePlayerResponse {
+        resumeCallCount += 1
+        if !resumeResults.isEmpty { return try resumeResults.removeFirst().get() }
         guard let resumeResult else { throw MockError.missingStub("resume") }
         return resumeResult
     }

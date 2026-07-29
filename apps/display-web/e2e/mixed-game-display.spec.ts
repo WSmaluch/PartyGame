@@ -107,8 +107,10 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
             );
             await page.reload();
             await expect(
-              page.getByText(coordination.roomCode).first(),
-            ).toBeVisible({ timeout: 30_000 });
+              page.getByTestId('display-state-version'),
+            ).toHaveAttribute('data-state-version', /^\d+$/, {
+              timeout: 30_000,
+            });
             const recovered = await displayStateVersion(page);
             expect(recovered).toBeGreaterThanOrEqual(before);
             await recordDisplayObservation(

@@ -261,6 +261,10 @@ struct CollectingTextAnswerVotesView: View {
     var isSubmitted: Bool {
         store.privateGameState?.hasSubmittedTextAnswerVote == true
     }
+
+    var isEligible: Bool {
+        store.privateGameState?.isEligibleForTextAnswerVote == true
+    }
     
     var body: some View {
         VStack {
@@ -268,10 +272,11 @@ struct CollectingTextAnswerVotesView: View {
                 .font(.title2)
                 .padding()
             
-            if isSubmitted {
+            if isSubmitted || !isEligible {
                 Text("textanswer.vote_waiting")
                     .font(.headline)
                     .foregroundColor(.secondary)
+                    .accessibilityIdentifier("textanswer.vote_waiting")
             } else {
                 Text("textanswer.vote_prompt")
                 

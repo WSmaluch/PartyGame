@@ -99,6 +99,19 @@ public class RoomContractMapperTests
     }
 
     [Fact]
+    public void ToSnapshot_ExposesPersistedQuestionInstanceIdAlongsideDefinitionId()
+    {
+        var env = SetupTestEnvironment();
+        env.session.Stage = GameStage.QuestionIntro;
+
+        var snapshot = env.session.ToSnapshot();
+
+        Assert.NotNull(snapshot.Question);
+        Assert.Equal(env.session.CurrentQuestionInstanceId, snapshot.Question.InstanceId);
+        Assert.NotEqual(snapshot.Question.Id, snapshot.Question.InstanceId);
+    }
+
+    [Fact]
     public void ToSnapshot_ShowingQuestionResults_RevealsVotesAndPoints()
     {
         // Arrange

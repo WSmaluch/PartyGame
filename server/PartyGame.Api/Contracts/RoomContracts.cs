@@ -79,7 +79,10 @@ public sealed record GameSnapshot(
 );
 
 public sealed record GameCategorySnapshot(Guid Id, LocalizedText Name, LocalizedText Description);
-public sealed record GameQuestionSnapshot(Guid Id, LocalizedText Text);
+// `Id` remains the content-definition id for clients that identify a question
+// in a package.  Transport actions and player-private state use the distinct
+// persisted game-question instance id.
+public sealed record GameQuestionSnapshot(Guid Id, LocalizedText Text, Guid? InstanceId = null);
 public sealed record PlayerSelectionResults(Guid QuestionInstanceId, int AnsweredPlayers, int RequiredPlayers, int MissingPlayers, int HighestVoteCount, List<PlayerSelectionResultOption> Options);
 public sealed record PlayerSelectionResultOption(Guid SelectedPlayerId, string SelectedPlayerNickname, string? SelectedPlayerPhotoUrl, int VoteCount, bool IsTopResult, List<ResultVoter> Voters);
 
