@@ -280,6 +280,29 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(api.resumeCallCount, 5)
     }
 
+    func testTextAnswerRetryReusesSubmissionIdAndNewQuestionGetsNewId() async {
+        let playerId = UUID(), firstQuestion = UUID(), secondQuestion = UUID()
+        let first = roomSnapshot(playerId: playerId, version: 1, game: textGame(questionId: firstQuestion))
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: first,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: firstQuestion, hasSubmittedTextAnswer: false,
+                ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = first
+        realtime.submitTextAnswerResult = first
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+
+        await store.submitTextAnswer(text: "retry")
+        await store.submitTextAnswer(text: "retry")
+        XCTAssertEqual(realtime.textSubmissionIds.count, 2)
+        XCTAssertEqual(realtime.textSubmissionIds[0], realtime.textSubmissionIds[1])
+
+        let second = roomSnapshot(playerId: playerId, version: 2, game: textGame(questionId: secondQuestion))
+        realtime.submitTextAnswerResult = second
+        store.apply(second)
+        await store.submitTextAnswer(text: "new question")
+        XCTAssertEqual(realtime.textSubmissionIds.count, 3)
+        XCTAssertNotEqual(realtime.textSubmissionIds[1], realtime.textSubmissionIds[2])
+    }
+
     private func roomSnapshot(playerId: UUID, version: Int64, game: GameSnapshot?) -> RoomSnapshot {
         RoomSnapshot(roomCode: "TEST", phase: game == nil ? .lobby : .started, stateVersion: version, displayConnected: true,
             minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(),
@@ -295,6 +318,14 @@ final class GameSessionStoreTests: XCTestCase {
             drawingAnswerResults: DrawingAnswerResultsSnapshot(questionInstanceId: questionId, submittedDrawingAnswers: 0,
                 requiredDrawingAnswers: 3, submittedDrawingAnswerPlayerIds: nil, votedPlayers: nil, requiredVoters: nil,
                 highestVoteCount: nil, options: nil, anonymousOptions: nil))
+    }
+
+    private func textGame(questionId: UUID) -> GameSnapshot {
+        GameSnapshot(stage: .collectingTextAnswers, currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1,
+            questionsInCurrentRound: 4, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil,
+            scores: [], categories: nil, currentQuestion: GameQuestionSnapshot(instanceId: questionId, categoryId: UUID(),
+                questionText: LocalizedText(defaultText: "Text", translations: nil), requiredAnswerType: "TextAnswer"),
+            playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil)
     }
 }
 
@@ -390,7 +421,12 @@ private final class MockGameRealtimeClient: GameRealtimeClient {
     }
 
     var submitTextAnswerResult: RoomSnapshot?
+    private(set) var textSubmissionIds: [UUID] = []
     func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String) async throws -> RoomSnapshot {
+        return submitTextAnswerResult!
+    }
+    func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        textSubmissionIds.append(clientSubmissionId)
         return submitTextAnswerResult!
     }
 

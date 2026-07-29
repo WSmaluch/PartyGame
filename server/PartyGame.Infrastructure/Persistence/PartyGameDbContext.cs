@@ -39,6 +39,8 @@ public sealed class PartyGameDbContext(DbContextOptions<PartyGameDbContext> opti
     public DbSet<DrawingAnswerSubmission> DrawingAnswerSubmissions => Set<DrawingAnswerSubmission>();
     public DbSet<DrawingAnswerVoteEligiblePlayer> DrawingAnswerVoteEligiblePlayers => Set<DrawingAnswerVoteEligiblePlayer>();
     public DbSet<DrawingAnswerVote> DrawingAnswerVotes => Set<DrawingAnswerVote>();
+    public DbSet<SubmissionReceipt> SubmissionReceipts => Set<SubmissionReceipt>();
+    public DbSet<SubmissionAuditEntry> SubmissionAuditEntries => Set<SubmissionAuditEntry>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<DatabaseMetadata>(entity =>
@@ -359,6 +361,26 @@ public sealed class PartyGameDbContext(DbContextOptions<PartyGameDbContext> opti
             entity.HasIndex(e => new { e.QuestionInstanceId, e.VoterPlayerId }).IsUnique();
             entity.HasOne<DrawingAnswerSubmission>().WithMany().HasForeignKey(e => e.SelectedDrawingAnswerId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<Player>().WithMany().HasForeignKey(e => e.VoterPlayerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SubmissionReceipt>(entity =>
+        {
+            entity.ToTable("SubmissionReceipts");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ActionType).HasConversion<int>();
+            entity.Property(e => e.PayloadFingerprint).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.HasIndex(e => new { e.RoomId, e.PlayerId, e.QuestionInstanceId, e.ActionType, e.ClientSubmissionId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SubmissionAuditEntry>(entity =>
+        {
+            entity.ToTable("SubmissionAuditEntries");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ActionType).HasConversion<int>();
+            entity.Property(e => e.Result).HasConversion<int>();
+            entity.Property(e => e.PayloadFingerprint).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.HasIndex(e => new { e.RoomId, e.CreatedAtUtc });
+            entity.HasIndex(e => new { e.RoomId, e.PlayerId, e.QuestionInstanceId, e.ActionType, e.ClientSubmissionId });
         });
     }
 }

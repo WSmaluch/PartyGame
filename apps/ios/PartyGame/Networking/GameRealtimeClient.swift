@@ -27,9 +27,29 @@ protocol GameRealtimeClient: AnyObject {
     func submitTextAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, selectedAnswerId: UUID) async throws -> RoomSnapshot
     func submitPhotoAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, photoAnswerId: UUID) async throws
     func submitDrawingAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, drawingAnswerId: UUID) async throws
+    func submitPlayerSelection(roomCode: String, playerId: UUID, reconnectToken: String, selectedPlayerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot
+    func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot
+    func submitTextAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, selectedAnswerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot
+    func submitPhotoAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, photoAnswerId: UUID, clientSubmissionId: UUID) async throws
+    func submitDrawingAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, drawingAnswerId: UUID, clientSubmissionId: UUID) async throws
 }
 
 extension GameRealtimeClient {
+    func submitPlayerSelection(roomCode: String, playerId: UUID, reconnectToken: String, selectedPlayerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        try await submitPlayerSelection(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, selectedPlayerId: selectedPlayerId)
+    }
+    func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        try await submitTextAnswer(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, text: text)
+    }
+    func submitTextAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, selectedAnswerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        try await submitTextAnswerVote(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, selectedAnswerId: selectedAnswerId)
+    }
+    func submitPhotoAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, photoAnswerId: UUID, clientSubmissionId: UUID) async throws {
+        try await submitPhotoAnswerVote(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, questionInstanceId: questionInstanceId, photoAnswerId: photoAnswerId)
+    }
+    func submitDrawingAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, drawingAnswerId: UUID, clientSubmissionId: UUID) async throws {
+        try await submitDrawingAnswerVote(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, questionInstanceId: questionInstanceId, drawingAnswerId: drawingAnswerId)
+    }
     func submitPhotoAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, photoAnswerId: UUID) async throws {
         throw RealtimeClientError.notConnected
     }
@@ -137,6 +157,21 @@ final class SignalRGameRealtimeClient: GameRealtimeClient {
         )
     }
 
+    func submitPlayerSelection(roomCode: String, playerId: UUID, reconnectToken: String, selectedPlayerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        return try await connection.invoke(method: "SubmitPlayerSelectionWithSubmission", arguments: roomCode, playerId.uuidString, reconnectToken, selectedPlayerId.uuidString, questionInstanceId.uuidString, clientSubmissionId.uuidString)
+    }
+
+    func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        return try await connection.invoke(method: "SubmitTextAnswerWithSubmission", arguments: roomCode, playerId.uuidString, reconnectToken, text, questionInstanceId.uuidString, clientSubmissionId.uuidString)
+    }
+
+    func submitTextAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, selectedAnswerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        return try await connection.invoke(method: "SubmitTextAnswerVoteWithSubmission", arguments: roomCode, playerId.uuidString, reconnectToken, selectedAnswerId.uuidString, questionInstanceId.uuidString, clientSubmissionId.uuidString)
+    }
+
     func submitTextAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, selectedAnswerId: UUID) async throws -> RoomSnapshot {
         guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
         return try await connection.invoke(
@@ -153,12 +188,22 @@ final class SignalRGameRealtimeClient: GameRealtimeClient {
         )
     }
 
+    func submitPhotoAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, photoAnswerId: UUID, clientSubmissionId: UUID) async throws {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        try await connection.invoke(method: "SubmitPhotoAnswerVoteWithSubmission", arguments: roomCode, playerId.uuidString, reconnectToken, questionInstanceId.uuidString, photoAnswerId.uuidString, clientSubmissionId.uuidString)
+    }
+
     func submitDrawingAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, drawingAnswerId: UUID) async throws {
         guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
         try await connection.invoke(
             method: "SubmitDrawingAnswerVote",
             arguments: roomCode, playerId.uuidString, reconnectToken, questionInstanceId.uuidString, drawingAnswerId.uuidString
         )
+    }
+
+    func submitDrawingAnswerVote(roomCode: String, playerId: UUID, reconnectToken: String, questionInstanceId: UUID, drawingAnswerId: UUID, clientSubmissionId: UUID) async throws {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        try await connection.invoke(method: "SubmitDrawingAnswerVoteWithSubmission", arguments: roomCode, playerId.uuidString, reconnectToken, questionInstanceId.uuidString, drawingAnswerId.uuidString, clientSubmissionId.uuidString)
     }
 
     private func buildConnection(baseURL: URL) async -> HubConnection {

@@ -10,6 +10,8 @@ Status całego Etapu 7: w toku.
 | 7.3A.1 — rzeczywiste obserwacje iOS          | ukończony |
 | 7.3A.2 — obserwacje scripted players/backend | ukończony |
 | 7.3A.3 — agregator ledgeru pięciu klientów    | ukończony |
+| 7.3A.4 — trwałe evidence i cleanup             | ukończony |
+| 7.3B — idempotentne submissions                | ukończony |
 | 7.4 — stabilizacja wielokrotnych przebiegów | nierozpoczęty |
 
 ## Cel 7.1
@@ -273,4 +275,24 @@ scripted player A 44, scripted player B 43, backend 29; regresje każdego klient
 Playwright, orkiestrator, Xcodebuild i główny skrypt zakończyły się kodem 0, a cleanup również 0.
 
 Status: 7.3A.1 — ukończony; 7.3A.2 — ukończony; 7.3A.3 — ukończony; 7.3A.4 — ukończony;
-7.3A — ukończony; 7.3B — niewykonany; 7.3 — nadal nieukończony.
+7.3A — ukończony; 7.3B — ukończony; 7.3 — ukończony.
+
+## Etap 7.3B — idempotentne submissions
+
+Każda nowa komenda `*WithSubmission` przyjmuje `questionInstanceId` i stabilny
+`clientSubmissionId`. iOS zachowuje ID przez waiting, ponowny render i reconnect, a scripted
+players tworzą je przed pierwszym wysłaniem. Backend zapisuje trwały receipt oraz append-only
+audit z SHA-256 logicznego payloadu (dla mediów: content type i bytes, bez danych binarnych).
+Ten sam ID i fingerprint jest replayem bez drugiej mutacji; inny fingerprint jest konfliktem.
+`outcome.json` odczytuje liczniki prób z autoryzowanego audit trail, a pełny E2E wykonuje replay
+głosu tekstowego i uploadu zdjęcia.
+
+Końcowy przebieg z evidence w `/private/tmp/partygame-mixed-e2e-pass.4bUWGx` przeszedł pełną
+grę: 4 unikalne pytania (po jednym każdego typu), `RoomStartedCount = 1`, `RoomPhase = Completed`,
+ranking 3 graczy i finalny `stateVersion = 52`. Audit wykazał 21 prób, 19 unikalnych akceptacji,
+2 rzeczywiste replaye i 0 konfliktów. Wszystkie liczniki logicznych duplikatów, submissions po
+reconnect iOS/scripted players oraz submissions Displaya wynoszą 0. Ledger pięciu klientów ma
+0 regresji i PASS; Playwright, orkiestrator i Xcodebuild zakończyły się kodem 0, a cleanup kodem 0.
+
+Status: 7.3A.1 — ukończony; 7.3A.2 — ukończony; 7.3A.3 — ukończony; 7.3A.4 — ukończony;
+7.3A — ukończony; 7.3B — ukończony; 7.3 — ukończony.

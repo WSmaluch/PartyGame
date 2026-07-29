@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Game;
 using PartyGame.Domain.Rooms;
@@ -349,9 +351,12 @@ public sealed class RoomService(
             return changed;
         }, cancellationToken);
 
-    public Task<RoomMutationResult> SubmitSelectionAsync(string roomCode, Guid playerId, string? token, Guid selectedPlayerId, CancellationToken cancellationToken = default) =>
+    public Task<RoomMutationResult> SubmitSelectionAsync(string roomCode, Guid playerId, string? token, Guid selectedPlayerId, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) =>
         MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
         {
+            if (HasStableId(clientSubmissionId) && questionInstanceId is { } replayQuestionId && replayQuestionId != Guid.Empty &&
+                TryRecordReplay(room, player, replayQuestionId, SubmissionActionType.PlayerSelection, clientSubmissionId.Value, Fingerprint(selectedPlayerId)))
+                return false;
             if (room.Session == null || room.Session.Stage != GameStage.CollectingPlayerSelections)
             {
                 return false;
@@ -359,6 +364,7 @@ public sealed class RoomService(
 
             var currentInstanceId = room.Session.CurrentQuestionInstanceId;
             if (currentInstanceId == null) return false;
+            if (questionInstanceId.HasValue && questionInstanceId != Guid.Empty && questionInstanceId != currentInstanceId) return false;
 
             var currentInstance = dbContext.GameQuestionInstances
                 .Include(i => i.EligiblePlayers)
@@ -379,6 +385,8 @@ public sealed class RoomService(
 
             var selectedPlayer = room.Players.FirstOrDefault(p => p.Id == selectedPlayerId);
             if (selectedPlayer == null) return false;
+
+            if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, currentInstance.Id, SubmissionActionType.PlayerSelection, clientSubmissionId.Value, Fingerprint(selectedPlayerId)) != SubmissionDecision.Accepted) return false;
 
             var newAnswer = new PlayerSelectionAnswer
             {
@@ -403,28 +411,33 @@ public sealed class RoomService(
             return true;
         }, cancellationToken);
 
-    public Task<RoomMutationResult> SubmitTextAnswerAsync(string roomCode, Guid playerId, string? token, string text, CancellationToken cancellationToken = default) =>
+    public Task<RoomMutationResult> SubmitTextAnswerAsync(string roomCode, Guid playerId, string? token, string text, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) =>
         MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
         {
+            var cleanText = (text ?? "").Trim();
+            if (HasStableId(clientSubmissionId) && questionInstanceId is { } replayQuestionId && replayQuestionId != Guid.Empty &&
+                TryRecordReplay(room, player, replayQuestionId, SubmissionActionType.TextAnswer, clientSubmissionId.Value, Fingerprint(cleanText)))
+                return false;
             if (room.Session == null || room.Session.Stage != GameStage.CollectingTextAnswers) return false;
             var currentInstanceId = room.Session.CurrentQuestionInstanceId;
             if (currentInstanceId == null) return false;
+            if (questionInstanceId.HasValue && questionInstanceId != Guid.Empty && questionInstanceId != currentInstanceId) return false;
             var currentInstance = dbContext.GameQuestionInstances
                 .Include(i => i.TextAnswerEligiblePlayers)
                 .Include(i => i.TextAnswerSubmissions)
                 .FirstOrDefault(i => i.Id == currentInstanceId);
             if (currentInstance == null) return false;
+            if (string.IsNullOrEmpty(cleanText)) return false;
             if (!currentInstance.TextAnswerEligiblePlayers.Any(e => e.PlayerId == player.Id)) return false;
             if (currentInstance.TextAnswerSubmissions.Any(a => a.AuthorPlayerId == player.Id)) return false; // Already submitted
-
-            var cleanText = (text ?? "").Trim();
-            if (string.IsNullOrEmpty(cleanText)) return false;
 
             var stringInfo = new System.Globalization.StringInfo(cleanText);
             if (stringInfo.LengthInTextElements > 150)
             {
                 cleanText = stringInfo.SubstringByTextElements(0, 150);
             }
+
+            if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, currentInstance.Id, SubmissionActionType.TextAnswer, clientSubmissionId.Value, Fingerprint(cleanText)) != SubmissionDecision.Accepted) return false;
 
             var submission = new PartyGame.Domain.Game.TextAnswerSubmission
             {
@@ -446,12 +459,16 @@ public sealed class RoomService(
             return true;
         }, cancellationToken);
 
-    public Task<RoomMutationResult> SubmitTextAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid selectedAnswerId, CancellationToken cancellationToken = default) =>
+    public Task<RoomMutationResult> SubmitTextAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid selectedAnswerId, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) =>
         MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
         {
+            if (HasStableId(clientSubmissionId) && questionInstanceId is { } replayQuestionId && replayQuestionId != Guid.Empty &&
+                TryRecordReplay(room, player, replayQuestionId, SubmissionActionType.TextAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)))
+                return false;
             if (room.Session == null || room.Session.Stage != GameStage.CollectingTextAnswerVotes) return false;
             var currentInstanceId = room.Session.CurrentQuestionInstanceId;
             if (currentInstanceId == null) return false;
+            if (questionInstanceId.HasValue && questionInstanceId != Guid.Empty && questionInstanceId != currentInstanceId) return false;
             var currentInstance = dbContext.GameQuestionInstances
                 .Include(i => i.TextAnswerVoteEligiblePlayers)
                 .Include(i => i.TextAnswerVotes)
@@ -464,6 +481,8 @@ public sealed class RoomService(
             var targetSubmission = currentInstance.TextAnswerSubmissions.FirstOrDefault(s => s.Id == selectedAnswerId);
             if (targetSubmission == null) return false;
             if (targetSubmission.AuthorPlayerId == player.Id) return false; // Can't vote for your own text answer!
+
+            if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, currentInstance.Id, SubmissionActionType.TextAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)) != SubmissionDecision.Accepted) return false;
 
             var newVote = new PartyGame.Domain.Game.TextAnswerVote
             {
@@ -496,11 +515,17 @@ public sealed class RoomService(
             var room = await LoadAsync(code, cancellationToken);
             var player = Authorize(room, playerId, token);
             var now = clock.UtcNow;
+            var instance = room.Session.Rounds.SelectMany(r => r.Questions).SingleOrDefault(q => q.Id == questionInstanceId);
+            if (instance is null) throw new PhotoAnswerException("photo_answer_not_active", "Photo answers are not active for this question.");
+            var fingerprint = await FingerprintMediaAsync(content, contentType, cancellationToken);
+            if (TryRecordReplay(room, player, questionInstanceId, SubmissionActionType.PhotoAnswer, clientSubmissionId, fingerprint))
+            {
+                var existing = instance.PhotoAnswerSubmissions.Single(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new PhotoAnswerUploadResult(room, existing.Id, false);
+            }
             if (room.Session?.CurrentQuestionInstanceId != questionInstanceId)
                 throw new PhotoAnswerException("photo_answer_not_active", "Photo answers are not active for this question.");
-            var instance = room.Session.Rounds.SelectMany(r => r.Questions).Single(q => q.Id == questionInstanceId);
-            var existingByClient = instance.PhotoAnswerSubmissions.FirstOrDefault(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
-            if (existingByClient != null) return new PhotoAnswerUploadResult(room, existingByClient.Id, false);
             if (room.Session.Stage != GameStage.CollectingPhotoAnswers)
                 throw new PhotoAnswerException("photo_answer_not_active", "Photo answers are not active for this question.");
             if (room.Session.StageEndsAtUtc <= now)
@@ -511,6 +536,13 @@ public sealed class RoomService(
                 throw new PhotoAnswerException("photo_answer_player_not_eligible", "The player is not eligible to submit a photo.");
             if (instance.PhotoAnswerSubmissions.Any(s => s.AuthorPlayerId == player.Id))
                 throw new PhotoAnswerException("photo_answer_already_submitted", "The player has already submitted a photo.");
+
+            if (RecordSubmission(room, player, questionInstanceId, SubmissionActionType.PhotoAnswer, clientSubmissionId, fingerprint) != SubmissionDecision.Accepted)
+            {
+                var existing = instance.PhotoAnswerSubmissions.Single(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new PhotoAnswerUploadResult(room, existing.Id, false);
+            }
 
             var answerId = Guid.NewGuid();
             try
@@ -574,26 +606,35 @@ public sealed class RoomService(
             }
             return new PhotoAnswerUploadResult(room, answerId, true);
         }
+        catch (RoomConflictException)
+        {
+            if (dbContext.ChangeTracker.HasChanges()) await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
         finally
         {
             roomLock.Release();
         }
     }
 
-    public Task<RoomMutationResult> SubmitPhotoAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, CancellationToken cancellationToken = default) =>
+    public Task<RoomMutationResult> SubmitPhotoAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) =>
         MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
         {
+            if (HasStableId(clientSubmissionId) && TryRecordReplay(room, player, questionInstanceId, SubmissionActionType.PhotoAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)))
+                return false;
             if (room.Session?.CurrentQuestionInstanceId != questionInstanceId || room.Session.Stage != GameStage.CollectingPhotoAnswerVotes)
                 throw new PhotoAnswerException("photo_answer_vote_not_active", "Photo answer voting is not active.");
             if (room.Session.StageEndsAtUtc <= now)
                 throw new PhotoAnswerException("photo_answer_vote_time_expired", "Photo answer voting has expired.");
-            var instance = room.Session.Rounds.SelectMany(r => r.Questions).Single(q => q.Id == questionInstanceId);
+            var instance = room.Session.Rounds.SelectMany(r => r.Questions).SingleOrDefault(q => q.Id == questionInstanceId);
+            if (instance is null) throw new PhotoAnswerException("photo_answer_vote_not_active", "Photo answer voting is not active.");
             if (!instance.PhotoAnswerVoteEligiblePlayers.Any(e => e.PlayerId == player.Id))
                 throw new PhotoAnswerException("photo_answer_vote_player_not_eligible", "The player is not eligible to vote.");
             if (instance.PhotoAnswerVotes.Any(v => v.VoterPlayerId == player.Id))
                 throw new PhotoAnswerException("photo_answer_vote_already_submitted", "The player has already voted.");
             if (!instance.PhotoAnswerSubmissions.Any(s => s.Id == selectedAnswerId))
                 throw new PhotoAnswerException("photo_answer_not_found", "The selected photo answer was not found.");
+            if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, questionInstanceId, SubmissionActionType.PhotoAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)) != SubmissionDecision.Accepted) return false;
             var vote = new PhotoAnswerVote { Id = Guid.NewGuid(), QuestionInstanceId = questionInstanceId, VoterPlayerId = player.Id, SelectedPhotoAnswerId = selectedAnswerId, SubmittedAtUtc = now };
             dbContext.PhotoAnswerVotes.Add(vote);
             if (instance.PhotoAnswerVotes.Count >= instance.PhotoAnswerVoteEligiblePlayers.Count)
@@ -612,11 +653,17 @@ public sealed class RoomService(
             var room = await LoadAsync(code, cancellationToken);
             var player = Authorize(room, playerId, token);
             var now = clock.UtcNow;
+            var instance = room.Session.Rounds.SelectMany(r => r.Questions).SingleOrDefault(q => q.Id == questionInstanceId);
+            if (instance is null) throw new DrawingAnswerException("drawing_answer_not_active", "Drawing answers are not active for this question.");
+            var fingerprint = await FingerprintMediaAsync(content, contentType, cancellationToken);
+            if (TryRecordReplay(room, player, questionInstanceId, SubmissionActionType.DrawingAnswer, clientSubmissionId, fingerprint))
+            {
+                var existing = instance.DrawingAnswerSubmissions.Single(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new DrawingAnswerUploadResult(room, existing.Id, false);
+            }
             if (room.Session?.CurrentQuestionInstanceId != questionInstanceId)
                 throw new DrawingAnswerException("drawing_answer_not_active", "Drawing answers are not active for this question.");
-            var instance = room.Session.Rounds.SelectMany(r => r.Questions).Single(q => q.Id == questionInstanceId);
-            var retry = instance.DrawingAnswerSubmissions.FirstOrDefault(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
-            if (retry != null) return new DrawingAnswerUploadResult(room, retry.Id, false);
             if (room.Session.Stage != GameStage.CollectingDrawingAnswers)
                 throw new DrawingAnswerException("drawing_answer_not_active", "Drawing answers are not active.");
             if (room.Session.StageEndsAtUtc <= now)
@@ -627,6 +674,12 @@ public sealed class RoomService(
                 throw new DrawingAnswerException("drawing_answer_player_not_eligible", "The player is not eligible.");
             if (instance.DrawingAnswerSubmissions.Any(s => s.AuthorPlayerId == player.Id))
                 throw new DrawingAnswerException("drawing_answer_already_submitted", "The player has already submitted a drawing.");
+            if (RecordSubmission(room, player, questionInstanceId, SubmissionActionType.DrawingAnswer, clientSubmissionId, fingerprint) != SubmissionDecision.Accepted)
+            {
+                var existing = instance.DrawingAnswerSubmissions.Single(s => s.ClientSubmissionId == clientSubmissionId && s.AuthorPlayerId == player.Id);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new DrawingAnswerUploadResult(room, existing.Id, false);
+            }
             var answerId = Guid.NewGuid();
             try
             {
@@ -659,17 +712,25 @@ public sealed class RoomService(
             }
             return new DrawingAnswerUploadResult(room, answerId, true);
         }
+        catch (RoomConflictException)
+        {
+            if (dbContext.ChangeTracker.HasChanges()) await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
         finally { roomLock.Release(); }
     }
 
-    public Task<RoomMutationResult> SubmitDrawingAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, CancellationToken cancellationToken = default) => MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
+    public Task<RoomMutationResult> SubmitDrawingAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) => MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
     {
+        if (HasStableId(clientSubmissionId) && TryRecordReplay(room, player, questionInstanceId, SubmissionActionType.DrawingAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)))
+            return false;
         if (room.Session?.CurrentQuestionInstanceId != questionInstanceId || room.Session.Stage != GameStage.CollectingDrawingAnswerVotes) throw new DrawingAnswerException("drawing_answer_vote_not_active", "Drawing answer voting is not active.");
         if (room.Session.StageEndsAtUtc <= now) throw new DrawingAnswerException("drawing_answer_vote_time_expired", "Drawing answer voting has expired.");
         var instance = room.Session.Rounds.SelectMany(r => r.Questions).Single(q => q.Id == questionInstanceId);
         if (!instance.DrawingAnswerVoteEligiblePlayers.Any(e => e.PlayerId == player.Id)) throw new DrawingAnswerException("drawing_answer_vote_player_not_eligible", "The player is not eligible to vote.");
         if (instance.DrawingAnswerVotes.Any(v => v.VoterPlayerId == player.Id)) throw new DrawingAnswerException("drawing_answer_vote_already_submitted", "The player has already voted.");
         if (!instance.DrawingAnswerSubmissions.Any(s => s.Id == selectedAnswerId)) throw new DrawingAnswerException("drawing_answer_not_found", "The selected drawing was not found.");
+        if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, questionInstanceId, SubmissionActionType.DrawingAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)) != SubmissionDecision.Accepted) return false;
         dbContext.DrawingAnswerVotes.Add(new DrawingAnswerVote { Id = Guid.NewGuid(), QuestionInstanceId = questionInstanceId, VoterPlayerId = player.Id, SelectedDrawingAnswerId = selectedAnswerId, SubmittedAtUtc = now });
         if (instance.DrawingAnswerVotes.Count >= instance.DrawingAnswerVoteEligiblePlayers.Count) await stateMachine.ForceTransitionAsync(room.Session, now, cancellationToken);
         return true;
@@ -685,6 +746,81 @@ public sealed class RoomService(
         catch (Exception exception)
         {
             logger.LogWarning(exception, "Compensating media cleanup failed");
+        }
+    }
+
+    private enum SubmissionDecision { Accepted, Replay }
+
+    private SubmissionDecision RecordSubmission(GameRoom room, Player player, Guid questionInstanceId,
+        SubmissionActionType actionType, Guid clientSubmissionId, string payloadFingerprint)
+    {
+        var receipt = dbContext.SubmissionReceipts.SingleOrDefault(entry =>
+            entry.RoomId == room.Id && entry.PlayerId == player.Id && entry.QuestionInstanceId == questionInstanceId &&
+            entry.ActionType == actionType && entry.ClientSubmissionId == clientSubmissionId);
+        var now = clock.UtcNow;
+        if (receipt is not null)
+        {
+            var result = receipt.PayloadFingerprint == payloadFingerprint
+                ? SubmissionAuditResult.IdempotentReplay
+                : SubmissionAuditResult.Conflict;
+            dbContext.SubmissionAuditEntries.Add(NewAudit(room.Id, player.Id, questionInstanceId, actionType, clientSubmissionId, payloadFingerprint, result, now));
+            if (result == SubmissionAuditResult.Conflict)
+                throw new RoomConflictException("client_submission_id_conflict");
+            return SubmissionDecision.Replay;
+        }
+
+        dbContext.SubmissionReceipts.Add(new SubmissionReceipt
+        {
+            Id = Guid.NewGuid(), RoomId = room.Id, PlayerId = player.Id, QuestionInstanceId = questionInstanceId,
+            ActionType = actionType, ClientSubmissionId = clientSubmissionId, PayloadFingerprint = payloadFingerprint, CreatedAtUtc = now
+        });
+        dbContext.SubmissionAuditEntries.Add(NewAudit(room.Id, player.Id, questionInstanceId, actionType, clientSubmissionId, payloadFingerprint, SubmissionAuditResult.Accepted, now));
+        return SubmissionDecision.Accepted;
+    }
+
+    private bool TryRecordReplay(GameRoom room, Player player, Guid questionInstanceId, SubmissionActionType actionType,
+        Guid clientSubmissionId, string payloadFingerprint)
+    {
+        var receipt = dbContext.SubmissionReceipts.SingleOrDefault(entry => entry.RoomId == room.Id &&
+            entry.PlayerId == player.Id && entry.QuestionInstanceId == questionInstanceId && entry.ActionType == actionType &&
+            entry.ClientSubmissionId == clientSubmissionId);
+        if (receipt is null) return false;
+        var result = receipt.PayloadFingerprint == payloadFingerprint ? SubmissionAuditResult.IdempotentReplay : SubmissionAuditResult.Conflict;
+        dbContext.SubmissionAuditEntries.Add(NewAudit(room.Id, player.Id, questionInstanceId, actionType, clientSubmissionId, payloadFingerprint, result, clock.UtcNow));
+        if (result == SubmissionAuditResult.Conflict) throw new RoomConflictException("client_submission_id_conflict");
+        return true;
+    }
+
+    private static SubmissionAuditEntry NewAudit(Guid roomId, Guid playerId, Guid questionId, SubmissionActionType action,
+        Guid submissionId, string fingerprint, SubmissionAuditResult result, DateTimeOffset now) => new()
+    {
+        Id = Guid.NewGuid(), RoomId = roomId, PlayerId = playerId, QuestionInstanceId = questionId, ActionType = action,
+        ClientSubmissionId = submissionId, PayloadFingerprint = fingerprint, Result = result, CreatedAtUtc = now
+    };
+
+    private static string Fingerprint(Guid value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToString("N")))).ToLowerInvariant();
+    private static string Fingerprint(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Normalize(NormalizationForm.FormC)))).ToLowerInvariant();
+    private static bool HasStableId(Guid? value) => value is { } id && id != Guid.Empty;
+
+    private static async Task<string> FingerprintMediaAsync(Stream content, string contentType, CancellationToken cancellationToken)
+    {
+        if (!content.CanSeek) throw new InvalidOperationException("Media submission stream must be seekable for idempotency.");
+        var position = content.Position;
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            hash.AppendData(Encoding.UTF8.GetBytes(contentType.Trim().ToLowerInvariant() + "\n"));
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await content.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+            {
+                hash.AppendData(buffer, 0, read);
+            }
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        finally
+        {
+            content.Position = position;
         }
     }
 
@@ -757,7 +893,7 @@ public sealed class RoomService(
                 }
             }
 
-            if (changed || startedNow)
+            if (changed || startedNow || dbContext.ChangeTracker.HasChanges())
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
@@ -766,6 +902,14 @@ public sealed class RoomService(
                 logger.LogInformation("Room {RoomCode} started automatically at state version {StateVersion}", room.Code, room.StateVersion);
             }
             return new RoomMutationResult(room, changed || startedNow, startedNow);
+        }
+        catch (RoomConflictException)
+        {
+            if (dbContext.ChangeTracker.HasChanges())
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            throw;
         }
         finally
         {

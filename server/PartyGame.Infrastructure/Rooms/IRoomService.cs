@@ -15,13 +15,13 @@ public interface IRoomService
     Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> DisconnectPlayerAsync(string roomCode, Guid playerId, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> DisconnectDisplayAsync(string roomCode, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SubmitSelectionAsync(string roomCode, Guid playerId, string? token, Guid selectedPlayerId, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SubmitTextAnswerAsync(string roomCode, Guid playerId, string? token, string text, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SubmitTextAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid selectedAnswerId, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitSelectionAsync(string roomCode, Guid playerId, string? token, Guid selectedPlayerId, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitTextAnswerAsync(string roomCode, Guid playerId, string? token, string text, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitTextAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid selectedAnswerId, Guid? questionInstanceId = null, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
     Task<PhotoAnswerUploadResult> SubmitPhotoAnswerAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SubmitPhotoAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitPhotoAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
     Task<DrawingAnswerUploadResult> SubmitDrawingAnswerAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default);
-    Task<RoomMutationResult> SubmitDrawingAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitDrawingAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
     Task<PartyGame.Domain.Rooms.PlayerPrivateGameState> GetPlayerPrivateGameStateAsync(string roomCode, Guid playerId, CancellationToken cancellationToken = default);
 }
 

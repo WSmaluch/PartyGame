@@ -18,6 +18,7 @@ using var http = new HttpClient { BaseAddress = new Uri(backendUrl) };
 var stage = "package-setup";
 var startedEvents = 0;
 var tracker = new GameTracker();
+var submissionIds = new Dictionary<string, Guid>(StringComparer.Ordinal);
 var observationFailures = new ConcurrentQueue<Exception>();
 var backendObservations = new ClientStateVersionRecorder("backend", coordinationDir);
 var hostObservations = new ClientStateVersionRecorder("scripted-player-a", coordinationDir);
@@ -158,54 +159,61 @@ try
             case "CollectingPlayerSelections":
                 await WaitForMarker("display-playerselection-collecting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-player-selection-submitted", TimeSpan.FromSeconds(30));
-                await hostConnection.InvokeAsync("SubmitPlayerSelection", roomCode, host.Id, host.Token, node.Id);
-                await nodeConnection.InvokeAsync("SubmitPlayerSelection", roomCode, node.Id, node.Token, host.Id);
+                await hostConnection.InvokeAsync("SubmitPlayerSelectionWithSubmission", roomCode, host.Id, host.Token, node.Id, active.InstanceId, SubmissionId(host, active.InstanceId, "selection"));
+                await nodeConnection.InvokeAsync("SubmitPlayerSelectionWithSubmission", roomCode, node.Id, node.Token, host.Id, active.InstanceId, SubmissionId(node, active.InstanceId, "selection"));
                 break;
             case "CollectingTextAnswers":
                 await WaitForMarker("display-textanswer-collecting", TimeSpan.FromSeconds(30));
                 await WaitForAnyMarker(new[] { "ios-text-submitted", "ios-text-subject-observed" }, TimeSpan.FromSeconds(30));
-                await hostConnection.InvokeAsync("SubmitTextAnswer", roomCode, host.Id, host.Token, "Odpowiedź hosta");
-                await nodeConnection.InvokeAsync("SubmitTextAnswer", roomCode, node.Id, node.Token, "Odpowiedź node");
+                await hostConnection.InvokeAsync("SubmitTextAnswerWithSubmission", roomCode, host.Id, host.Token, "Odpowiedź hosta", active.InstanceId, SubmissionId(host, active.InstanceId, "text-answer"));
+                await nodeConnection.InvokeAsync("SubmitTextAnswerWithSubmission", roomCode, node.Id, node.Token, "Odpowiedź node", active.InstanceId, SubmissionId(node, active.InstanceId, "text-answer"));
                 break;
             case "CollectingPhotoAnswers":
                 await WaitForMarker("display-photoanswer-collecting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-photo-submitted", TimeSpan.FromSeconds(45));
                 if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingPhotoAnswers"))
-                    await UploadAnswer(roomCode, host, active.InstanceId, "photo", hostPhoto, "image/jpeg");
+                {
+                    var hostPhotoSubmissionId = SubmissionId(host, active.InstanceId, "photo-answer");
+                    await UploadAnswer(roomCode, host, active.InstanceId, "photo", hostPhoto, "image/jpeg", hostPhotoSubmissionId);
+                    await UploadAnswer(roomCode, host, active.InstanceId, "photo", hostPhoto, "image/jpeg", hostPhotoSubmissionId);
+                }
                 if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingPhotoAnswers"))
-                    await UploadAnswer(roomCode, node, active.InstanceId, "photo", nodePhoto, "image/jpeg");
+                    await UploadAnswer(roomCode, node, active.InstanceId, "photo", nodePhoto, "image/jpeg", SubmissionId(node, active.InstanceId, "photo-answer"));
                 break;
             case "CollectingDrawingAnswers":
                 await WaitForMarker("display-drawinganswer-collecting", TimeSpan.FromSeconds(30));
                 await WaitForAnyMarker(new[] { "ios-drawing-submitted", "ios-drawing-not-required" }, TimeSpan.FromSeconds(45));
                 if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingDrawingAnswers"))
-                    await UploadAnswer(roomCode, host, active.InstanceId, "drawing", hostDrawing, "image/png");
+                    await UploadAnswer(roomCode, host, active.InstanceId, "drawing", hostDrawing, "image/png", SubmissionId(host, active.InstanceId, "drawing-answer"));
                 if (IsStillCollecting(await GetJson($"/api/rooms/{roomCode}"), active, "CollectingDrawingAnswers"))
-                    await UploadAnswer(roomCode, node, active.InstanceId, "drawing", nodeDrawing, "image/png");
+                    await UploadAnswer(roomCode, node, active.InstanceId, "drawing", nodeDrawing, "image/png", SubmissionId(node, active.InstanceId, "drawing-answer"));
                 break;
             case "CollectingTextAnswerVotes":
                 await WaitForMarker("display-textanswer-voting", TimeSpan.FromSeconds(30));
                 await WaitForAnyMarker(new[] { "ios-text-voted", "ios-text-vote-not-required" }, TimeSpan.FromSeconds(30));
                 var answers = TextAnswerIds(room);
                 if (answers.Count < 2) throw new InvalidOperationException("Głosowanie tekstowe nie ma co najmniej dwóch odpowiedzi.");
-                await hostConnection.InvokeAsync("SubmitTextAnswerVote", roomCode, host.Id, host.Token, answers.First(id => id != hostPrivate.TextAnswerId));
-                await nodeConnection.InvokeAsync("SubmitTextAnswerVote", roomCode, node.Id, node.Token, answers.First(id => id != nodePrivate.TextAnswerId));
+                var hostTextVote = answers.First(id => id != hostPrivate.TextAnswerId);
+                var hostTextVoteSubmissionId = SubmissionId(host, active.InstanceId, "text-vote");
+                await hostConnection.InvokeAsync("SubmitTextAnswerVoteWithSubmission", roomCode, host.Id, host.Token, hostTextVote, active.InstanceId, hostTextVoteSubmissionId);
+                await hostConnection.InvokeAsync("SubmitTextAnswerVoteWithSubmission", roomCode, host.Id, host.Token, hostTextVote, active.InstanceId, hostTextVoteSubmissionId);
+                await nodeConnection.InvokeAsync("SubmitTextAnswerVoteWithSubmission", roomCode, node.Id, node.Token, answers.First(id => id != nodePrivate.TextAnswerId), active.InstanceId, SubmissionId(node, active.InstanceId, "text-vote"));
                 break;
             case "CollectingPhotoAnswerVotes":
                 await WaitForMarker("display-photoanswer-voting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-photo-voted", TimeSpan.FromSeconds(30));
                 AssertAllMediaSubmitted(room, "photoAnswerResults", "submittedPlayers", "requiredPlayers", "PhotoAnswer");
                 var photoAnswerIds = MediaAnswerIds(room, "photoAnswerResults", "photoAnswerId");
-                await VoteMedia(hostConnection, "SubmitPhotoAnswerVote", roomCode, host, active.InstanceId, photoAnswerIds[0]);
-                await VoteMedia(nodeConnection, "SubmitPhotoAnswerVote", roomCode, node, active.InstanceId, photoAnswerIds[^1]);
+                await VoteMedia(hostConnection, "SubmitPhotoAnswerVote", roomCode, host, active.InstanceId, photoAnswerIds[0], SubmissionId(host, active.InstanceId, "photo-vote"));
+                await VoteMedia(nodeConnection, "SubmitPhotoAnswerVote", roomCode, node, active.InstanceId, photoAnswerIds[^1], SubmissionId(node, active.InstanceId, "photo-vote"));
                 break;
             case "CollectingDrawingAnswerVotes":
                 await WaitForMarker("display-drawinganswer-voting", TimeSpan.FromSeconds(30));
                 await WaitForMarker("ios-drawing-voted", TimeSpan.FromSeconds(30));
                 AssertAllMediaSubmitted(room, "drawingAnswerResults", "submittedPlayers", "requiredPlayers", "DrawingAnswer");
                 var drawingAnswerIds = MediaAnswerIds(room, "drawingAnswerResults", "drawingAnswerId");
-                await VoteMedia(hostConnection, "SubmitDrawingAnswerVote", roomCode, host, active.InstanceId, drawingAnswerIds[0]);
-                await VoteMedia(nodeConnection, "SubmitDrawingAnswerVote", roomCode, node, active.InstanceId, drawingAnswerIds[^1]);
+                await VoteMedia(hostConnection, "SubmitDrawingAnswerVote", roomCode, host, active.InstanceId, drawingAnswerIds[0], SubmissionId(host, active.InstanceId, "drawing-vote"));
+                await VoteMedia(nodeConnection, "SubmitDrawingAnswerVote", roomCode, node, active.InstanceId, drawingAnswerIds[^1], SubmissionId(node, active.InstanceId, "drawing-vote"));
                 break;
         }
     }
@@ -235,6 +243,36 @@ try
     var finalPlayers = completed.GetProperty("players");
     if (finalPlayers.GetArrayLength() != 3 || !finalPlayers.EnumerateArray().Any(player => player.GetProperty("id").GetGuid() == iosPlayerId))
         throw new InvalidOperationException("Reconnect iOS nie odzyskał tego samego gracza w pokoju trzech graczy.");
+    var audit = await GetJson($"/api/rooms/{roomCode}/submission-audit?playerId={host.Id}&reconnectToken={Uri.EscapeDataString(host.Token)}");
+    var auditEntries = audit.GetProperty("entries").EnumerateArray().ToArray();
+    var acceptedUniqueSubmissionCount = AuditCount(auditEntries, "Accepted");
+    var idempotentReplayCount = AuditCount(auditEntries, "IdempotentReplay");
+    var conflictingSubmissionIdCount = AuditCount(auditEntries, "Conflict");
+    var duplicateTextAnswerCount = DomainDuplicateCount(auditEntries, "TextAnswer");
+    var duplicateTextVoteCount = DomainDuplicateCount(auditEntries, "TextAnswerVote");
+    var duplicatePhotoAnswerCount = DomainDuplicateCount(auditEntries, "PhotoAnswer");
+    var duplicatePhotoVoteCount = DomainDuplicateCount(auditEntries, "PhotoAnswerVote");
+    var duplicateDrawingAnswerCount = DomainDuplicateCount(auditEntries, "DrawingAnswer");
+    var duplicateDrawingVoteCount = DomainDuplicateCount(auditEntries, "DrawingAnswerVote");
+    var duplicateAnswerCount = duplicateTextAnswerCount + duplicatePhotoAnswerCount + duplicateDrawingAnswerCount;
+    var duplicateVoteCount = duplicateTextVoteCount + duplicatePhotoVoteCount + duplicateDrawingVoteCount;
+    var duplicateDrawingCount = duplicateDrawingAnswerCount + duplicateDrawingVoteCount;
+    var duplicateClientSubmissionIdCount = DuplicateSubmissionIdCount(auditEntries);
+    var iosPostReconnectDuplicateSubmissionCount = DomainDuplicateCountForPlayer(auditEntries, iosPlayerId);
+    var scriptedPlayerADuplicateSubmissionCount = DomainDuplicateCountForPlayer(auditEntries, host.Id);
+    var scriptedPlayerBDuplicateSubmissionCount = DomainDuplicateCountForPlayer(auditEntries, node.Id);
+    var displaySubmissionCount = auditEntries.Count(entry =>
+    {
+        var playerId = entry.GetProperty("playerId").GetGuid();
+        return playerId != iosPlayerId && playerId != host.Id && playerId != node.Id;
+    });
+    if (idempotentReplayCount < 2) throw new InvalidOperationException($"Oczekiwano co najmniej dwóch rzeczywistych replayów, otrzymano {idempotentReplayCount}.");
+    if (conflictingSubmissionIdCount != 0 || duplicateAnswerCount != 0 || duplicateVoteCount != 0 ||
+        duplicateClientSubmissionIdCount != 0 || iosPostReconnectDuplicateSubmissionCount != 0 ||
+        scriptedPlayerADuplicateSubmissionCount != 0 || scriptedPlayerBDuplicateSubmissionCount != 0 || displaySubmissionCount != 0)
+    {
+        throw new InvalidOperationException("Audyt submissions wykrył konflikt, duplikat logiczny albo submission Displaya.");
+    }
     await WriteJson("outcome.json", new
     {
         status = "passed",
@@ -272,8 +310,24 @@ try
         finalBackendStateVersion = ledger.FinalBackendStateVersion,
         stateVersionLedgerPassed = ledger.Passed,
         stateVersionLedgerFailureCount = ledger.FailureCount,
-        duplicateResponseCount = 0,
-        duplicateVoteCount = 0,
+        totalSubmissionAttemptCount = auditEntries.Length,
+        acceptedUniqueSubmissionCount,
+        idempotentReplayCount,
+        conflictingSubmissionIdCount,
+        duplicateTextAnswerCount,
+        duplicateTextVoteCount,
+        duplicatePhotoAnswerCount,
+        duplicatePhotoVoteCount,
+        duplicateDrawingAnswerCount,
+        duplicateDrawingVoteCount,
+        duplicateAnswerCount,
+        duplicateVoteCount,
+        duplicateDrawingCount,
+        duplicateClientSubmissionIdCount,
+        iosPostReconnectDuplicateSubmissionCount,
+        scriptedPlayerADuplicateSubmissionCount,
+        scriptedPlayerBDuplicateSubmissionCount,
+        displaySubmissionCount,
         questions = tracker.Questions,
         ios = "completed",
         display = "completed",
@@ -303,7 +357,8 @@ async Task<JsonElement> GetJson(string path)
 {
     using var response = await http.GetAsync(path);
     var value = await ReadSuccess(response);
-    if (path.StartsWith("/api/rooms/", StringComparison.Ordinal)) Observe(backendObservations, value, "snapshot-accepted");
+    if (path.StartsWith("/api/rooms/", StringComparison.Ordinal) && value.TryGetProperty("stateVersion", out _))
+        Observe(backendObservations, value, "snapshot-accepted");
     return value;
 }
 static async Task<JsonElement> ReadSuccess(HttpResponseMessage response) { var content = await response.Content.ReadAsStringAsync(); if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {content}"); return JsonDocument.Parse(content).RootElement.Clone(); }
@@ -311,12 +366,12 @@ static bool IsGameCompleted(JsonElement room) =>
     room.TryGetProperty("game", out var game) && game.ValueKind == JsonValueKind.Object &&
     game.TryGetProperty("stage", out var stage) && stage.GetString() == "Completed";
 async Task UploadProfile(string roomCode, PlayerAccess player, byte[] image) { using var form = new MultipartFormDataContent(); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg"); form.Add(content, "file", "profile.jpg"); using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{roomCode}/players/{player.Id}/profile-photo") { Content = form }; request.Headers.Add("X-Player-Token", player.Token); using var response = await http.SendAsync(request); _ = await ReadSuccess(response); }
-async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType)
+async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType, Guid clientSubmissionId)
 {
     using var form = new MultipartFormDataContent();
     form.Add(new StringContent(player.Id.ToString()), "playerId");
     form.Add(new StringContent(player.Token), "reconnectToken");
-    form.Add(new StringContent(Guid.NewGuid().ToString()), "clientSubmissionId");
+    form.Add(new StringContent(clientSubmissionId.ToString()), "clientSubmissionId");
     var content = new ByteArrayContent(image);
     content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
     form.Add(content, field, $"{field}.{(contentType == "image/png" ? "png" : "jpg")}");
@@ -329,7 +384,13 @@ static async Task<byte[]> Jpeg(Color color) { using var image = new Image<Rgba32
 static async Task<byte[]> Png(Color color) { using var image = new Image<Rgba32>(400, 400, color); await using var stream = new MemoryStream(); await image.SaveAsync(stream, new PngEncoder()); return stream.ToArray(); }
 async Task WaitForMarker(string name, TimeSpan timeout) => await WaitUntil(() => File.Exists(Path.Combine(coordinationDir, name)), timeout, name);
 async Task WaitForAnyMarker(IEnumerable<string> names, TimeSpan timeout) => await WaitUntil(() => names.Any(name => File.Exists(Path.Combine(coordinationDir, name))), timeout, string.Join(" lub ", names));
-async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Guid answerId) => await connection.InvokeAsync(method, roomCode, voter.Id, voter.Token, questionId, answerId);
+async Task VoteMedia(HubConnection connection, string method, string roomCode, PlayerAccess voter, Guid questionId, Guid answerId, Guid clientSubmissionId) => await connection.InvokeAsync(method + "WithSubmission", roomCode, voter.Id, voter.Token, questionId, answerId, clientSubmissionId);
+Guid SubmissionId(PlayerAccess player, Guid questionId, string action)
+{
+    var key = $"{player.Id:N}:{questionId:N}:{action}";
+    if (submissionIds.TryGetValue(key, out var id)) return id;
+    id = Guid.NewGuid(); submissionIds[key] = id; return id;
+}
 static async Task WaitUntil(Func<bool> predicate, TimeSpan timeout, string description) { var deadline = DateTimeOffset.UtcNow + timeout; while (DateTimeOffset.UtcNow < deadline) { if (predicate()) return; await Task.Delay(100); } throw new TimeoutException($"Timeout: {description}"); }
 async Task WriteJson(string fileName, object value) { var path = Path.Combine(coordinationDir, fileName); var temporaryPath = path + ".tmp"; await File.WriteAllTextAsync(temporaryPath, JsonSerializer.Serialize(value, json)); File.Move(temporaryPath, path, true); }
 void Mark(string name) => File.WriteAllText(Path.Combine(coordinationDir, name), string.Empty);
@@ -346,6 +407,19 @@ static string Required(string name) => Environment.GetEnvironmentVariable(name) 
 static PlayerAccess Access(JsonElement response, string name) => new(response.GetProperty("playerId").GetGuid(), response.GetProperty("reconnectToken").GetString()!, name);
 static PrivateState Private(JsonElement value) => new(ReadGuid(value, "ownTextAnswerId"), ReadGuid(value, "ownPhotoAnswerId"), ReadGuid(value, "ownDrawingAnswerId"));
 static Guid? ReadGuid(JsonElement value, string property) => value.TryGetProperty(property, out var item) && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out var id) ? id : null;
+static int AuditCount(IEnumerable<JsonElement> entries, string result) => entries.Count(entry => entry.GetProperty("result").GetString() == result);
+static int DomainDuplicateCount(IEnumerable<JsonElement> entries, string action) => entries
+    .Where(entry => entry.GetProperty("actionType").GetString() == action && entry.GetProperty("result").GetString() == "Accepted")
+    .GroupBy(entry => $"{entry.GetProperty("playerId").GetGuid():N}:{entry.GetProperty("questionInstanceId").GetGuid():N}")
+    .Sum(group => Math.Max(0, group.Count() - 1));
+static int DomainDuplicateCountForPlayer(IEnumerable<JsonElement> entries, Guid playerId) => entries
+    .Where(entry => entry.GetProperty("playerId").GetGuid() == playerId && entry.GetProperty("result").GetString() == "Accepted")
+    .GroupBy(entry => $"{entry.GetProperty("actionType").GetString()}:{entry.GetProperty("questionInstanceId").GetGuid():N}")
+    .Sum(group => Math.Max(0, group.Count() - 1));
+static int DuplicateSubmissionIdCount(IEnumerable<JsonElement> entries) => entries
+    .Where(entry => entry.GetProperty("result").GetString() == "Accepted")
+    .GroupBy(entry => $"{entry.GetProperty("playerId").GetGuid():N}:{entry.GetProperty("questionInstanceId").GetGuid():N}:{entry.GetProperty("actionType").GetString()}:{entry.GetProperty("clientSubmissionId").GetGuid():N}")
+    .Sum(group => Math.Max(0, group.Count() - 1));
 static ActiveQuestion? Active(JsonElement room, IReadOnlyDictionary<Guid, string> questionTypes)
 {
     if (!room.TryGetProperty("game", out var game) || game.ValueKind == JsonValueKind.Null ||

@@ -113,7 +113,7 @@ public sealed class GameHub : Hub
         }
     }
 
-    public async Task SubmitPlayerSelection(string roomCode, Guid playerId, string reconnectToken, Guid selectedPlayerId)
+    public async Task SubmitPlayerSelectionWithSubmission(string roomCode, Guid playerId, string reconnectToken, Guid selectedPlayerId, Guid questionInstanceId, Guid clientSubmissionId)
     {
         try
         {
@@ -126,6 +126,8 @@ public sealed class GameHub : Hub
                 playerId,
                 reconnectToken,
                 selectedPlayerId,
+                questionInstanceId,
+                clientSubmissionId,
                 Context.ConnectionAborted);
 
             await NotifyAsync(result);
@@ -136,7 +138,10 @@ public sealed class GameHub : Hub
         }
     }
 
-    public async Task SubmitTextAnswer(string roomCode, Guid playerId, string reconnectToken, string text)
+    public Task SubmitPlayerSelection(string roomCode, Guid playerId, string reconnectToken, Guid selectedPlayerId) =>
+        SubmitPlayerSelectionWithSubmission(roomCode, playerId, reconnectToken, selectedPlayerId, Guid.Empty, Guid.Empty);
+
+    public async Task SubmitTextAnswerWithSubmission(string roomCode, Guid playerId, string reconnectToken, string text, Guid questionInstanceId, Guid clientSubmissionId)
     {
         try
         {
@@ -149,6 +154,8 @@ public sealed class GameHub : Hub
                 playerId,
                 reconnectToken,
                 text,
+                questionInstanceId,
+                clientSubmissionId,
                 Context.ConnectionAborted);
 
             await NotifyAsync(result);
@@ -161,7 +168,10 @@ public sealed class GameHub : Hub
         }
     }
 
-    public async Task SubmitTextAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid selectedAnswerId)
+    public Task SubmitTextAnswer(string roomCode, Guid playerId, string reconnectToken, string text) =>
+        SubmitTextAnswerWithSubmission(roomCode, playerId, reconnectToken, text, Guid.Empty, Guid.Empty);
+
+    public async Task SubmitTextAnswerVoteWithSubmission(string roomCode, Guid playerId, string reconnectToken, Guid selectedAnswerId, Guid questionInstanceId, Guid clientSubmissionId)
     {
         try
         {
@@ -174,6 +184,8 @@ public sealed class GameHub : Hub
                 playerId,
                 reconnectToken,
                 selectedAnswerId,
+                questionInstanceId,
+                clientSubmissionId,
                 Context.ConnectionAborted);
 
             await NotifyAsync(result);
@@ -186,13 +198,16 @@ public sealed class GameHub : Hub
         }
     }
 
-    public async Task SubmitPhotoAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid photoAnswerId)
+    public Task SubmitTextAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid selectedAnswerId) =>
+        SubmitTextAnswerVoteWithSubmission(roomCode, playerId, reconnectToken, selectedAnswerId, Guid.Empty, Guid.Empty);
+
+    public async Task SubmitPhotoAnswerVoteWithSubmission(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid photoAnswerId, Guid clientSubmissionId)
     {
         try
         {
             if (!connectionRegistry.IsActivePlayer(Context.ConnectionId, roomCode.Trim(), playerId))
                 throw new PhotoAnswerException("photo_answer_vote_player_not_eligible", "Not an active player.");
-            var result = await roomService.SubmitPhotoAnswerVoteAsync(roomCode, playerId, reconnectToken, questionInstanceId, photoAnswerId, Context.ConnectionAborted);
+            var result = await roomService.SubmitPhotoAnswerVoteAsync(roomCode, playerId, reconnectToken, questionInstanceId, photoAnswerId, clientSubmissionId, Context.ConnectionAborted);
             await NotifyAsync(result);
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, Context.ConnectionAborted);
             await Clients.Caller.SendAsync("PlayerPrivateGameStateUpdated", privateState, Context.ConnectionAborted);
@@ -203,11 +218,17 @@ public sealed class GameHub : Hub
         }
     }
 
-    public async Task SubmitDrawingAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid drawingAnswerId)
+    public Task SubmitPhotoAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid photoAnswerId) =>
+        SubmitPhotoAnswerVoteWithSubmission(roomCode, playerId, reconnectToken, questionInstanceId, photoAnswerId, Guid.Empty);
+
+    public async Task SubmitDrawingAnswerVoteWithSubmission(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid drawingAnswerId, Guid clientSubmissionId)
     {
-        try { if (!connectionRegistry.IsActivePlayer(Context.ConnectionId, roomCode.Trim(), playerId)) throw new DrawingAnswerException("drawing_answer_vote_player_not_eligible", "Not an active player."); var result = await roomService.SubmitDrawingAnswerVoteAsync(roomCode, playerId, reconnectToken, questionInstanceId, drawingAnswerId, Context.ConnectionAborted); await NotifyAsync(result); var state = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, Context.ConnectionAborted); await Clients.Caller.SendAsync("PlayerPrivateGameStateUpdated", state, Context.ConnectionAborted); }
+        try { if (!connectionRegistry.IsActivePlayer(Context.ConnectionId, roomCode.Trim(), playerId)) throw new DrawingAnswerException("drawing_answer_vote_player_not_eligible", "Not an active player."); var result = await roomService.SubmitDrawingAnswerVoteAsync(roomCode, playerId, reconnectToken, questionInstanceId, drawingAnswerId, clientSubmissionId, Context.ConnectionAborted); await NotifyAsync(result); var state = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, Context.ConnectionAborted); await Clients.Caller.SendAsync("PlayerPrivateGameStateUpdated", state, Context.ConnectionAborted); }
         catch (RoomException exception) { throw new HubException(exception is DrawingAnswerException drawing ? drawing.Code : exception.Message); }
     }
+
+    public Task SubmitDrawingAnswerVote(string roomCode, Guid playerId, string reconnectToken, Guid questionInstanceId, Guid drawingAnswerId) =>
+        SubmitDrawingAnswerVoteWithSubmission(roomCode, playerId, reconnectToken, questionInstanceId, drawingAnswerId, Guid.Empty);
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {

@@ -26,6 +26,7 @@ final class GameSessionStore {
     private var privateStateRefreshTask: Task<Void, Never>?
     private var activeQuestionInstanceId: UUID?
     private var privateStateRefreshInFlightQuestionId: UUID?
+    private var submissionIds: [String: UUID] = [:]
     private(set) var privateStateRefreshFailedQuestionId: UUID?
 
     private(set) var screen: GameScreen = .idle
@@ -128,7 +129,7 @@ final class GameSessionStore {
               privateGameState?.hasSubmittedDrawingAnswerVote != true, let session, let reconnectToken,
               let questionId = snapshot?.game?.resolvedQuestionInstanceId, let drawingId = selectedDrawingAnswerVoteId else { return }
         isWorking = true; errorMessage = nil; defer { isWorking = false }
-        do { try await realtime.submitDrawingAnswerVote(roomCode: session.roomCode, playerId: session.playerId, reconnectToken: reconnectToken, questionInstanceId: questionId, drawingAnswerId: drawingId) }
+        do { try await realtime.submitDrawingAnswerVote(roomCode: session.roomCode, playerId: session.playerId, reconnectToken: reconnectToken, questionInstanceId: questionId, drawingAnswerId: drawingId, clientSubmissionId: submissionId(questionId, "drawing-vote")) }
         catch { errorMessage = Self.drawingAnswerMessage(for: error) }
     }
 
@@ -233,7 +234,9 @@ final class GameSessionStore {
                 roomCode: session.roomCode,
                 playerId: session.playerId,
                 reconnectToken: reconnectToken,
-                selectedPlayerId: selectedPlayerId
+                selectedPlayerId: selectedPlayerId,
+                questionInstanceId: questionId,
+                clientSubmissionId: submissionId(questionId, "player-selection")
             )
             submittedQuestionInstanceIds.insert(questionId)
             apply(updated)
@@ -252,7 +255,9 @@ final class GameSessionStore {
                 roomCode: session.roomCode,
                 playerId: session.playerId,
                 reconnectToken: reconnectToken,
-                text: text
+                text: text,
+                questionInstanceId: questionId,
+                clientSubmissionId: submissionId(questionId, "text-answer")
             )
             submittedQuestionInstanceIds.insert(questionId)
             apply(updated)
@@ -262,7 +267,7 @@ final class GameSessionStore {
     }
 
     func submitTextAnswerVote(selectedAnswerId: UUID) async {
-        guard let session, let reconnectToken else { return }
+        guard let session, let reconnectToken, let questionId = snapshot?.game?.resolvedQuestionInstanceId else { return }
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
@@ -271,7 +276,9 @@ final class GameSessionStore {
                 roomCode: session.roomCode,
                 playerId: session.playerId,
                 reconnectToken: reconnectToken,
-                selectedAnswerId: selectedAnswerId
+                selectedAnswerId: selectedAnswerId,
+                questionInstanceId: questionId,
+                clientSubmissionId: submissionId(questionId, "text-vote")
             )
             apply(updated)
         } catch {
@@ -338,7 +345,7 @@ final class GameSessionStore {
         do {
             try await realtime.submitPhotoAnswerVote(roomCode: session.roomCode, playerId: session.playerId,
                                                      reconnectToken: reconnectToken, questionInstanceId: questionId,
-                                                     photoAnswerId: photoAnswerId)
+                                                     photoAnswerId: photoAnswerId, clientSubmissionId: submissionId(questionId, "photo-vote"))
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -428,6 +435,7 @@ final class GameSessionStore {
         let nextQuestion = candidate.game?.resolvedQuestionInstanceId
         let questionChanged = nextQuestion != activeQuestionInstanceId
         if questionChanged {
+            submissionIds = [:]
             photoUploadTask?.cancel()
             photoUploadTask = nil
             if let photoDraft { PhotoAnswerDraftStorage.remove(photoDraft) }
@@ -709,8 +717,17 @@ final class GameSessionStore {
         drawingUploadPhase = .idle
         selectedDrawingAnswerVoteId = nil
         activeQuestionInstanceId = nil
+        submissionIds = [:]
         realtimeStatus = .disconnected
         screen = .idle
+    }
+
+    private func submissionId(_ questionId: UUID, _ action: String) -> UUID {
+        let key = "\(questionId.uuidString)|\(action)"
+        if let existing = submissionIds[key] { return existing }
+        let created = UUID()
+        submissionIds[key] = created
+        return created
     }
 
     private func performPhotoAnswerUpload(_ draft: PhotoAnswerDraft) async {

@@ -36,6 +36,22 @@ public static class RoomEndpoints
         rooms.MapGet("/{roomCode}", async (string roomCode, IRoomService roomService, CancellationToken cancellationToken) =>
             Results.Ok((await roomService.GetAsync(roomCode, cancellationToken)).ToSnapshot()));
 
+        // Player-authorized operational diagnostics. It deliberately exposes only
+        // hashes and aggregate counts; reconnect tokens and media bytes never leave
+        // storage through this endpoint.
+        rooms.MapGet("/{roomCode}/submission-audit", async (
+            string roomCode, Guid playerId, string reconnectToken, IRoomService roomService,
+            PartyGame.Infrastructure.Persistence.PartyGameDbContext db, CancellationToken cancellationToken) =>
+        {
+            var authorization = await roomService.ResumeAsync(roomCode, playerId, reconnectToken, cancellationToken);
+            var entries = await db.SubmissionAuditEntries.AsNoTracking()
+                .Where(entry => entry.RoomId == authorization.Room.Id)
+                .Select(entry => new { entry.PlayerId, entry.QuestionInstanceId, actionType = entry.ActionType.ToString(), clientSubmissionId = entry.ClientSubmissionId, payloadFingerprint = entry.PayloadFingerprint, result = entry.Result.ToString(), entry.CreatedAtUtc })
+                .ToListAsync(cancellationToken);
+            var orderedEntries = entries.OrderBy(entry => entry.CreatedAtUtc).ToArray();
+            return Results.Ok(new { entries = orderedEntries });
+        });
+
         rooms.MapPost("/{roomCode}/players/{playerId:guid}/resume", async (
             string roomCode,
             Guid playerId,
