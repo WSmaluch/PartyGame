@@ -19,7 +19,12 @@ public sealed class PhotoAnswerMixedGameE2ETests
     [Fact]
     public async Task RealHostAndSignalRClient_RunExactTwoTwoTwoPlanToCompleted()
     {
-        await using var harness = new PhotoAnswerTestHarness();
+        // The test advances stage deadlines itself. The production worker must not
+        // concurrently persist the same transition to this SQLite database.
+        await using var harness = new PhotoAnswerTestHarness(settings: new Dictionary<string, string?>
+        {
+            ["GameFlow:WorkerIntervalMilliseconds"] = "60000"
+        });
         var settings = new RoomSettingsRequest(1, 6, 5, 5, 5, 10, 30, 3, false, 1);
         var host = await CreateAsync(harness, "Host", settings);
         var second = await JoinAsync(harness, host.RoomCode, "Second");
@@ -97,6 +102,10 @@ public sealed class PhotoAnswerMixedGameE2ETests
                     }
                 }
             }
+            // HTTP/SignalR actions above used independent contexts. Reload before
+            // forcing the next transition so this context cannot write stale state.
+            db.ChangeTracker.Clear();
+            session = await db.GameSessions.SingleAsync();
             session.StageEndsAtUtc = DateTimeOffset.UtcNow.AddMilliseconds(-1);
             await db.SaveChangesAsync();
             var machine = scope.ServiceProvider.GetRequiredService<GameStateMachine>();

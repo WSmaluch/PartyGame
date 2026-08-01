@@ -65,3 +65,6 @@ Skrypt release ustawia wersję w obu plikach `config.json`; adresy można podać
 Walidacja obejmuje Backend Release (281/281), Display (36/36), Admin (80/80), iOS `Release build-for-testing`, health/readiness, konfigurację runtime, manifest, checksumy i smoke test. `git fsck --connectivity-only --no-dangling` oraz odczyt 865 osiągalnych obiektów przez `git cat-file` przeszły bez `missing`, `corrupt`, `bad` ani `unknown`. Pełny `git fsck --full --no-dangling` napotkał lokalne `mmap failed: Operation timed out`, bez komunikatu o uszkodzonym obiekcie; log diagnostyczny znajduje się w `/private/tmp/partygame-stage8-git-fsck.log`.
 
 **Etap 8.2 — niewykonany. Etap 8 — nieukończony.** Instalacja LAN, produkcyjna polityka migracji/backupów oraz pozostałe punkty roadmapy nie są częścią tego artefaktu.
+# Stabilność testów SQLite
+
+Testy z ręcznie sterowanymi zegarami muszą wyłączyć wyłącznie własny, hosted `GameEngineWorker` przez długi interwał testowy. Dzięki temu worker nie zapisuje tej samej fazy co testowy `DbContext`; nie jest to globalne wyłączenie równoległości ani zmiana produkcyjnej konfiguracji. Każdy `WebApplicationFactory` używa unikalnego katalogu runtime i usuwa go dopiero po `DisposeAsync`, wraz z SQLite, WAL i SHM.

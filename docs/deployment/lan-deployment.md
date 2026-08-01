@@ -73,3 +73,5 @@ W PartyGame iOS otwórz ustawienia serwera, wpisz `http://<LAN-IP>:5050` i użyj
 Na drugim komputerze lub telefonie, bez uruchamiania lokalnego Vite, otwórz `/display/` oraz `/admin/`, następnie `health` i utwórz pokój. Sprawdź też, czy Display połączył się z SignalR. Nie twierdź, że test był między fizycznymi urządzeniami, jeśli wykonywano go tylko przez adres LAN z tego samego hosta.
 
 macOS: zezwól `dotnet` na połączenia przychodzące w **Ustawienia systemowe → Sieć → Zapora sieciowa**. Linux: otwórz wybrany port TCP w lokalnym firewallu (np. `ufw allow 5050/tcp`) tylko dla zaufanej podsieci. Przy błędach sprawdź `runtime/logs`, `status-lan.sh`, zajęty port, izolację klientów Wi-Fi i VPN. Aby usunąć instalację bez danych, usuń wyłącznie wskazane katalogi w `releases/` i symlink `current`; zachowaj `runtime/` oraz `config/`.
+
+Automatyczna regresja używa realnego nie-loopbackowego adresu hosta. Walidacja na drugim fizycznym urządzeniu pozostaje **manual validation pending**; automatyczny test LAN nie jest deklarowany jako jej substytut.

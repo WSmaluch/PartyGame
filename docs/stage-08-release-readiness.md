@@ -35,4 +35,10 @@ Polityka migracji i kopii zapasowych nie jest zamknięta w 8.1. `PARTYGAME_APPLY
 
 **Etap 8.2 — ukończony.** Jednoprocesowy deployment LAN używa opublikowanego API do serwowania `/display` i `/admin`, ma trwały katalog runtime, lifecycle, checksumy i rollback. Instrukcja: [lan-deployment.md](deployment/lan-deployment.md).
 
+## Stabilizacja 8.2F
+
+`PhotoAnswerMixedGameE2ETests` steruje przejściami faz bezpośrednio przez `GameStateMachine`. Wcześniej równolegle działał produkcyjny `GameEngineWorker` z domyślnym interwałem 1 s i mógł zapisać ten sam `GameSession` w SQLite. Powodowało to okazjonalny konflikt zapisu (`database is locked`) podczas pełnego przebiegu. Test ma teraz lokalny interwał workera 60 s oraz po akcjach HTTP/SignalR odświeża swój `DbContext` przed wymuszeniem kolejnego przejścia. Nie zmienia to semantyki produkcyjnego silnika.
+
+`PhotoAnswerTestHarness` od początku nadaje każdemu hostowi własny katalog, plik SQLite i katalog mediów. Dodany test regresyjny potwierdza rozłączność i cleanup po `DisposeAsync`, obejmujący bazę oraz pliki WAL/SHM usuwane razem z katalogiem runtime.
+
 **Etap 8 — nieukończony.**
