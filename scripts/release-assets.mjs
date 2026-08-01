@@ -10,6 +10,10 @@ if (command === 'config') {
   if (!target || !version) usage();
   await fs.writeFile(target, `${JSON.stringify({
     apiBaseUrl: apiBaseUrl ?? '',
+    signalRHubUrl: '/hubs/game',
+    publicBaseUrl: publicAppUrl ?? '',
+    applicationVersion: version,
+    // Legacy names remain available for artifacts generated before the LAN contract.
     signalRBaseUrl: apiBaseUrl ?? '',
     publicAppUrl: publicAppUrl ?? '',
     buildVersion: version,

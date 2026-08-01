@@ -33,4 +33,15 @@ describe('runtime configuration', () => {
     });
     expect(apiConfig.signalRBaseUrl).toBe('http://192.168.1.5:5050');
   });
+
+  it('accepts an origin-relative single-origin LAN runtime contract', () => {
+    parseRuntimeConfig({
+      apiBaseUrl: '/',
+      signalRHubUrl: '/hubs/game',
+      publicBaseUrl: '/admin/',
+      applicationVersion: '0.8.2-lan',
+    });
+    expect(apiConfig.baseUrl).toBe('/');
+    expect(apiConfig.signalRHubUrl).toBe('/hubs/game');
+  });
 });

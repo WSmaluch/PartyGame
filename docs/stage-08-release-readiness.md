@@ -5,7 +5,12 @@ Etap 8 przygotowuje powtarzalne artefakty i operacyjne zasady uruchomienia Party
 ## Plan etapów
 
 1. **8.1 — powtarzalny release build i konfiguracja środowiska.** Publikacja API, build webów i iOS, zewnętrzny runtime, manifest, checksumy, smoke test oraz wersjonowanie.
-2. **8.2 — wdrożenie backendu i webów w LAN.** Konkretna topologia hosta, serwowanie Display/Admin i instrukcja instalacji w lokalnej sieci.
+2. **8.2 — wdrożenie backendu i webów w LAN.**
+   - **8.2A:** układ wdrożenia i konfiguracja LAN;
+   - **8.2B:** lifecycle start/stop/status/restart;
+   - **8.2C:** statyczny Display i Admin bez Vite;
+   - **8.2D:** walidacja z użyciem adresu LAN;
+   - **8.2E:** rollback i ponowne wdrożenie bez utraty danych.
 3. **8.3 — trwałość, migracje, backup i recovery.** Polityka wykonywania migracji, kopie zapasowe SQLite/mediów oraz ćwiczenie odtworzenia.
 4. **8.4 — bezpieczeństwo, sekrety, CORS i ograniczenia sieciowe.** Uprawnienia procesu, źródła sekretów, firewall i produkcyjna polityka originów.
 5. **8.5 — diagnostyka, logi, wersjonowanie i support bundle.** Retencja logów, format diagnostyki oraz pakiet wsparcia bez danych wrażliwych.
@@ -28,6 +33,6 @@ Polityka migracji i kopii zapasowych nie jest zamknięta w 8.1. `PARTYGAME_APPLY
 
 **Etap 8.1 — ukończony.**
 
-**Etap 8.2 — niewykonany.**
+**Etap 8.2 — ukończony.** Jednoprocesowy deployment LAN używa opublikowanego API do serwowania `/display` i `/admin`, ma trwały katalog runtime, lifecycle, checksumy i rollback. Instrukcja: [lan-deployment.md](deployment/lan-deployment.md).
 
 **Etap 8 — nieukończony.**

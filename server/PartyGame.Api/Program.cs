@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.FileProviders;
 using PartyGame.Api.Configuration;
 using PartyGame.Api.Endpoints;
 using PartyGame.Api.Health;
@@ -19,6 +20,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(ReleaseRuntimeConfiguration.EnvironmentOverrides());
 
 var releaseRuntime = builder.Configuration.GetSection(ReleaseRuntimeOptions.SectionName).Get<ReleaseRuntimeOptions>() ?? new ReleaseRuntimeOptions();
+var deployment = builder.Configuration.GetSection(DeploymentOptions.SectionName).Get<DeploymentOptions>() ?? new DeploymentOptions();
 if (builder.Environment.IsProduction())
 {
     var databasePath = ReleaseRuntimeConfiguration.ResolveRuntimePath(
@@ -70,6 +72,11 @@ builder.Services.AddOptions<ReleaseRuntimeOptions>()
     .Validate(options => !builder.Environment.IsProduction() || ReleaseRuntimeConfiguration.IsValidHttpUrl(options.ListeningUrl), "ReleaseRuntime:ListeningUrl (PARTYGAME_URLS) must be an absolute http or https URL in Production.")
     .Validate(options => !builder.Environment.IsProduction() || options.AllowedOrigins.Length > 0, "ReleaseRuntime:AllowedOrigins (PARTYGAME_ALLOWED_ORIGINS) must contain at least one explicit origin in Production.")
     .Validate(options => !builder.Environment.IsProduction() || options.AllowedOrigins.All(ReleaseRuntimeConfiguration.IsValidOrigin), "ReleaseRuntime:AllowedOrigins must contain only explicit http or https origins; wildcard origins are not allowed in Production.")
+    .ValidateOnStart();
+builder.Services.AddOptions<DeploymentOptions>()
+    .Bind(builder.Configuration.GetSection(DeploymentOptions.SectionName))
+    .Validate(options => !options.Enabled || (!string.IsNullOrWhiteSpace(options.DisplayRoot) && !string.IsNullOrWhiteSpace(options.AdminRoot)), "Deployment:DisplayRoot and Deployment:AdminRoot are required when Deployment is enabled.")
+    .Validate(options => !options.Enabled || (DeploymentConfiguration.IsValidPathBase(options.DisplayPathBase) && DeploymentConfiguration.IsValidPathBase(options.AdminPathBase) && !string.Equals(options.DisplayPathBase, options.AdminPathBase, StringComparison.OrdinalIgnoreCase)), "Deployment path bases must be distinct absolute single-root paths without traversal.")
     .ValidateOnStart();
 builder.Services.AddOptions<MediaOptions>()
     .Bind(builder.Configuration.GetSection(MediaOptions.SectionName))
@@ -210,6 +217,20 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 app.UseCors("LocalClients");
 
+if (deployment.Enabled)
+{
+    var displayRoot = DeploymentConfiguration.ResolveStaticRoot(deployment.DisplayRoot, app.Environment.ContentRootPath, "Deployment:DisplayRoot");
+    var adminRoot = DeploymentConfiguration.ResolveStaticRoot(deployment.AdminRoot, app.Environment.ContentRootPath, "Deployment:AdminRoot");
+    if (!Directory.Exists(displayRoot) || !File.Exists(Path.Combine(displayRoot, "index.html")))
+        app.Logger.LogError("Deployment Display root is unavailable or missing index.html: {DisplayRoot}", displayRoot);
+    if (!Directory.Exists(adminRoot) || !File.Exists(Path.Combine(adminRoot, "index.html")))
+        app.Logger.LogError("Deployment Admin root is unavailable or missing index.html: {AdminRoot}", adminRoot);
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(displayRoot), RequestPath = deployment.DisplayPathBase });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(adminRoot), RequestPath = deployment.AdminPathBase });
+    app.MapFallback($"{deployment.DisplayPathBase}/{{**path}}", () => Results.File(Path.Combine(displayRoot, "index.html"), "text/html"));
+    app.MapFallback($"{deployment.AdminPathBase}/{{**path}}", () => Results.File(Path.Combine(adminRoot, "index.html"), "text/html"));
+}
+
 app.MapGet("/health", (IGameClock clock) =>
     Results.Ok(new HealthResponse(
         "ok",
@@ -222,9 +243,10 @@ app.MapGet("/health", (IGameClock clock) =>
 app.MapGet("/health/ready", async (
     IServiceScopeFactory scopeFactory,
     IOptions<MediaOptions> mediaOptions,
+    IOptions<DeploymentOptions> deploymentOptions,
     CancellationToken cancellationToken) =>
 {
-    var readiness = await RuntimeReadiness.CheckAsync(scopeFactory, mediaOptions, cancellationToken);
+    var readiness = await RuntimeReadiness.CheckAsync(scopeFactory, mediaOptions, deploymentOptions, cancellationToken);
     return readiness.Status == "ready"
         ? Results.Ok(readiness)
         : Results.Json(readiness, statusCode: StatusCodes.Status503ServiceUnavailable);

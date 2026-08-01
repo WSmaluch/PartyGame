@@ -1,17 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using PartyGame.Api.Configuration;
 using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 
 namespace PartyGame.Api.Health;
 
-public sealed record RuntimeReadinessResult(string Status, string Database, string MediaStorage);
+public sealed record RuntimeReadinessResult(string Status, string Database, string MediaStorage, string Display, string Admin);
 
 public static class RuntimeReadiness
 {
     public static async Task<RuntimeReadinessResult> CheckAsync(
         IServiceScopeFactory scopeFactory,
         IOptions<MediaOptions> mediaOptions,
+        IOptions<DeploymentOptions> deploymentOptions,
         CancellationToken cancellationToken)
     {
         var databaseReady = false;
@@ -41,9 +43,24 @@ public static class RuntimeReadiness
             mediaReady = false;
         }
 
+        var displayReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.DisplayRoot);
+        var adminReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.AdminRoot);
+
         return new RuntimeReadinessResult(
-            databaseReady && mediaReady ? "ready" : "not-ready",
+            databaseReady && mediaReady && displayReady && adminReady ? "ready" : "not-ready",
             databaseReady ? "ready" : "unavailable",
-            mediaReady ? "ready" : "unavailable");
+            mediaReady ? "ready" : "unavailable",
+            displayReady ? "ready" : "unavailable",
+            adminReady ? "ready" : "unavailable");
+    }
+
+    private static bool IsStaticRootReady(bool deploymentEnabled, string root)
+    {
+        if (!deploymentEnabled) return true;
+        try
+        {
+            return Directory.Exists(root) && File.Exists(Path.Combine(root, "index.html"));
+        }
+        catch { return false; }
     }
 }

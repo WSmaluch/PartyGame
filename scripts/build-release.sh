@@ -36,7 +36,8 @@ for app in display-web admin-web; do
   npm --prefix "apps/$app" ci
   PARTYGAME_BUILD_VERSION="$VERSION" npm --prefix "apps/$app" run lint
   PARTYGAME_BUILD_VERSION="$VERSION" npm --prefix "apps/$app" run test
-  PARTYGAME_BUILD_VERSION="$VERSION" npm --prefix "apps/$app" run build
+  if [[ "$app" == "display-web" ]]; then WEB_BASE_PATH="/display/"; else WEB_BASE_PATH="/admin/"; fi
+  PARTYGAME_BUILD_VERSION="$VERSION" PARTYGAME_WEB_BASE_PATH="$WEB_BASE_PATH" npm --prefix "apps/$app" run build
   cp -R "apps/$app/dist" "$RELEASE_DIR/${app%-web}"
 done
 

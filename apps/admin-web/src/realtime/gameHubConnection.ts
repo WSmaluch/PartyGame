@@ -4,7 +4,7 @@ import {
   HubConnectionState,
   LogLevel,
 } from '@microsoft/signalr';
-import { apiUrl } from '../api/apiConfig';
+import { signalRHubUrl } from '../api/apiConfig';
 import type {
   GameHubStatus,
   GameHubStatusListener,
@@ -20,7 +20,7 @@ class GameHubConnection {
   private ensureConnection(): HubConnection {
     if (this.connection) return this.connection;
     const connection = new HubConnectionBuilder()
-      .withUrl(apiUrl('/hubs/game'))
+      .withUrl(signalRHubUrl())
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();

@@ -34,6 +34,11 @@ public static class ReleaseRuntimeConfiguration
         Add("PARTYGAME_ADMIN_PUBLIC_URL", "ReleaseRuntime:AdminPublicUrl");
         Add("PARTYGAME_LOG_LEVEL", "Serilog:MinimumLevel:Default");
         Add("PARTYGAME_APPLY_MIGRATIONS", "ReleaseRuntime:ApplyMigrations");
+        Add("PARTYGAME_DEPLOYMENT_ENABLED", "Deployment:Enabled");
+        Add("PARTYGAME_DISPLAY_ROOT", "Deployment:DisplayRoot");
+        Add("PARTYGAME_ADMIN_ROOT", "Deployment:AdminRoot");
+        Add("PARTYGAME_DISPLAY_PATH_BASE", "Deployment:DisplayPathBase");
+        Add("PARTYGAME_ADMIN_PATH_BASE", "Deployment:AdminPathBase");
 
         var urls = Environment.GetEnvironmentVariable("PARTYGAME_URLS");
         if (!string.IsNullOrWhiteSpace(urls)) values["urls"] = urls;

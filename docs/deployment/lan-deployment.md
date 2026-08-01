@@ -1,0 +1,75 @@
+# Wdrożenie PartyGame w zaufanej sieci LAN
+
+Etap 8.2 uruchamia PartyGame jako **jeden proces `PartyGame.Api` i jeden port HTTP**. API, SignalR oraz gotowe buildy Display i Admin mają wspólny origin:
+
+```text
+http://<LAN-IP>:5050/display/
+http://<LAN-IP>:5050/admin/
+http://<LAN-IP>:5050/api/
+http://<LAN-IP>:5050/hubs/game
+http://<LAN-IP>:5050/health
+http://<LAN-IP>:5050/health/ready
+```
+
+HTTP jest dopuszczalne wyłącznie w prywatnej, zaufanej sieci LAN. TLS, sekrety, restrykcje CORS i polityka firewallu produkcyjnego należą do etapu 8.4.
+
+## Wymagania hosta
+
+Host potrzebuje `dotnet` zgodnego z artefaktem, `bash`, `curl`, `node` (wyłącznie do odczytu manifestu), `shasum` i wolnego portu TCP 5050. Nie potrzebuje IDE, Node modules ani Vite. Zbuduj artefakt na maszynie budującej przez `scripts/build-release.sh`, a następnie przenieś cały katalog `artifacts/release/<version>` na host.
+
+## Instalacja
+
+Wybierz prywatny IPv4 hosta. Gdy skrypt wykryje dokładnie jeden adres z zakresu `10/8`, `172.16/12` lub `192.168/16`, użyje go automatycznie. Przy kilku interfejsach podaj go jawnie:
+
+```bash
+scripts/deploy-lan.sh \
+  --deploy-root "$HOME/PartyGame" \
+  --release-dir "/path/to/0.8.1-..." \
+  --host 192.168.1.50 --port 5050
+```
+
+`0.0.0.0` jest tylko adresem nasłuchiwania i nigdy nie może być publicznym URL-em. `127.0.0.1` nie jest poprawnym adresem LAN. Deployment sprawdza manifest i wszystkie SHA-256 przed zmianą `current`, tworzy `display/config.json` i `admin/config.json`, a w razie nieudanego smoke testu przywraca poprzednią wersję.
+
+Webowe `config.json` zawierają `apiBaseUrl`, `signalRHubUrl`, `publicBaseUrl` i `applicationVersion`. Przy wspólnym originie używają ścieżek względnych (`/`, `/hubs/game`, `/display/`, `/admin/`); dlatego zmiana IP wymaga ponownego `deploy-lan.sh` z właściwym `--host`, lecz nie wymaga `npm build`.
+
+## Katalogi i trwałość
+
+```text
+<deploy-root>/
+├── releases/<version>/{api,display,admin,manifest.json,checksums.sha256,BUILD_INFO.txt}
+├── current -> releases/<version>
+├── runtime/{database,media,logs,pid,temp}
+└── config/partygame.env
+```
+
+Baza SQLite, media, logi i PID są tylko w `runtime/`; ponowne wdrożenie nie usuwa ich. Katalog release jest po instalacji tylko do odczytu. `current` jest podmieniany atomowo. Konfiguracja webów jest jedynym deploymentowym plikiem podmienianym przed ustawieniem release jako niezmiennego i jest wyłączona z późniejszej kontroli jego checksumów; wszystkie pozostałe pliki są sprawdzane względem manifestu.
+
+## Lifecycle i logi
+
+```bash
+scripts/start-lan.sh   --deploy-root "$HOME/PartyGame"
+scripts/status-lan.sh  --deploy-root "$HOME/PartyGame" # 0 ready, 1 stopped, 2 obcy PID, 3 readiness fail
+scripts/restart-lan.sh --deploy-root "$HOME/PartyGame"
+scripts/stop-lan.sh    --deploy-root "$HOME/PartyGame"
+scripts/smoke-lan.sh   --deploy-root "$HOME/PartyGame"
+```
+
+Dodaj `--host` i `--port`, gdy różnią się od zapisanej konfiguracji. API jest uruchamiane z opublikowanego DLL, a stdout/stderr trafiają do `runtime/logs/`. PID jest zapisywany atomowo i zanim zostanie zatrzymany jest porównywany z pełną ścieżką DLL bieżącego release; skrypty nie używają `pkill`, `killall` ani globalnego wyszukiwania procesu.
+
+## Aktualizacja i rollback
+
+Deploy nowego artefaktu zachowuje runtime. Przed rollbackiem nie zmieniaj ręcznie bazy: etap 8.3 zdefiniuje kompatybilność migracji oraz backup i restore.
+
+```bash
+scripts/deploy-lan.sh --deploy-root "$HOME/PartyGame" --rollback <version> --host 192.168.1.50
+```
+
+Rollback weryfikuje release, zatrzymuje własny proces, atomowo przełącza `current`, uruchamia API i wykonuje readiness/smoke. Jeśli nowa wersja nie startuje, wraca do poprzedniego `current`; baza i media nie są modyfikowane przez sam mechanizm rollbacku.
+
+## iOS i drugi komputer
+
+W PartyGame iOS otwórz ustawienia serwera, wpisz `http://<LAN-IP>:5050` i użyj testu połączenia. Aplikacja zapisuje poprawny adres, usuwa zbędny końcowy `/` i raportuje błąd transportu lub niegotowego backendu. Nie ma automatycznego Bonjour/mDNS w 8.2.
+
+Na drugim komputerze lub telefonie, bez uruchamiania lokalnego Vite, otwórz `/display/` oraz `/admin/`, następnie `health` i utwórz pokój. Sprawdź też, czy Display połączył się z SignalR. Nie twierdź, że test był między fizycznymi urządzeniami, jeśli wykonywano go tylko przez adres LAN z tego samego hosta.
+
+macOS: zezwól `dotnet` na połączenia przychodzące w **Ustawienia systemowe → Sieć → Zapora sieciowa**. Linux: otwórz wybrany port TCP w lokalnym firewallu (np. `ufw allow 5050/tcp`) tylko dla zaufanej podsieci. Przy błędach sprawdź `runtime/logs`, `status-lan.sh`, zajęty port, izolację klientów Wi-Fi i VPN. Aby usunąć instalację bez danych, usuń wyłącznie wskazane katalogi w `releases/` i symlink `current`; zachowaj `runtime/` oraz `config/`.
