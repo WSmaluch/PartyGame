@@ -87,7 +87,8 @@ lan_release_version() {
 }
 
 lan_verify_release() {
-  local release="$1" checks="$release/checksums.sha256"
+  local release="$1"
+  local checks="$release/checksums.sha256"
   lan_assert_release_layout "$release"
   node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!m.version||!m.checksums||!m.artifacts) process.exit(1)' "$release/manifest.json" || lan_die "invalid manifest: $release/manifest.json"
   (cd "$release" && shasum -a 256 -c "$(basename "$checks")") || lan_die "checksum validation failed for $release"
