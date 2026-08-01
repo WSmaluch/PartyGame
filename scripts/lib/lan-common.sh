@@ -101,7 +101,7 @@ lan_verify_installed_release() {
   node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync(process.argv[1])); if(!m.version||!m.checksums||!m.artifacts) process.exit(1)' "$release/manifest.json" || lan_die "invalid manifest: $release/manifest.json"
   # config.json is deliberately substituted at deployment time; every other release file
   # remains byte-for-byte covered by the source manifest.
-  (cd "$release" && grep -v -E '  (display|admin)/config\\.json$' checksums.sha256 | shasum -a 256 -c -) || lan_die "installed release checksum validation failed for $release"
+  (cd "$release" && grep -v -E '  (display|admin)/config\.json$' checksums.sha256 | shasum -a 256 -c -) || lan_die "installed release checksum validation failed for $release"
 }
 
 lan_write_environment() {
