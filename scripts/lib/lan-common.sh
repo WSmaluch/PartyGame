@@ -72,7 +72,8 @@ lan_current_release() {
   local current; current="$(lan_current_link)"
   [[ -L "$current" ]] || lan_die "current release is not configured. Run deploy-lan.sh first."
   local release; release="$(cd "$current" && pwd -P)"
-  [[ "$release" == "$LAN_DEPLOY_ROOT"/releases/* ]] || lan_die "current symlink points outside releases."
+  local normalized_root; normalized_root="$(cd "$LAN_DEPLOY_ROOT" && pwd -P)"
+  [[ "$release" == "$normalized_root"/releases/* ]] || lan_die "current symlink points outside releases."
   printf '%s' "$release"
 }
 

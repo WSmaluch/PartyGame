@@ -26,6 +26,7 @@ test_root="$(mktemp -d "${TMPDIR:-/private/tmp}/partygame-lan-test.XXXXXX")"
 runtime_marker="$test_root/runtime/media/preserved-marker"
 cleanup() {
   "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$test_root" --host "$host" --port "$port" >/dev/null 2>&1 || true
+  chmod -R u+w "$test_root" 2>/dev/null || true
   rm -rf "$test_root"
 }
 trap cleanup EXIT INT TERM
