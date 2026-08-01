@@ -185,7 +185,10 @@ start_vite() {
   local log_path="$1"
   (
     cd "${REPO_DIR}/apps/display-web" || exit 1
-    exec env VITE_API_BASE_URL="$PLAYWRIGHT_API_URL" ./node_modules/.bin/vite --host 127.0.0.1 --port "$VITE_PORT" --strictPort
+    # Vite serves the Display on a separate ephemeral origin during E2E.  REST
+    # already uses the test API base URL; SignalR must use that same origin
+    # rather than the Display-relative /hubs/game route (which is a Vite 404).
+    exec env VITE_API_BASE_URL="$PLAYWRIGHT_API_URL" VITE_SIGNALR_HUB_URL="${PLAYWRIGHT_API_URL}/hubs/game" ./node_modules/.bin/vite --host 127.0.0.1 --port "$VITE_PORT" --strictPort
   ) >"$log_path" 2>&1 &
   register_process vite "$!" "$log_path"
 }

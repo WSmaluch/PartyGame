@@ -53,6 +53,12 @@ Skrypt release ustawia wersję w obu plikach `config.json`; adresy można podać
 
 8.1 sprawdza `Release build-for-testing`. Normalny Release nie korzysta z argumentów UI-testów; konfiguracja adresu serwera pozostaje zwykłym ustawieniem użytkownika. Odkrywanie hosta i scenariusz instalacji LAN nie należą jeszcze do tego etapu.
 
+## Stabilność testów SQLite
+
+Testy z ręcznie sterowanymi zegarami muszą wyłączyć wyłącznie własny, hosted `GameEngineWorker` przez długi interwał testowy. Dzięki temu worker nie zapisuje tej samej fazy co testowy `DbContext`; nie jest to globalne wyłączenie równoległości ani zmiana produkcyjnej konfiguracji. Każdy `WebApplicationFactory` używa unikalnego katalogu runtime i usuwa go dopiero po `DisposeAsync`, wraz z SQLite, WAL i SHM.
+
+W 8.2F potwierdzono pełny Backend Release 285/285 oraz clean release build z manifestem, SHA-256 i smoke testem. Pełny Mixed Client E2E po tej walidacji zakończył się PASS; evidence: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p`. Artefakt release nie zawiera testowej bazy, runtime ani danych evidence.
+
 ## Znane ograniczenia i ostrzeżenia
 
 - Bieżące `npm ci` raportuje trzy podatności o poziomie high. Nie zastosowano automatycznego ani wymuszonego `npm audit fix`; analiza wpływu i bezpieczna aktualizacja zależności należą do etapu 8.4.
@@ -64,7 +70,4 @@ Skrypt release ustawia wersję w obu plikach `config.json`; adresy można podać
 
 Walidacja obejmuje Backend Release (281/281), Display (36/36), Admin (80/80), iOS `Release build-for-testing`, health/readiness, konfigurację runtime, manifest, checksumy i smoke test. `git fsck --connectivity-only --no-dangling` oraz odczyt 865 osiągalnych obiektów przez `git cat-file` przeszły bez `missing`, `corrupt`, `bad` ani `unknown`. Pełny `git fsck --full --no-dangling` napotkał lokalne `mmap failed: Operation timed out`, bez komunikatu o uszkodzonym obiekcie; log diagnostyczny znajduje się w `/private/tmp/partygame-stage8-git-fsck.log`.
 
-**Etap 8.2 — niewykonany. Etap 8 — nieukończony.** Instalacja LAN, produkcyjna polityka migracji/backupów oraz pozostałe punkty roadmapy nie są częścią tego artefaktu.
-# Stabilność testów SQLite
-
-Testy z ręcznie sterowanymi zegarami muszą wyłączyć wyłącznie własny, hosted `GameEngineWorker` przez długi interwał testowy. Dzięki temu worker nie zapisuje tej samej fazy co testowy `DbContext`; nie jest to globalne wyłączenie równoległości ani zmiana produkcyjnej konfiguracji. Każdy `WebApplicationFactory` używa unikalnego katalogu runtime i usuwa go dopiero po `DisposeAsync`, wraz z SQLite, WAL i SHM.
+**Etap 8.2 — ukończony i w pełni zwalidowany. Etap 8 — nieukończony.** Instalacja LAN została zwalidowana automatycznie na nie-loopbackowym adresie hosta; polityka migracji/backupów i pozostałe punkty roadmapy należą do kolejnych etapów. Walidacja na drugim fizycznym urządzeniu pozostaje **manual validation pending**.

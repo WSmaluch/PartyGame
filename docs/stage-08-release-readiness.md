@@ -11,6 +11,7 @@ Etap 8 przygotowuje powtarzalne artefakty i operacyjne zasady uruchomienia Party
    - **8.2C:** statyczny Display i Admin bez Vite;
    - **8.2D:** walidacja z użyciem adresu LAN;
    - **8.2E:** rollback i ponowne wdrożenie bez utraty danych.
+   - **8.2F:** stabilizacja walidacji SQLite i końcowa regresja release/LAN.
 3. **8.3 — trwałość, migracje, backup i recovery.** Polityka wykonywania migracji, kopie zapasowe SQLite/mediów oraz ćwiczenie odtworzenia.
 4. **8.4 — bezpieczeństwo, sekrety, CORS i ograniczenia sieciowe.** Uprawnienia procesu, źródła sekretów, firewall i produkcyjna polityka originów.
 5. **8.5 — diagnostyka, logi, wersjonowanie i support bundle.** Retencja logów, format diagnostyki oraz pakiet wsparcia bez danych wrażliwych.
@@ -33,12 +34,16 @@ Polityka migracji i kopii zapasowych nie jest zamknięta w 8.1. `PARTYGAME_APPLY
 
 **Etap 8.1 — ukończony.**
 
-**Etap 8.2 — ukończony.** Jednoprocesowy deployment LAN używa opublikowanego API do serwowania `/display` i `/admin`, ma trwały katalog runtime, lifecycle, checksumy i rollback. Instrukcja: [lan-deployment.md](deployment/lan-deployment.md).
+**Etap 8.2 — ukończony i w pełni zwalidowany.** Jednoprocesowy deployment LAN używa opublikowanego API do serwowania `/display` i `/admin`, ma trwały katalog runtime, lifecycle, checksumy i rollback. Instrukcja: [lan-deployment.md](deployment/lan-deployment.md).
 
 ## Stabilizacja 8.2F
 
 `PhotoAnswerMixedGameE2ETests` steruje przejściami faz bezpośrednio przez `GameStateMachine`. Wcześniej równolegle działał produkcyjny `GameEngineWorker` z domyślnym interwałem 1 s i mógł zapisać ten sam `GameSession` w SQLite. Powodowało to okazjonalny konflikt zapisu (`database is locked`) podczas pełnego przebiegu. Test ma teraz lokalny interwał workera 60 s oraz po akcjach HTTP/SignalR odświeża swój `DbContext` przed wymuszeniem kolejnego przejścia. Nie zmienia to semantyki produkcyjnego silnika.
 
 `PhotoAnswerTestHarness` od początku nadaje każdemu hostowi własny katalog, plik SQLite i katalog mediów. Dodany test regresyjny potwierdza rozłączność i cleanup po `DisposeAsync`, obejmujący bazę oraz pliki WAL/SHM usuwane razem z katalogiem runtime.
+
+Końcowa walidacja 8.2F: Backend Release 285/285 PASS; clean release build, manifest, SHA-256 i smoke PASS; pełna regresja deploymentu LAN (deploy/start/status/health/readiness/version/Display/Admin/SignalR/restart/redeploy/runtime preservation/rollback/stop) PASS przez rzeczywisty nie-loopbackowy adres hosta. Pełny Mixed Client E2E PASS: cztery różne typy pytań, `Completed`, ranking 3, dokładnie jedno `RoomStarted` i monotoniczny ledger `stateVersion`; evidence: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p`. To nie jest test na drugim fizycznym urządzeniu — ta walidacja pozostaje **manual validation pending**.
+
+**Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — niewykonany; Etap 8 — nieukończony.
 
 **Etap 8 — nieukończony.**

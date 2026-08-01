@@ -178,6 +178,8 @@ Production wymaga jawnych `PARTYGAME_URLS`, `PARTYGAME_DATABASE_PATH`, `PARTYGAM
 
 Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md). Gotowy artefakt można wdrożyć w LAN bez Node, Vite i IDE przez [instrukcję LAN](docs/deployment/lan-deployment.md); status roadmapy jest w [docs/stage-08-release-readiness.md](docs/stage-08-release-readiness.md). Etapy 8.1 i 8.2 są ukończone, ale Etap 8 jako całość pozostaje nieukończony.
 
+Walidacja 8.2F ustabilizowała `PhotoAnswerMixedGameE2ETests`: testowy worker nie ściga się już z ręcznie sterowanym przejściem SQLite, a każda fixture ma własny katalog runtime, bazę, media i cleanup po `DisposeAsync` (w tym WAL/SHM). Pełny backend Release (285/285), clean release build, regresja lifecycle LAN oraz pełny Mixed Client E2E przeszły. Evidence pełnego E2E: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p` (4 typy pytań, `Completed`, ranking 3, jedno `RoomStarted`, monotoniczny ledger wersji). Automatyczna regresja używa nie-loopbackowego adresu hosta, lecz test na drugim fizycznym urządzeniu pozostaje **manual validation pending**.
+
 Walidacja 8.1 obejmuje Mixed Client E2E PASS (evidence: `/private/tmp/partygame-mixed-e2e-pass.hwwjRA`), Backend Release 281/281, Display 36/36, Admin 80/80, iOS `Release build-for-testing`, smoke, manifest i checksumy. Kontrola Git przeszła przez `fsck --connectivity-only` oraz odczyt 865 osiągalnych obiektów; pełny fsck napotkał lokalny timeout `mmap`, bez komunikatu o brakującym lub uszkodzonym obiekcie. Trzy znane podatności npm high są udokumentowane i nie zostały automatycznie naprawione.
 
 ## Kolejność uruchamiania systemu
