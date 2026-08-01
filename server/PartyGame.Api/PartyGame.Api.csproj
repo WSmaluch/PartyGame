@@ -20,6 +20,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.8.1</Version>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
+    <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">unknown</SourceRevisionId>
+    <PartyGameBuildTimestampUtc Condition="'$(PartyGameBuildTimestampUtc)' == ''">unknown</PartyGameBuildTimestampUtc>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="CommitHash" Value="$(SourceRevisionId)" />
+    <AssemblyMetadata Include="BuildTimestampUtc" Value="$(PartyGameBuildTimestampUtc)" />
+  </ItemGroup>
 
 </Project>

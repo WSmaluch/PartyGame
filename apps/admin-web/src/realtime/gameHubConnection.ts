@@ -12,22 +12,25 @@ import type {
 } from './types';
 
 class GameHubConnection {
-  private readonly connection: HubConnection;
+  private connection?: HubConnection;
   private readonly listeners = new Set<GameHubStatusListener>();
   private startPromise?: Promise<void>;
   private status: GameHubStatus = 'disconnected';
 
-  constructor() {
-    this.connection = new HubConnectionBuilder()
+  private ensureConnection(): HubConnection {
+    if (this.connection) return this.connection;
+    const connection = new HubConnectionBuilder()
       .withUrl(apiUrl('/hubs/game'))
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();
-    this.connection.onreconnecting(() => this.setStatus('reconnecting'));
-    this.connection.onreconnected(() => this.setStatus('connected'));
-    this.connection.onclose((error) =>
+    connection.onreconnecting(() => this.setStatus('reconnecting'));
+    connection.onreconnected(() => this.setStatus('connected'));
+    connection.onclose((error) =>
       this.setStatus(error ? 'error' : 'disconnected'),
     );
+    this.connection = connection;
+    return connection;
   }
 
   subscribe(listener: GameHubStatusListener): () => void {
@@ -37,10 +40,11 @@ class GameHubConnection {
   }
 
   async start(): Promise<void> {
-    if (this.connection.state === HubConnectionState.Connected) return;
+    const connection = this.ensureConnection();
+    if (connection.state === HubConnectionState.Connected) return;
     if (this.startPromise) return this.startPromise;
     this.setStatus('connecting');
-    this.startPromise = this.connection
+    this.startPromise = connection
       .start()
       .then(() => this.setStatus('connected'))
       .catch((error: unknown) => {
@@ -55,16 +59,20 @@ class GameHubConnection {
 
   async stop(): Promise<void> {
     await this.startPromise?.catch(() => undefined);
-    if (this.connection.state !== HubConnectionState.Disconnected)
+    if (
+      this.connection &&
+      this.connection.state !== HubConnectionState.Disconnected
+    )
       await this.connection.stop();
     this.setStatus('disconnected');
   }
 
   async ping(): Promise<HubPingResponse> {
-    if (this.connection.state !== HubConnectionState.Connected) {
+    const connection = this.ensureConnection();
+    if (connection.state !== HubConnectionState.Connected) {
       throw new Error('SignalR nie jest połączony.');
     }
-    return this.connection.invoke<HubPingResponse>('Ping');
+    return connection.invoke<HubPingResponse>('Ping');
   }
 
   private setStatus(status: GameHubStatus): void {

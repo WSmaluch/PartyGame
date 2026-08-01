@@ -6,13 +6,17 @@ import {
 } from '@microsoft/signalr';
 import { apiUrl } from '../api/apiConfig';
 import type { RoomSnapshot } from '../api/types';
-import type { GameHubStatus, GameHubStatusListener, HubPingResponse } from './types';
+import type {
+  GameHubStatus,
+  GameHubStatusListener,
+  HubPingResponse,
+} from './types';
 
 type SnapshotListener = (snapshot: RoomSnapshot) => void;
 type VoidListener = () => void;
 
 class GameHubConnection {
-  private readonly connection: HubConnection;
+  private connection?: HubConnection;
   private readonly statusListeners = new Set<GameHubStatusListener>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
   private readonly startedListeners = new Set<SnapshotListener>();
@@ -21,30 +25,37 @@ class GameHubConnection {
   private status: GameHubStatus = 'disconnected';
   private attachedRoomCode?: string;
 
-  constructor() {
-    this.connection = new HubConnectionBuilder()
+  private ensureConnection(): HubConnection {
+    if (this.connection) return this.connection;
+    const connection = new HubConnectionBuilder()
       .withUrl(apiUrl('/hubs/game'))
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000, 20_000])
       .configureLogging(LogLevel.Warning)
       .build();
 
-    this.connection.on('RoomSnapshotUpdated', (snapshot: RoomSnapshot) =>
+    connection.on('RoomSnapshotUpdated', (snapshot: RoomSnapshot) =>
       this.snapshotListeners.forEach((listener) => listener(snapshot)),
     );
-    this.connection.on('RoomStarted', (snapshot: RoomSnapshot) =>
+    connection.on('RoomStarted', (snapshot: RoomSnapshot) =>
       this.startedListeners.forEach((listener) => listener(snapshot)),
     );
-    this.connection.on('DisplayReplaced', () =>
+    connection.on('DisplayReplaced', () =>
       this.replacedListeners.forEach((listener) => listener()),
     );
-    this.connection.onreconnecting(() => this.setStatus('reconnecting'));
-    this.connection.onreconnected(() => {
+    connection.onreconnecting(() => this.setStatus('reconnecting'));
+    connection.onreconnected(() => {
       this.setStatus('connected');
       if (this.attachedRoomCode) {
-        void this.attachDisplay(this.attachedRoomCode).catch(() => this.setStatus('error'));
+        void this.attachDisplay(this.attachedRoomCode).catch(() =>
+          this.setStatus('error'),
+        );
       }
     });
-    this.connection.onclose((error) => this.setStatus(error ? 'error' : 'disconnected'));
+    connection.onclose((error) =>
+      this.setStatus(error ? 'error' : 'disconnected'),
+    );
+    this.connection = connection;
+    return connection;
   }
 
   subscribe(listener: GameHubStatusListener): () => void {
@@ -66,34 +77,54 @@ class GameHubConnection {
   }
 
   async start(): Promise<void> {
-    if (this.connection.state === HubConnectionState.Connected) return;
+    const connection = this.ensureConnection();
+    if (connection.state === HubConnectionState.Connected) return;
     if (this.startPromise) return this.startPromise;
     this.setStatus('connecting');
-    this.startPromise = this.connection.start()
+    this.startPromise = connection
+      .start()
       .then(() => this.setStatus('connected'))
-      .catch((error: unknown) => { this.setStatus('error'); throw error; })
-      .finally(() => { this.startPromise = undefined; });
+      .catch((error: unknown) => {
+        this.setStatus('error');
+        throw error;
+      })
+      .finally(() => {
+        this.startPromise = undefined;
+      });
     return this.startPromise;
   }
 
   async stop(): Promise<void> {
     await this.startPromise?.catch(() => undefined);
-    if (this.connection.state !== HubConnectionState.Disconnected) await this.connection.stop();
+    if (
+      this.connection &&
+      this.connection.state !== HubConnectionState.Disconnected
+    )
+      await this.connection.stop();
     this.setStatus('disconnected');
   }
 
   async attachDisplay(roomCode: string): Promise<RoomSnapshot> {
-    if (this.connection.state !== HubConnectionState.Connected) throw new Error('SignalR nie jest połączony.');
-    const snapshot = await this.connection.invoke<RoomSnapshot>('AttachDisplay', roomCode);
+    const connection = this.ensureConnection();
+    if (connection.state !== HubConnectionState.Connected)
+      throw new Error('SignalR nie jest połączony.');
+    const snapshot = await connection.invoke<RoomSnapshot>(
+      'AttachDisplay',
+      roomCode,
+    );
     this.attachedRoomCode = roomCode;
     return snapshot;
   }
 
-  forgetAttachment(): void { this.attachedRoomCode = undefined; }
+  forgetAttachment(): void {
+    this.attachedRoomCode = undefined;
+  }
 
   async ping(): Promise<HubPingResponse> {
-    if (this.connection.state !== HubConnectionState.Connected) throw new Error('SignalR nie jest połączony.');
-    return this.connection.invoke<HubPingResponse>('Ping');
+    const connection = this.ensureConnection();
+    if (connection.state !== HubConnectionState.Connected)
+      throw new Error('SignalR nie jest połączony.');
+    return connection.invoke<HubPingResponse>('Ping');
   }
 
   private setStatus(status: GameHubStatus): void {

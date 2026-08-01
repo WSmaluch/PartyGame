@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using PartyGame.Api.Configuration;
 using PartyGame.Api.Endpoints;
 using PartyGame.Api.Health;
 using PartyGame.Api.Hubs;
@@ -14,6 +16,24 @@ using PartyGame.Infrastructure.Rooms;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddInMemoryCollection(ReleaseRuntimeConfiguration.EnvironmentOverrides());
+
+var releaseRuntime = builder.Configuration.GetSection(ReleaseRuntimeOptions.SectionName).Get<ReleaseRuntimeOptions>() ?? new ReleaseRuntimeOptions();
+if (builder.Environment.IsProduction())
+{
+    var databasePath = ReleaseRuntimeConfiguration.ResolveRuntimePath(
+        releaseRuntime.DatabasePath,
+        builder.Environment.ContentRootPath,
+        "ReleaseRuntime:DatabasePath",
+        mustBeOutsideContentRoot: true);
+    var mediaRoot = ReleaseRuntimeConfiguration.ResolveRuntimePath(
+        releaseRuntime.MediaRoot,
+        builder.Environment.ContentRootPath,
+        "ReleaseRuntime:MediaRoot",
+        mustBeOutsideContentRoot: true);
+    builder.Configuration["ConnectionStrings:PartyGame"] = $"Data Source={databasePath}";
+    builder.Configuration["MediaStorage:RootPath"] = mediaRoot;
+}
 
 builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
     .ReadFrom.Configuration(context.Configuration)
@@ -42,6 +62,15 @@ builder.Services.AddOptions<PartyGame.Infrastructure.Rooms.GameFlowOptions>()
     .Bind(builder.Configuration.GetSection(PartyGame.Infrastructure.Rooms.GameFlowOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddOptions<ReleaseRuntimeOptions>()
+    .Bind(builder.Configuration.GetSection(ReleaseRuntimeOptions.SectionName))
+    .Validate(options => !builder.Environment.IsProduction() || !string.IsNullOrWhiteSpace(options.DatabasePath), "ReleaseRuntime:DatabasePath is required in Production.")
+    .Validate(options => !builder.Environment.IsProduction() || !string.IsNullOrWhiteSpace(options.MediaRoot), "ReleaseRuntime:MediaRoot is required in Production.")
+    .Validate(options => !builder.Environment.IsProduction() || ReleaseRuntimeConfiguration.IsValidHttpUrl(options.PublicBaseUrl), "ReleaseRuntime:PublicBaseUrl must be an absolute http or https URL in Production.")
+    .Validate(options => !builder.Environment.IsProduction() || ReleaseRuntimeConfiguration.IsValidHttpUrl(options.ListeningUrl), "ReleaseRuntime:ListeningUrl (PARTYGAME_URLS) must be an absolute http or https URL in Production.")
+    .Validate(options => !builder.Environment.IsProduction() || options.AllowedOrigins.Length > 0, "ReleaseRuntime:AllowedOrigins (PARTYGAME_ALLOWED_ORIGINS) must contain at least one explicit origin in Production.")
+    .Validate(options => !builder.Environment.IsProduction() || options.AllowedOrigins.All(ReleaseRuntimeConfiguration.IsValidOrigin), "ReleaseRuntime:AllowedOrigins must contain only explicit http or https origins; wildcard origins are not allowed in Production.")
+    .ValidateOnStart();
 builder.Services.AddOptions<MediaOptions>()
     .Bind(builder.Configuration.GetSection(MediaOptions.SectionName))
     .Validate(options => options.Provider == "LocalFileSystem", "Only the LocalFileSystem media provider is available in this release.")
@@ -66,7 +95,9 @@ builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("PartyGame")));
 
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+var allowedOrigins = builder.Environment.IsProduction()
+    ? releaseRuntime.AllowedOrigins
+    : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("LocalClients", policy =>
@@ -115,7 +146,7 @@ app.UseExceptionHandler(exceptionHandlerApp =>
     });
 });
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || releaseRuntime.ApplyMigrations)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -188,6 +219,37 @@ app.MapGet("/health", (IGameClock clock) =>
     .WithName("GetHealth")
     .Produces<HealthResponse>(StatusCodes.Status200OK);
 
+app.MapGet("/health/ready", async (
+    IServiceScopeFactory scopeFactory,
+    IOptions<MediaOptions> mediaOptions,
+    CancellationToken cancellationToken) =>
+{
+    var readiness = await RuntimeReadiness.CheckAsync(scopeFactory, mediaOptions, cancellationToken);
+    return readiness.Status == "ready"
+        ? Results.Ok(readiness)
+        : Results.Json(readiness, statusCode: StatusCodes.Status503ServiceUnavailable);
+})
+    .WithName("GetRuntimeReadiness")
+    .Produces<RuntimeReadinessResult>(StatusCodes.Status200OK)
+    .Produces<RuntimeReadinessResult>(StatusCodes.Status503ServiceUnavailable);
+
+app.MapGet("/api/system/version", (IHostEnvironment environment) =>
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+    var releaseVersion = informationalVersion.Split('+', 2)[0];
+    var metadata = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .ToDictionary(attribute => attribute.Key, attribute => attribute.Value, StringComparer.OrdinalIgnoreCase);
+    return Results.Ok(new SystemVersionResponse(
+        releaseVersion,
+        informationalVersion,
+        metadata.GetValueOrDefault("CommitHash") ?? "unknown",
+        metadata.GetValueOrDefault("BuildTimestampUtc") ?? "unknown",
+        environment.EnvironmentName));
+})
+    .WithName("GetSystemVersion")
+    .Produces<SystemVersionResponse>(StatusCodes.Status200OK);
+
 app.MapGet("/health/storage", async (
     IMediaStorageDiagnosticsService diagnostics,
     CancellationToken cancellationToken) =>
@@ -230,5 +292,12 @@ public sealed record HealthResponse(
     string Service,
     string Version,
     DateTimeOffset UtcTime);
+
+public sealed record SystemVersionResponse(
+    string Version,
+    string InformationalVersion,
+    string CommitHash,
+    string BuildTimestampUtc,
+    string Environment);
 
 public partial class Program;

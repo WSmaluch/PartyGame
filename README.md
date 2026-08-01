@@ -155,9 +155,30 @@ npm run dev
 
 Otwórz `http://localhost:5174/admin`.
 
-Obie aplikacje odczytują adres serwera z `VITE_API_BASE_URL`. Skopiuj `.env.example` lub edytuj `.env.development`. Zmienna domyślnie wskazuje `http://localhost:5050`.
+W trybie deweloperskim obie aplikacje odczytują jawnie podane `VITE_API_BASE_URL` (np. z `.env.development`). Artefakty release pobierają konfigurację runtime z `/config.json`; brak konfiguracji nie powoduje fallbacku do `localhost`.
 
 Aplikację iOS uruchom z [projektu Xcode](apps/ios/PartyGame.xcodeproj). W symulatorze `localhost` oznacza Maca i działa z lokalnym backendem. Na fizycznym iPhonie `localhost` oznacza telefon, dlatego w ekranie ustawień trzeba wpisać `http://ADRES_IP_MACA:5050`.
+
+## Release build (Etap 8.1)
+
+Powtarzalny lokalny artefakt Release utworzysz na czystym drzewie Git:
+
+```bash
+IOS_DESTINATION_ID="<simulator-uuid>" scripts/build-release.sh
+```
+
+Skrypt publikuje API, buduje Display, Admin i iOS (`Release build-for-testing`), wykonuje testy oraz izolowany smoke test. Wynik trafia do `artifacts/release/<version>/` wraz z `manifest.json`, `checksums.sha256` i `BUILD_INFO.txt`; artefakt nie zawiera danych runtime ani sekretów. Sprawdzenie integralności:
+
+```bash
+cd artifacts/release/<version>
+shasum -a 256 -c checksums.sha256
+```
+
+Production wymaga jawnych `PARTYGAME_URLS`, `PARTYGAME_DATABASE_PATH`, `PARTYGAME_MEDIA_ROOT`, `PARTYGAME_PUBLIC_BASE_URL` i `PARTYGAME_ALLOWED_ORIGINS`; DB oraz media muszą znajdować się poza katalogiem publish. Display i Admin wymagają poprawnego `config.json`, a iOS nadal otrzymuje adres backendu z normalnych ustawień aplikacji. Endpointy operacyjne to `/health`, `/health/ready` i `/api/system/version`.
+
+Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md), a status roadmapy w [docs/stage-08-release-readiness.md](docs/stage-08-release-readiness.md). Etap 8.1 jest ukończony; Etap 8.2 jest niewykonany, więc Etap 8 jako całość pozostaje nieukończony.
+
+Walidacja 8.1 obejmuje Mixed Client E2E PASS (evidence: `/private/tmp/partygame-mixed-e2e-pass.hwwjRA`), Backend Release 281/281, Display 36/36, Admin 80/80, iOS `Release build-for-testing`, smoke, manifest i checksumy. Kontrola Git przeszła przez `fsck --connectivity-only` oraz odczyt 865 osiągalnych obiektów; pełny fsck napotkał lokalny timeout `mmap`, bez komunikatu o brakującym lub uszkodzonym obiekcie. Trzy znane podatności npm high są udokumentowane i nie zostały automatycznie naprawione.
 
 ## Kolejność uruchamiania systemu
 

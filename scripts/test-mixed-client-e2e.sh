@@ -130,7 +130,10 @@ wait_for_marker() {
 
 wait_for_http() {
   local url="$1" description="$2" process="$3" attempt
-  for ((attempt = 0; attempt < 100; attempt++)); do
+  # Cold .NET and Vite starts can exceed 20 seconds on a busy local host.
+  # Keep the process liveness check on every retry while allowing 60 seconds
+  # for the service to become reachable.
+  for ((attempt = 0; attempt < 300; attempt++)); do
     if curl --silent --fail "$url" >/dev/null; then LAST_KNOWN_MARKER="$description"; return 0; fi
     require_running "$process" || return 1
     sleep 0.2
