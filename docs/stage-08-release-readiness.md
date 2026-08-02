@@ -44,6 +44,6 @@ Produkcja startuje w trybie kontroli zgodności schematu. `PARTYGAME_APPLY_MIGRA
 
 Końcowa walidacja 8.2F: Backend Release 285/285 PASS; clean release build, manifest, SHA-256 i smoke PASS; pełna regresja deploymentu LAN (deploy/start/status/health/readiness/version/Display/Admin/SignalR/restart/redeploy/runtime preservation/rollback/stop) PASS przez rzeczywisty nie-loopbackowy adres hosta. Pełny Mixed Client E2E PASS: cztery różne typy pytań, `Completed`, ranking 3, dokładnie jedno `RoomStarted` i monotoniczny ledger `stateVersion`; evidence: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p`. To nie jest test na drugim fizycznym urządzeniu — ta walidacja pozostaje **manual validation pending**.
 
-**Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — ukończony; 8.4 — niewykonany; Etap 8 — nieukończony. Instrukcja: [data-backup-and-restore.md](deployment/data-backup-and-restore.md).
+**Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — ukończony; 8.4A–8.4E — ukończone; 8.4 — ukończony; 8.5 — niewykonany; Etap 8 — nieukończony. Instrukcja: [data-backup-and-restore.md](deployment/data-backup-and-restore.md), [security hardening](security/security-hardening.md).
 
 **Etap 8 — nieukończony.**

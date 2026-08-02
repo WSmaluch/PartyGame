@@ -1,4 +1,5 @@
 import { apiUrl } from './apiConfig';
+import { clearOperatorToken, getOperatorToken } from './operatorSession';
 
 export type PackageStatus = 'Draft' | 'Published' | 'Archived';
 export type QuestionType = 'PlayerSelection' | 'TextAnswer' | 'PhotoAnswer' | 'DrawingAnswer';
@@ -22,9 +23,19 @@ export class AdminContentApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers } });
+  const token = getOperatorToken();
+  const response = await fetch(apiUrl(path), {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
+  });
   const body: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
+    if (response.status === 401) clearOperatorToken();
     const message = typeof body === 'object' && body && 'message' in body && typeof body.message === 'string' ? body.message : `Backend zwrócił HTTP ${response.status}.`;
     throw new AdminContentApiError(response.status, message, body);
   }

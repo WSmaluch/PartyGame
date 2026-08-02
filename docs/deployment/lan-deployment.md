@@ -11,7 +11,7 @@ http://<LAN-IP>:5050/health
 http://<LAN-IP>:5050/health/ready
 ```
 
-HTTP jest dopuszczalne wyłącznie w prywatnej, zaufanej sieci LAN. TLS, sekrety, restrykcje CORS i polityka firewallu produkcyjnego należą do etapu 8.4.
+HTTP jest dopuszczalne wyłącznie w prywatnej, zaufanej sieci LAN i wymaga `PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true`. Poza nią skonfiguruj standardowy HTTPS Kestrel oraz publiczny URL HTTPS. Panel `/admin/` wymaga tokenu operatora ustawionego wyłącznie po stronie procesu; token nie jest przekazywany do `config.json`. Szczegóły: [TLS i sieć](../security/tls-and-networking.md).
 
 ## Wymagania hosta
 

@@ -38,8 +38,10 @@ public sealed class GameHub : Hub
     {
         try
         {
-            await roomService.ResumeAsync(roomCode, playerId, reconnectToken, Context.ConnectionAborted);
             var code = roomCode.Trim().ToUpperInvariant();
+            if (!connectionRegistry.CanAttachPlayer(Context.ConnectionId, code, playerId))
+                throw new RoomConflictException("A SignalR connection cannot change its player identity after attach.");
+            await roomService.ResumeAsync(code, playerId, reconnectToken, Context.ConnectionAborted);
             var previousConnection = connectionRegistry.AttachPlayer(Context.ConnectionId, code, playerId);
             await Groups.AddToGroupAsync(Context.ConnectionId, RoomNotifier.GroupName(code), Context.ConnectionAborted);
             if (previousConnection is not null)
@@ -64,6 +66,8 @@ public sealed class GameHub : Hub
         {
             var room = await roomService.GetAsync(roomCode, Context.ConnectionAborted);
             var code = room.Code;
+            if (!connectionRegistry.CanAttachDisplay(Context.ConnectionId, code))
+                throw new RoomConflictException("A SignalR connection cannot change its display room after attach.");
             var previousConnection = connectionRegistry.AttachDisplay(Context.ConnectionId, code);
             await Groups.AddToGroupAsync(Context.ConnectionId, RoomNotifier.GroupName(code), Context.ConnectionAborted);
             if (previousConnection is not null)
@@ -105,7 +109,10 @@ public sealed class GameHub : Hub
     {
         try
         {
-            return (await roomService.GetAsync(roomCode, Context.ConnectionAborted)).ToSnapshot();
+            var code = roomCode.Trim().ToUpperInvariant();
+            if (!connectionRegistry.HasRoomAccess(Context.ConnectionId, code))
+                throw new RoomConflictException("AttachPlayer or AttachDisplay must establish room access before requesting a snapshot.");
+            return (await roomService.GetAsync(code, Context.ConnectionAborted)).ToSnapshot();
         }
         catch (RoomException exception)
         {

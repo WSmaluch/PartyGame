@@ -176,6 +176,10 @@ shasum -a 256 -c checksums.sha256
 
 Production wymaga jawnych `PARTYGAME_URLS`, `PARTYGAME_DATABASE_PATH`, `PARTYGAME_MEDIA_ROOT`, `PARTYGAME_PUBLIC_BASE_URL` i `PARTYGAME_ALLOWED_ORIGINS`; DB oraz media muszą znajdować się poza katalogiem publish. Display i Admin wymagają poprawnego `config.json`, a iOS nadal otrzymuje adres backendu z normalnych ustawień aplikacji. Endpointy operacyjne to `/health`, `/health/ready` i `/api/system/version`.
 
+## Bezpieczeństwo wdrożenia (Etap 8.4)
+
+W Production panel Admin wymaga `PARTYGAME_OPERATOR_TOKEN` (minimum 32 znaki, bez placeholdera) przesyłanego wyłącznie jako Bearer token. Admin pyta o niego po otwarciu strony i zachowuje go tylko w pamięci. Produkcyjny HTTP wymaga jawnego `PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true`; poza zaufaną LAN używaj HTTPS. Pełna polityka: [security hardening](docs/security/security-hardening.md), [TLS i sieć](docs/security/tls-and-networking.md), [audit zależności](docs/security/dependency-audit.md). Przed wydaniem uruchom `scripts/scan-secrets.sh --tracked` oraz `scripts/security-smoke.sh`.
+
 Trwałe dane produkcyjne obsługują jawny check/migrate schematu EF Core oraz zweryfikowany backup/restore SQLite i mediów. Instrukcja operatora, kody wyjścia, dry-run, pre-restore backup i retencja: [backup i restore danych](docs/deployment/data-backup-and-restore.md).
 
 Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md). Gotowy artefakt można wdrożyć w LAN bez Node, Vite i IDE przez [instrukcję LAN](docs/deployment/lan-deployment.md), a backup, restore i retencję opisuje [instrukcja danych](docs/deployment/data-backup-and-restore.md). Etapy 8.1, 8.2 i 8.3 są ukończone; Etap 8 jako całość pozostaje nieukończony do wykonania 8.4.

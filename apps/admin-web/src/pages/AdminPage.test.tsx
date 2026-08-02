@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { getHealth } from '../api/healthApi';
 import { gameHubConnection } from '../realtime/gameHubConnection';
+import { setOperatorToken } from '../api/operatorSession';
 
 vi.mock('../api/healthApi', async (importOriginal) => {
   const original = await importOriginal<typeof import('../api/healthApi')>();
@@ -42,6 +43,7 @@ function renderApp() {
 
 describe('AdminPage', () => {
   beforeEach(() => {
+    setOperatorToken('test-operator-token');
     vi.mocked(getHealth).mockReset();
     vi.mocked(gameHubConnection.start).mockClear();
     vi.mocked(gameHubConnection.ping).mockClear();

@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.FileProviders;
@@ -10,6 +12,7 @@ using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Endpoints;
 using PartyGame.Api.Health;
 using PartyGame.Api.Hubs;
+using PartyGame.Api.Security;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Rooms;
 using PartyGame.GameEngine;
@@ -23,6 +26,13 @@ builder.Configuration.AddInMemoryCollection(ReleaseRuntimeConfiguration.Environm
 
 var releaseRuntime = builder.Configuration.GetSection(ReleaseRuntimeOptions.SectionName).Get<ReleaseRuntimeOptions>() ?? new ReleaseRuntimeOptions();
 var deployment = builder.Configuration.GetSection(DeploymentOptions.SectionName).Get<DeploymentOptions>() ?? new DeploymentOptions();
+var configuredTransportSecurity = builder.Configuration.GetSection(TransportSecurityOptions.SectionName).Get<TransportSecurityOptions>() ?? new TransportSecurityOptions();
+if (builder.Environment.IsProduction() && !configuredTransportSecurity.AllowInsecureLanHttp &&
+    (releaseRuntime.PublicBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+     releaseRuntime.ListeningUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
+{
+    throw new InvalidOperationException("Production HTTP requires PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true; use HTTPS otherwise.");
+}
 if (builder.Environment.IsProduction())
 {
     var databasePath = ReleaseRuntimeConfiguration.ResolveRuntimePath(
@@ -45,6 +55,12 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfig
     .Enrich.FromLogContext());
 
 builder.Services.AddProblemDetails();
+builder.Services.Configure<FormOptions>(options =>
+{
+    // The largest accepted media payload is 10 MiB. Keep multipart framing bounded
+    // so oversized files are rejected before model binding reaches storage.
+    options.MultipartBodyLengthLimit = 11 * 1024 * 1024;
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -104,6 +120,13 @@ builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("PartyGame")));
 builder.Services.AddScoped<DatabaseSchemaService>();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<OperatorTokenOptions>>().Value);
+builder.Services.AddOptions<OperatorTokenOptions>().Bind(builder.Configuration.GetSection(OperatorTokenOptions.SectionName))
+    .Validate(options => !builder.Environment.IsProduction() || options.IsConfigured, "PARTYGAME_OPERATOR_TOKEN must be a non-placeholder value of at least 32 characters in Production.")
+    .ValidateOnStart();
+builder.Services.AddOptions<TransportSecurityOptions>()
+    .Bind(builder.Configuration.GetSection(TransportSecurityOptions.SectionName))
+    .ValidateOnStart();
 
 var allowedOrigins = builder.Environment.IsProduction()
     ? releaseRuntime.AllowedOrigins
@@ -125,6 +148,33 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowCredentials();
     });
+});
+builder.Services.AddRateLimiter(options =>
+{
+    // Development/test hosts retain active limiters but use a clearly documented
+    // high ceiling so parallel integration and Mixed Client scenarios are not
+    // accidentally serialized by a shared loopback address.
+    var roomPermitLimit = builder.Environment.IsDevelopment() ? 10_000 : 120;
+    var uploadPermitLimit = builder.Environment.IsDevelopment() ? 1_000 : 12;
+    var operatorPermitLimit = builder.Environment.IsDevelopment() ? 10_000 : 20;
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, _) =>
+    {
+        context.HttpContext.Response.Headers.RetryAfter = "60";
+        return ValueTask.CompletedTask;
+    };
+    options.AddPolicy("room-operations", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"{context.Connection.RemoteIpAddress}|{RoomRatePartition(context.Request.Path)}",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = roomPermitLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("uploads", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"{context.Connection.RemoteIpAddress}|{RoomRatePartition(context.Request.Path)}",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("operator", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = operatorPermitLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
 });
 
 var app = builder.Build();
@@ -168,6 +218,21 @@ app.UseExceptionHandler(exceptionHandlerApp =>
         }
         await result.ExecuteAsync(context);
     });
+});
+
+app.Use(async (context, next) =>
+{
+    context.Response.OnStarting(() =>
+    {
+        var headers = context.Response.Headers;
+        headers.TryAdd("X-Content-Type-Options", "nosniff");
+        headers.TryAdd("Referrer-Policy", "no-referrer");
+        headers.TryAdd("X-Frame-Options", "DENY");
+        headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+        headers.TryAdd("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; object-src 'none'");
+        return Task.CompletedTask;
+    });
+    await next();
 });
 
 if (app.Environment.IsDevelopment() || releaseRuntime.ApplyMigrations)
@@ -241,6 +306,16 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.UseCors("LocalClients");
+app.UseRateLimiter();
+
+var transportSecurity = app.Services.GetRequiredService<IOptions<TransportSecurityOptions>>().Value;
+if (transportSecurity.EnableHsts)
+    app.UseHsts();
+if (app.Environment.IsProduction() && transportSecurity.AllowInsecureLanHttp &&
+    (releaseRuntime.PublicBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || releaseRuntime.ListeningUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
+{
+    app.Logger.LogWarning("Trusted LAN HTTP is enabled. HTTP is intended only for a trusted private LAN.");
+}
 
 if (deployment.Enabled)
 {
@@ -316,7 +391,7 @@ app.MapGet("/health/storage", async (
     .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status200OK)
     .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status503ServiceUnavailable);
 
-app.MapHub<GameHub>("/hubs/game");
+app.MapHub<GameHub>("/hubs/game").RequireRateLimiting("room-operations");
 app.MapRoomEndpoints();
 app.MapContentEndpoints();
 app.MapAdminContentEndpoints();
@@ -338,6 +413,15 @@ static int DrawingStatus(string code) => code is "drawing_answer_file_missing" o
     : code is "drawing_answer_not_found" ? StatusCodes.Status404NotFound
     : code is "drawing_answer_storage_failed" ? StatusCodes.Status503ServiceUnavailable
     : StatusCodes.Status409Conflict;
+
+static string RoomRatePartition(PathString path)
+{
+    var segments = path.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries) ?? [];
+    return segments.Length >= 3 && string.Equals(segments[0], "api", StringComparison.OrdinalIgnoreCase) &&
+           string.Equals(segments[1], "rooms", StringComparison.OrdinalIgnoreCase)
+        ? segments[2].ToUpperInvariant()
+        : path.Value ?? "unknown";
+}
 
 public sealed record HealthResponse(
     string Status,

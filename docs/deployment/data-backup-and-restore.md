@@ -2,7 +2,7 @@
 
 ## Audyt początkowy 8.3
 
-PartyGame ma prawdziwą historię migracji EF Core w `PartyGame.Infrastructure/Persistence/Migrations`; bieżąca migracja jest zapisywana standardowo w `__EFMigrationsHistory`. Produkcyjny host nie używa `EnsureCreated`: w Development migracje są stosowane przy starcie, a w Production tylko po jawnym `ReleaseRuntime:ApplyMigrations=true`. Przed 8.3 nie istniał jawny check wersji, komenda migracyjna ani procedura backupu/restore.
+PartyGame ma prawdziwą historię migracji EF Core w `PartyGame.Infrastructure/Persistence/Migrations`; bieżąca migracja jest zapisywana standardowo w `__EFMigrationsHistory`. Produkcyjny host nie używa `EnsureCreated`: w Development migracje są stosowane przy starcie, a w Production tylko po jawnym `ReleaseRuntime:ApplyMigrations=true`. Przed 8.3 nie istniał jawny check wersji, komenda migracyjna ani procedura backupu/restore. Od 8.4 lokalny deployment LAN zapisuje operator token w prywatnym pliku environment (tryb `0600`); backupy nie kopiują tego pliku ani sekretów.
 
 SQLite jest wybierane przez `ConnectionStrings:PartyGame`; w deployment LAN plik znajduje się poza release w `runtime/database/partygame.db`. SQLite może używać WAL, dlatego zwykłe kopiowanie samego pliku `.db` nie jest bezpiecznym backupem. Media są poza release w `runtime/media`; rekordy `MediaAsset` zawierają stabilne GUID-y, względne opaque storage keys, MIME, hash i wymiary — nie ma w nich ścieżek absolutnych. Rekord może przeżyć utratę pliku, a plik może przeżyć rekord; istniejące reconcileery to raportują/naprawiają ograniczonym zakresem, lecz nie tworzą backupu.
 

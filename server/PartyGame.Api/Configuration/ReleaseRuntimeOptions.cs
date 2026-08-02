@@ -34,6 +34,9 @@ public static class ReleaseRuntimeConfiguration
         Add("PARTYGAME_ADMIN_PUBLIC_URL", "ReleaseRuntime:AdminPublicUrl");
         Add("PARTYGAME_LOG_LEVEL", "Serilog:MinimumLevel:Default");
         Add("PARTYGAME_APPLY_MIGRATIONS", "ReleaseRuntime:ApplyMigrations");
+        Add("PARTYGAME_OPERATOR_TOKEN", "Security:Operator:Token");
+        Add("PARTYGAME_ALLOW_INSECURE_LAN_HTTP", "Security:Transport:AllowInsecureLanHttp");
+        Add("PARTYGAME_ENABLE_HSTS", "Security:Transport:EnableHsts");
         Add("PARTYGAME_DEPLOYMENT_ENABLED", "Deployment:Enabled");
         Add("PARTYGAME_DISPLAY_ROOT", "Deployment:DisplayRoot");
         Add("PARTYGAME_ADMIN_ROOT", "Deployment:AdminRoot");

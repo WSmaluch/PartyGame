@@ -34,6 +34,8 @@ Skopiuj wartości z rootowego `.env.example` do procesu uruchamiającego (plik n
 | `PARTYGAME_MEDIA_ROOT` | Katalog mediów poza katalogiem publish. |
 | `PARTYGAME_PUBLIC_BASE_URL` | Publiczny adres API HTTP(S). |
 | `PARTYGAME_ALLOWED_ORIGINS` | Lista dozwolonych originów rozdzielona przecinkami; bez `*`. |
+| `PARTYGAME_OPERATOR_TOKEN` | Sekret operatora, minimum 32 znaki; wymagany do API Admina. |
+| `PARTYGAME_ALLOW_INSECURE_LAN_HTTP` | Ustaw wyłącznie `true` dla świadomie zaufanej LAN z HTTP. |
 
 Opcjonalne są `PARTYGAME_LOG_LEVEL`, `PARTYGAME_DISPLAY_PUBLIC_URL` i `PARTYGAME_ADMIN_PUBLIC_URL`. Nieprawidłowe, puste lub wildcardowe originy oraz dane runtime wewnątrz katalogu publish zatrzymują start czytelnym błędem. `appsettings.Production.json` jest wyłącznie szablonem bez sekretów; wartości mogą pochodzić także z konfiguracji ASP.NET.
 
@@ -49,7 +51,7 @@ Skrypt release ustawia wersję w obu plikach `config.json`; adresy można podać
 - `GET /health/ready` odróżnia gotowość bazy i katalogu mediów, bez zapisu testowych plików.
 - `GET /api/system/version` zwraca bezpiecznie wersję, informational version, commit, timestamp i environment.
 
-`scripts/smoke-release.sh artifacts/release/<version>` uruchamia opublikowany API w `Production`, z losowym lokalnym portem oraz zewnętrznym, tymczasowym DB/media. Sprawdza liveness, readiness, prosty endpoint API i zgodność wersji z manifestem. Proces jest śledzony przez PID; runtime jest kasowany przy sukcesie, a log zostaje tylko przy błędzie.
+`scripts/smoke-release.sh artifacts/release/<version>` uruchamia opublikowany API w `Production`, z losowym lokalnym portem oraz zewnętrznym, tymczasowym DB/media. Sprawdza liveness, readiness, prosty endpoint API i zgodność wersji z manifestem. `scripts/security-smoke.sh <ścieżka-do-dll>` dodatkowo sprawdza granicę Admina, nagłówki, CORS oraz obowiązkowy opt-in TrustedLanHttp. Proces jest śledzony przez PID; runtime jest kasowany przy sukcesie, a log zostaje tylko przy błędzie.
 
 ## iOS
 

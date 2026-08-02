@@ -41,6 +41,8 @@ PARTYGAME_ALLOWED_ORIGINS="http://127.0.0.1:5173,http://127.0.0.1:5174" \
 PARTYGAME_DISPLAY_PUBLIC_URL="http://127.0.0.1:5173/display" \
 PARTYGAME_ADMIN_PUBLIC_URL="http://127.0.0.1:5174/admin" \
 PARTYGAME_APPLY_MIGRATIONS=true \
+PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true \
+PARTYGAME_OPERATOR_TOKEN="release-smoke-operator-token-that-is-not-a-secret" \
 dotnet "$API_DLL" >"$LOG_FILE" 2>&1 &
 PID=$!
 

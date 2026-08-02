@@ -5,6 +5,7 @@ import type { HealthResponse } from '../api/types';
 import { StatusPill } from '../components/StatusPill';
 import { ContentPackages } from '../components/ContentPackages';
 import { gameHubConnection } from '../realtime/gameHubConnection';
+import { clearOperatorToken } from '../api/operatorSession';
 import type { GameHubStatus, HubPingResponse } from '../realtime/types';
 
 const modules = [
@@ -101,6 +102,7 @@ export function AdminPage() {
           >
             {isLoading ? 'Sprawdzanie…' : 'Ponów połączenie'}
           </button>
+          <button type="button" onClick={clearOperatorToken}>Wyloguj operatora</button>
         </header>
 
         {error && (

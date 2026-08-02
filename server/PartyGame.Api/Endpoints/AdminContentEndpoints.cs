@@ -5,6 +5,7 @@ using PartyGame.Domain.Rooms;
 using PartyGame.GameEngine;
 using PartyGame.Infrastructure.Content;
 using PartyGame.Infrastructure.Persistence;
+using PartyGame.Api.Security;
 
 namespace PartyGame.Api.Endpoints;
 
@@ -12,7 +13,9 @@ public static class AdminContentEndpoints
 {
     public static IEndpointRouteBuilder MapAdminContentEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var admin = endpoints.MapGroup("/api/admin/content-packages").WithTags("Admin Content");
+        var admin = endpoints.MapGroup("/api/admin/content-packages").WithTags("Admin Content")
+            .AddEndpointFilter<OperatorTokenEndpointFilter>()
+            .RequireRateLimiting("operator");
 
         // --- Packages ---
         admin.MapGet("", async (PartyGameDbContext dbContext, CancellationToken cancellationToken) =>

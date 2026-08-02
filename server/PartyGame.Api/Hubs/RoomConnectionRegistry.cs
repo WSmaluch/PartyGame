@@ -6,6 +6,9 @@ public interface IRoomConnectionRegistry
 {
     string? AttachPlayer(string connectionId, string roomCode, Guid playerId);
     string? AttachDisplay(string connectionId, string roomCode);
+    bool CanAttachPlayer(string connectionId, string roomCode, Guid playerId);
+    bool CanAttachDisplay(string connectionId, string roomCode);
+    bool HasRoomAccess(string connectionId, string roomCode);
     bool IsActivePlayer(string connectionId, string roomCode, Guid playerId);
     string? GetActivePlayerConnection(Guid playerId);
     ConnectionAssignment? RemoveIfActive(string connectionId);
@@ -50,6 +53,35 @@ public sealed class RoomConnectionRegistry : IRoomConnectionRegistry
             _displayConnections[roomCode] = connectionId;
             _byConnection[connectionId] = new(connectionId, roomCode, ConnectionRole.Display, null);
             return previous == connectionId ? null : previous;
+        }
+    }
+
+    public bool CanAttachPlayer(string connectionId, string roomCode, Guid playerId)
+    {
+        lock (_sync)
+        {
+            return !_byConnection.TryGetValue(connectionId, out var assignment) ||
+                   assignment.Role == ConnectionRole.Player && assignment.PlayerId == playerId &&
+                   assignment.RoomCode.Equals(roomCode, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public bool CanAttachDisplay(string connectionId, string roomCode)
+    {
+        lock (_sync)
+        {
+            return !_byConnection.TryGetValue(connectionId, out var assignment) ||
+                   assignment.Role == ConnectionRole.Display &&
+                   assignment.RoomCode.Equals(roomCode, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public bool HasRoomAccess(string connectionId, string roomCode)
+    {
+        lock (_sync)
+        {
+            return _byConnection.TryGetValue(connectionId, out var assignment) &&
+                   assignment.RoomCode.Equals(roomCode, StringComparison.OrdinalIgnoreCase);
         }
     }
 

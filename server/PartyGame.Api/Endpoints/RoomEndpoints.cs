@@ -15,7 +15,7 @@ public static class RoomEndpoints
 
     public static IEndpointRouteBuilder MapRoomEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var rooms = endpoints.MapGroup("/api/rooms").WithTags("Rooms");
+        var rooms = endpoints.MapGroup("/api/rooms").WithTags("Rooms").RequireRateLimiting("room-operations");
 
         rooms.MapPost("/", async (CreateRoomRequest request, IRoomService roomService, CancellationToken cancellationToken) =>
         {
@@ -113,7 +113,8 @@ public static class RoomEndpoints
             await notifier.NotifyAsync(result, cancellationToken);
             return Results.Ok(result.Room.ToSnapshot());
         })
-        .DisableAntiforgery();
+        .DisableAntiforgery()
+        .RequireRateLimiting("uploads");
 
         rooms.MapGet("/{roomCode}/players/{playerId:guid}/profile-photo", async (
             string roomCode,
@@ -170,7 +171,7 @@ public static class RoomEndpoints
             if (connectionId != null)
                 await hubContext.Clients.Client(connectionId).SendAsync("PlayerPrivateGameStateUpdated", privateState, cancellationToken);
             return Results.Ok(new PhotoAnswerUploadResponse(result.PhotoAnswerId, privateState, result.Room.ToSnapshot()));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().RequireRateLimiting("uploads");
 
         rooms.MapPost("/{roomCode}/questions/{questionInstanceId:guid}/drawing-answers", async (string roomCode, Guid questionInstanceId, [FromForm] Guid playerId, [FromForm] string reconnectToken, [FromForm] Guid clientSubmissionId, IFormFile? drawing, IRoomService roomService, RoomNotifier notifier, IRoomConnectionRegistry connections, IHubContext<GameHub> hubContext, CancellationToken cancellationToken) =>
         {
@@ -181,7 +182,7 @@ public static class RoomEndpoints
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken); var connectionId = connections.GetActivePlayerConnection(playerId);
             if (connectionId != null) await hubContext.Clients.Client(connectionId).SendAsync("PlayerPrivateGameStateUpdated", privateState, cancellationToken);
             return Results.Ok(new DrawingAnswerUploadResponse(result.DrawingAnswerId, privateState, result.Room.ToSnapshot()));
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().RequireRateLimiting("uploads");
 
         return endpoints;
     }
