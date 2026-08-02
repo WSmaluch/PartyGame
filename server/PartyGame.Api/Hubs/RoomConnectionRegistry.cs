@@ -8,6 +8,7 @@ public interface IRoomConnectionRegistry
     string? AttachDisplay(string connectionId, string roomCode);
     bool CanAttachPlayer(string connectionId, string roomCode, Guid playerId);
     bool CanAttachDisplay(string connectionId, string roomCode);
+    bool IsActiveDisplay(string connectionId, string roomCode);
     bool HasRoomAccess(string connectionId, string roomCode);
     bool IsActivePlayer(string connectionId, string roomCode, Guid playerId);
     string? GetActivePlayerConnection(Guid playerId);
@@ -81,6 +82,18 @@ public sealed class RoomConnectionRegistry : IRoomConnectionRegistry
         lock (_sync)
         {
             return _byConnection.TryGetValue(connectionId, out var assignment) &&
+                   assignment.RoomCode.Equals(roomCode, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public bool IsActiveDisplay(string connectionId, string roomCode)
+    {
+        lock (_sync)
+        {
+            return _displayConnections.TryGetValue(roomCode, out var activeConnection) &&
+                   activeConnection == connectionId &&
+                   _byConnection.TryGetValue(connectionId, out var assignment) &&
+                   assignment.Role == ConnectionRole.Display &&
                    assignment.RoomCode.Equals(roomCode, StringComparison.OrdinalIgnoreCase);
         }
     }

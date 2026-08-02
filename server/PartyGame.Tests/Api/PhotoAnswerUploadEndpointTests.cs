@@ -133,10 +133,14 @@ public sealed class PhotoAnswerUploadEndpointTests
     {
         await using var harness = new PhotoAnswerTestHarness();
         var room = await harness.CreateRoomAsync(stageEndsAtUtc: DateTimeOffset.UtcNow.AddMinutes(-1));
+        var before = await harness.CountsAsync(room.RoomCode);
         await AssertProblemAsync(
             await harness.UploadAsync(room, room.Players[0], await PhotoAnswerTestHarness.ImageAsync()),
             HttpStatusCode.Conflict,
             "photo_answer_time_expired");
+        var after = await harness.CountsAsync(room.RoomCode);
+        Assert.Equal((before.Submissions, before.Assets, before.Version), (after.Submissions, after.Assets, after.Version));
+        Assert.Equal(0, harness.FinalJpegCount());
     }
 
     [Fact]

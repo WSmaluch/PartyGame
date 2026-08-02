@@ -86,6 +86,27 @@ public sealed class GameHub : Hub
         }
     }
 
+    public async Task<RoomSnapshot> DetachDisplay(string roomCode)
+    {
+        try
+        {
+            var code = roomCode.Trim().ToUpperInvariant();
+            if (!connectionRegistry.IsActiveDisplay(Context.ConnectionId, code))
+                throw new RoomConflictException("Only the active display connection can detach from this room.");
+
+            var result = await roomService.DisconnectDisplayAsync(code, Context.ConnectionAborted);
+            connectionRegistry.RemoveIfActive(Context.ConnectionId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomNotifier.GroupName(code), Context.ConnectionAborted);
+            logger.LogInformation("Display detached from room {RoomCode}", code);
+            await NotifyAsync(result);
+            return result.Room.ToSnapshot();
+        }
+        catch (RoomException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+    }
+
     public async Task<RoomSnapshot> SetReady(string roomCode, Guid playerId, string reconnectToken, bool isReady)
     {
         try

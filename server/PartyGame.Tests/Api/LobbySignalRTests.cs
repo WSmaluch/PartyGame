@@ -12,9 +12,33 @@ using PartyGame.Domain.Rooms;
 
 namespace PartyGame.Tests.Api;
 
-public sealed class LobbySignalRTests(PartyGameApiFactory factory) : IClassFixture<PartyGameApiFactory>
+public sealed class LobbySignalRTests : IAsyncLifetime
 {
-    private readonly HttpClient _httpClient = factory.CreateClient();
+    private readonly PartyGameApiFactory factory;
+    private readonly HttpClient _httpClient;
+
+    public LobbySignalRTests()
+    {
+        factory = new PartyGameApiFactory(
+            Path.Combine(Path.GetTempPath(), "PartyGame.LobbySignalR.Tests", Guid.NewGuid().ToString("N")),
+            settings: new Dictionary<string, string?>
+            {
+                // Each SignalR test owns its database, media root and background worker.
+                // These tests advance no game deadline, so a long interval prevents the
+                // worker from contending with the initial attach handshake.
+                ["GameFlow:WorkerIntervalMilliseconds"] = "60000"
+            });
+        _httpClient = factory.CreateClient();
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync()
+    {
+        _httpClient.Dispose();
+        factory.Dispose();
+        return Task.CompletedTask;
+    }
 
     [Fact]
     public async Task LobbyFlow_StartsOnceAndSupportsDisconnectAndReconnect()
@@ -105,7 +129,9 @@ public sealed class LobbySignalRTests(PartyGameApiFactory factory) : IClassFixtu
         await replaced.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await first.StopAsync();
         Assert.True((await second.InvokeAsync<RoomSnapshot>("GetRoomSnapshot", host.RoomCode)).DisplayConnected);
+        Assert.False((await second.InvokeAsync<RoomSnapshot>("DetachDisplay", host.RoomCode)).DisplayConnected);
         await second.StopAsync();
+        await second.DisposeAsync();
         await WaitForAsync(async () => !(await GetSnapshotAsync(host.RoomCode)).DisplayConnected);
     }
 

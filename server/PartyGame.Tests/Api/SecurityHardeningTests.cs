@@ -66,4 +66,19 @@ public sealed class SecurityHardeningTests
         Assert.True(registry.HasRoomAccess("connection", "abcd"));
         Assert.Equal(playerA, registry.RemoveIfActive("connection")?.PlayerId);
     }
+
+    [Fact]
+    public void SignalRDisplayIdentity_IsIndependentAndRemovedOnDetach()
+    {
+        var registry = new RoomConnectionRegistry();
+        registry.AttachDisplay("first", "ABCD");
+        registry.AttachDisplay("second", "WXYZ");
+
+        Assert.True(registry.IsActiveDisplay("first", "abcd"));
+        Assert.True(registry.IsActiveDisplay("second", "wxyz"));
+        Assert.False(registry.IsActiveDisplay("first", "wxyz"));
+        Assert.Equal(ConnectionRole.Display, registry.RemoveIfActive("first")?.Role);
+        Assert.False(registry.IsActiveDisplay("first", "abcd"));
+        Assert.True(registry.IsActiveDisplay("second", "wxyz"));
+    }
 }

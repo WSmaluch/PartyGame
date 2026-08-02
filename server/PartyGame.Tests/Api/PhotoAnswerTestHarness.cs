@@ -21,10 +21,22 @@ internal sealed class PhotoAnswerTestHarness : IAsyncDisposable
         IReadOnlyDictionary<string, string?>? settings = null,
         Action<IServiceCollection>? configureServices = null)
     {
+        var isolatedSettings = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            // Tests construct game state directly and advance it explicitly through
+            // ProcessAtAsync. Keep the production worker alive but prevent it from
+            // racing an intentionally expired fixture during setup/assertion.
+            ["GameFlow:WorkerIntervalMilliseconds"] = "60000"
+        };
+        if (settings is not null)
+        {
+            foreach (var setting in settings)
+                isolatedSettings[setting.Key] = setting.Value;
+        }
         Factory = new PartyGameApiFactory(
             directory ?? Path.Combine(Path.GetTempPath(), "PartyGame.PhotoAnswer.Tests", Guid.NewGuid().ToString("N")),
             deleteOnDispose,
-            settings,
+            isolatedSettings,
             configureServices);
         Client = Factory.CreateClient();
     }
