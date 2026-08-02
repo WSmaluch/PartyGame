@@ -7,6 +7,8 @@ import { ContentPackages } from '../components/ContentPackages';
 import { gameHubConnection } from '../realtime/gameHubConnection';
 import { clearOperatorToken } from '../api/operatorSession';
 import type { GameHubStatus, HubPingResponse } from '../realtime/types';
+import { diagnosticsApi, type DiagnosticsSummary, type SupportBundleStatus } from '../api/diagnosticsApi';
+import { lastCorrelationId } from '../api/healthApi';
 
 const modules = [
   'Pakiety',
@@ -32,6 +34,8 @@ export function AdminPage() {
   const [error, setError] = useState<string>();
   const [hubStatus, setHubStatus] = useState<GameHubStatus>('disconnected');
   const [lastPing, setLastPing] = useState<HubPingResponse>();
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsSummary>();
+  const [bundle, setBundle] = useState<SupportBundleStatus>();
   const abortController = useRef<AbortController | undefined>(undefined);
 
   const checkConnection = useCallback(async () => {
@@ -43,6 +47,7 @@ export function AdminPage() {
     try {
       const response = await getHealth(controller.signal);
       setHealth(response);
+      void diagnosticsApi.summary().then(setDiagnostics).catch(() => undefined);
       await gameHubConnection.start();
       setLastPing(await gameHubConnection.ping());
     } catch (connectionError) {
@@ -143,6 +148,18 @@ export function AdminPage() {
               {lastPing ? `${lastPing.status} · ${lastPing.utcTime}` : '—'}
             </strong>
           </article>
+          <article><span>Wersja Admina</span><strong>{apiConfig.applicationVersion}</strong></article>
+          <article><span>Commit Admina</span><strong>{apiConfig.commitHash}</strong></article>
+          <article><span>Aktywne pokoje</span><strong>{diagnostics?.connections.activeRooms ?? '—'}</strong></article>
+          <article><span>Połączenia SignalR</span><strong>{diagnostics?.connections.activeSignalRConnections ?? '—'}</strong></article>
+          <article className="wide"><span>Correlation ID</span><strong>{lastCorrelationId() || '—'}</strong></article>
+        </section>
+
+        <section className="modules" aria-label="Diagnostyka operatora">
+          <div className="section-title"><h2>Support bundle</h2><span>{bundle?.status ?? 'gotowy do utworzenia'}</span></div>
+          <p>Eksport zawiera wyłącznie zredagowane informacje operacyjne; nie zawiera bazy, mediów ani tokenu operatora.</p>
+          <button type="button" onClick={() => void diagnosticsApi.createBundle('standard').then(setBundle).catch(error => setError(error instanceof Error ? error.message : 'Nie udało się utworzyć bundle.'))}>Utwórz bundle</button>
+          {bundle && <button type="button" onClick={() => void diagnosticsApi.download(bundle.id).then(({ blob, fileName }) => { const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = fileName; anchor.click(); URL.revokeObjectURL(url); }).catch(error => setError(error instanceof Error ? error.message : 'Nie udało się pobrać bundle.'))}>Pobierz gotowy bundle</button>}
         </section>
 
         <ContentPackages />

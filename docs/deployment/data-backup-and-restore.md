@@ -6,7 +6,7 @@ PartyGame ma prawdziwą historię migracji EF Core w `PartyGame.Infrastructure/P
 
 SQLite jest wybierane przez `ConnectionStrings:PartyGame`; w deployment LAN plik znajduje się poza release w `runtime/database/partygame.db`. SQLite może używać WAL, dlatego zwykłe kopiowanie samego pliku `.db` nie jest bezpiecznym backupem. Media są poza release w `runtime/media`; rekordy `MediaAsset` zawierają stabilne GUID-y, względne opaque storage keys, MIME, hash i wymiary — nie ma w nich ścieżek absolutnych. Rekord może przeżyć utratę pliku, a plik może przeżyć rekord; istniejące reconcileery to raportują/naprawiają ograniczonym zakresem, lecz nie tworzą backupu.
 
-Trwałe dane obejmują pokoje, graczy i sesje, historię gry, pakiety treści, submission audit oraz rekordy i pliki mediów. Runtimeowe PID-y, locki, logi, katalogi tymczasowe, artefakty developerskie i `node_modules` nie są danymi backupu. Backup 8.3 używa spójnego snapshotu SQLite i manifestu mediów; restore operuje wyłącznie na zweryfikowanych backupach oraz atomowej podmianie katalogów.
+Trwałe dane obejmują pokoje, graczy i sesje, historię gry, pakiety treści, submission audit oraz rekordy i pliki mediów. Runtimeowe PID-y, locki, logi, katalogi tymczasowe, artefakty developerskie i `node_modules` nie są danymi backupu. Backup 8.3 używa spójnego snapshotu SQLite i manifestu mediów; restore operuje wyłącznie na zweryfikowanych backupach oraz atomowej podmianie katalogów. Support bundle 8.5 może zawierać wyłącznie zredagowany manifest backupu — nigdy snapshot danych ani media.
 
 ## Migracje i zgodność
 

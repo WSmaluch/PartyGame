@@ -56,4 +56,4 @@ Końcowa walidacja 8.2F: Backend Release 285/285 PASS; clean release build, mani
 
 Końcowa walidacja: dwie pełne regresje Backend Release, każda 292/292 PASS, oraz 10/10 współbieżnych uruchomień obu wcześniej niestabilnych testów PASS. Orkiestrator 38/38, Display 37/37 i Admin 82/82 przeszły wraz z lint/build; skan sekretów PASS. Clean release `0.8.1-bb1d46a5bda1` przeszedł manifest, SHA-256, release smoke i security smoke. Pełny Mixed Client E2E PASS: 4 pytania (po jednym każdego typu), `Completed`, ranking 3, jedno `RoomStarted`, reconnect iOS/Display, monotoniczny ledger oraz dwa idempotentne replaye bez konfliktów i duplikatów. Evidence: `/private/tmp/partygame-mixed-e2e-pass.PYyUNp`.
 
-**Status:** 8.1 — ukończony; 8.2 — ukończony; 8.3 — ukończony; 8.4 — ukończony; 8.5 — niewykonany; Etap 8 — nieukończony.
+**Status:** 8.1 — ukończony; 8.2 — ukończony; 8.3 — ukończony; 8.4 — ukończony; 8.5A–8.5E — ukończone; 8.5 — ukończony; 8.6 — niewykonany; Etap 8 — nieukończony. Instrukcje: [diagnostyka](diagnostics/runtime-diagnostics.md) i [support bundle](diagnostics/support-bundle.md).

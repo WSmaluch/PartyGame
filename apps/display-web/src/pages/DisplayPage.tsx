@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { apiConfig } from '../api/apiConfig';
-import { getHealth, HealthApiError } from '../api/healthApi';
+import { getHealth, HealthApiError, lastCorrelationId } from '../api/healthApi';
 import { getRoomSnapshot, profilePhotoUrl } from '../api/roomApi';
 import type { HealthResponse, RoomPlayer, RoomSnapshot } from '../api/types';
 import { StatusPill } from '../components/StatusPill';
@@ -27,6 +27,8 @@ export function DisplayPage() {
   const [health, setHealth] = useState<HealthResponse>();
   const [hubStatus, setHubStatus] = useState<GameHubStatus>('disconnected');
   const [lastPing, setLastPing] = useState<HubPingResponse>();
+  const [lastConnectedAt, setLastConnectedAt] = useState<string>();
+  const [lastReconnectAt, setLastReconnectAt] = useState<string>();
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const abortController = useRef<AbortController | undefined>(undefined);
   const latestVersion = useRef(-1);
@@ -77,7 +79,11 @@ export function DisplayPage() {
 
   useEffect(() => {
     const subscriptions = [
-      gameHubConnection.subscribe(setHubStatus),
+      gameHubConnection.subscribe((status) => {
+        setHubStatus(status);
+        if (status === 'connected') setLastConnectedAt(new Date().toISOString());
+        if (status === 'reconnecting') setLastReconnectAt(new Date().toISOString());
+      }),
       gameHubConnection.onSnapshot(applySnapshot),
       gameHubConnection.onRoomStarted(applySnapshot),
       gameHubConnection.onDisplayReplaced(() => {
@@ -138,6 +144,12 @@ export function DisplayPage() {
             <article><span>SignalR</span><StatusPill label={hubLabels[hubStatus]} state={hubStatus === 'connected' ? 'good' : hubStatus === 'error' ? 'bad' : 'pending'} /></article>
             <article><span>Health</span><strong>{health?.status ?? '—'}</strong></article>
             <article><span>Wersja backendu</span><strong>{health?.version ?? '—'}</strong></article>
+            <article><span>Wersja Display</span><strong>{apiConfig.applicationVersion}</strong></article>
+            <article><span>Commit Display</span><strong>{apiConfig.commitHash}</strong></article>
+            <article><span>Ostatnie połączenie</span><strong>{lastConnectedAt ?? '—'}</strong></article>
+            <article><span>Ostatni reconnect</span><strong>{lastReconnectAt ?? '—'}</strong></article>
+            <article><span>stateVersion</span><strong>{snapshot?.stateVersion ?? '—'}</strong></article>
+            <article><span>Correlation ID</span><strong>{lastCorrelationId() || '—'}</strong></article>
             <article><span>Ostatni Ping</span><strong>{lastPing ? `${lastPing.status} · ${lastPing.utcTime}` : '—'}</strong></article>
           </div>
           <div className="server-address"><span>Serwer</span><code>{apiConfig.baseUrl}</code></div>

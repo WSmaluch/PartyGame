@@ -41,8 +41,8 @@ for app in display-web admin-web; do
   cp -R "apps/$app/dist" "$RELEASE_DIR/${app%-web}"
 done
 
-node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/display/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_DISPLAY_PUBLIC_URL:-}" "$VERSION"
-node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/admin/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_ADMIN_PUBLIC_URL:-}" "$VERSION"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/display/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_DISPLAY_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/admin/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_ADMIN_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export PATH="$DEVELOPER_DIR/usr/bin:$PATH"

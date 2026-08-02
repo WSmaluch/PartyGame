@@ -13,6 +13,7 @@ public interface IRoomConnectionRegistry
     bool IsActivePlayer(string connectionId, string roomCode, Guid playerId);
     string? GetActivePlayerConnection(Guid playerId);
     ConnectionAssignment? RemoveIfActive(string connectionId);
+    int Count { get; }
 }
 
 public enum ConnectionRole { Player, Display }
@@ -24,6 +25,11 @@ public sealed class RoomConnectionRegistry : IRoomConnectionRegistry
     private readonly Dictionary<string, ConnectionAssignment> _byConnection = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, string> _playerConnections = [];
     private readonly Dictionary<string, string> _displayConnections = new(StringComparer.OrdinalIgnoreCase);
+
+    public int Count
+    {
+        get { lock (_sync) return _byConnection.Count; }
+    }
 
     public string? AttachPlayer(string connectionId, string roomCode, Guid playerId)
     {

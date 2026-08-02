@@ -33,6 +33,11 @@ public static class ReleaseRuntimeConfiguration
         Add("PARTYGAME_DISPLAY_PUBLIC_URL", "ReleaseRuntime:DisplayPublicUrl");
         Add("PARTYGAME_ADMIN_PUBLIC_URL", "ReleaseRuntime:AdminPublicUrl");
         Add("PARTYGAME_LOG_LEVEL", "Serilog:MinimumLevel:Default");
+        Add("PARTYGAME_LOG_DIRECTORY", "Diagnostics:LogDirectory");
+        Add("PARTYGAME_LOG_FILE_SIZE_LIMIT_MB", "Diagnostics:LogFileSizeLimitMb");
+        Add("PARTYGAME_LOG_RETAINED_FILE_COUNT", "Diagnostics:LogRetainedFileCount");
+        Add("PARTYGAME_LOG_FORMAT", "Diagnostics:LogFormat");
+        Add("PARTYGAME_SUPPORT_BUNDLE_DIRECTORY", "Diagnostics:SupportBundleDirectory");
         Add("PARTYGAME_APPLY_MIGRATIONS", "ReleaseRuntime:ApplyMigrations");
         Add("PARTYGAME_OPERATOR_TOKEN", "Security:Operator:Token");
         Add("PARTYGAME_ALLOW_INSECURE_LAN_HTTP", "Security:Transport:AllowInsecureLanHttp");

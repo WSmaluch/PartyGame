@@ -15,7 +15,7 @@ HTTP jest dopuszczalne wyłącznie w prywatnej, zaufanej sieci LAN i wymaga `PAR
 
 ## Wymagania hosta
 
-Host potrzebuje `dotnet` zgodnego z artefaktem, `bash`, `curl`, `node` (wyłącznie do odczytu manifestu), `shasum` i wolnego portu TCP 5050. Nie potrzebuje IDE, Node modules ani Vite. Zbuduj artefakt na maszynie budującej przez `scripts/build-release.sh`, a następnie przenieś cały katalog `artifacts/release/<version>` na host.
+Host potrzebuje `dotnet` zgodnego z artefaktem, `bash`, `curl`, `node` (wyłącznie do odczytu manifestu), `shasum` i wolnego portu TCP 5050. Nie potrzebuje IDE, Node modules ani Vite. Zbuduj artefakt na maszynie budującej przez `scripts/build-release.sh`, a następnie przenieś cały katalog `artifacts/release/<version>` na host. Po starcie uruchom `scripts/diagnose-lan.sh`; logi i bundle opisuje [diagnostyka](../diagnostics/runtime-diagnostics.md).
 
 ## Instalacja
 

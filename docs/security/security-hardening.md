@@ -1,5 +1,9 @@
 # Security hardening
 
+## Diagnostyka i bundle
+
+Logi oraz support bundle redagują Authorization, cookies, tokeny, query stringi, ścieżki użytkownika i adresy klientów. Bundle jest weryfikowany przed publikacją i nie może zawierać bazy, WAL/SHM, mediów, danych graczy ani sekretów.
+
 ## Operator access
 
 Set `PARTYGAME_OPERATOR_TOKEN` only in the deployment environment. It must be at least 32 characters and may not use a documentation placeholder. Production startup fails without it. The API accepts it only as `Authorization: Bearer <token>` and compares SHA-256 digests with a constant-time comparison.

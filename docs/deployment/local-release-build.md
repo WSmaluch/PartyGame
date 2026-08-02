@@ -51,7 +51,7 @@ Skrypt release ustawia wersję w obu plikach `config.json`; adresy można podać
 - `GET /health/ready` odróżnia gotowość bazy i katalogu mediów, bez zapisu testowych plików.
 - `GET /api/system/version` zwraca bezpiecznie wersję, informational version, commit, timestamp i environment.
 
-`scripts/smoke-release.sh artifacts/release/<version>` uruchamia opublikowany API w `Production`, z losowym lokalnym portem oraz zewnętrznym, tymczasowym DB/media. Sprawdza liveness, readiness, prosty endpoint API i zgodność wersji z manifestem. `scripts/security-smoke.sh <ścieżka-do-dll>` dodatkowo sprawdza granicę Admina, nagłówki, CORS oraz obowiązkowy opt-in TrustedLanHttp. Proces jest śledzony przez PID; runtime jest kasowany przy sukcesie, a log zostaje tylko przy błędzie.
+`scripts/smoke-release.sh artifacts/release/<version>` uruchamia opublikowany API w `Production`, z losowym lokalnym portem oraz zewnętrznym, tymczasowym DB/media. Sprawdza liveness, readiness, prosty endpoint API i zgodność wersji z manifestem. `scripts/security-smoke.sh <ścieżka-do-dll>` dodatkowo sprawdza granicę Admina, nagłówki, CORS oraz obowiązkowy opt-in TrustedLanHttp. Proces jest śledzony przez PID; runtime jest kasowany przy sukcesie, a log zostaje tylko przy błędzie. Kontrakt version/commit jest wspólny dla manifestu, endpointu API i `config.json` Display/Admin.
 
 ## iOS
 

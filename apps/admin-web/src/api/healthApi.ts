@@ -1,6 +1,9 @@
 import { apiUrl } from './apiConfig';
 import type { HealthResponse } from './types';
 
+let latestCorrelationId = '';
+export function lastCorrelationId(): string { return latestCorrelationId; }
+
 export class HealthApiError extends Error {
   readonly kind: 'cancelled' | 'http' | 'invalid-response' | 'network';
 
@@ -39,6 +42,7 @@ export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
         'http',
       );
     }
+    latestCorrelationId = response.headers.get('X-Correlation-ID') ?? latestCorrelationId;
     const body: unknown = await response.json();
     if (!isHealthResponse(body)) {
       throw new HealthApiError(

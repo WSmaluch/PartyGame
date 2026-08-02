@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ServerSettingsView: View {
     let configuration: ServerConfiguration
@@ -40,6 +41,27 @@ struct ServerSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            Section("Diagnostyka") {
+                Text("Wersja aplikacji: \(appVersion)")
+                Text("Serwer: \(configuration.baseURL)")
+                switch healthViewModel.state {
+                case let .online(response):
+                    Text("Wersja serwera: \(response.version)")
+                    Text("Stan połączenia: online")
+                case .loading:
+                    Text("Stan połączenia: sprawdzanie")
+                case .offline:
+                    Text("Stan połączenia: offline")
+                case .idle:
+                    Text("Stan połączenia: nie sprawdzono")
+                }
+                Text("Reconnect token nie jest wyświetlany ani kopiowany.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Kopiuj bezpieczne podsumowanie") {
+                    UIPasteboard.general.string = safeSummary
+                }
+            }
         }
         .navigationTitle("server.settings.title")
         .toolbar {
@@ -55,6 +77,24 @@ struct ServerSettingsView: View {
     private func saveAndCheck() {
         guard saveAddress() else { return }
         healthViewModel.checkConnection()
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+        return "\(version) (\(build))"
+    }
+
+    private var safeSummary: String {
+        let serverVersion: String
+        let state: String
+        switch healthViewModel.state {
+        case let .online(response): serverVersion = response.version; state = "online"
+        case .loading: serverVersion = "—"; state = "checking"
+        case .offline: serverVersion = "—"; state = "offline"
+        case .idle: serverVersion = "—"; state = "idle"
+        }
+        return "PartyGame iOS\nApp: \(appVersion)\nServer: \(configuration.baseURL)\nServer version: \(serverVersion)\nConnection: \(state)"
     }
 
     @discardableResult

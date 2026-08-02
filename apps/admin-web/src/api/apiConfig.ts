@@ -3,6 +3,9 @@ export const apiConfig = {
   signalRHubUrl: '',
   publicBaseUrl: '',
   applicationVersion: '',
+  commitHash: '',
+  apiContractVersion: '',
+  signalRContractVersion: '',
   signalRBaseUrl: '',
   publicAppUrl: '',
   buildVersion: '',
@@ -13,6 +16,9 @@ export type RuntimeConfig = {
   signalRHubUrl?: string;
   publicBaseUrl?: string;
   applicationVersion?: string;
+  commitHash?: string;
+  apiContractVersion?: string;
+  signalRContractVersion?: string;
   signalRBaseUrl?: string;
   publicAppUrl?: string;
   buildVersion?: string;
@@ -32,6 +38,9 @@ export function configureApiConfig(config: RuntimeConfig): void {
     config.applicationVersion ?? config.buildVersion ?? '',
     'applicationVersion',
   );
+  apiConfig.commitHash = config.commitHash ?? 'development';
+  apiConfig.apiContractVersion = config.apiContractVersion ?? '1';
+  apiConfig.signalRContractVersion = config.signalRContractVersion ?? apiConfig.apiContractVersion;
   apiConfig.signalRBaseUrl = normalizeBaseUrl(
     config.signalRBaseUrl ?? config.apiBaseUrl,
     'signalRBaseUrl',
@@ -75,6 +84,9 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
       config.applicationVersion,
       'applicationVersion',
     );
+  if (config.commitHash !== undefined) parsed.commitHash = stringValue(config.commitHash, 'commitHash');
+  if (config.apiContractVersion !== undefined) parsed.apiContractVersion = stringValue(config.apiContractVersion, 'apiContractVersion');
+  if (config.signalRContractVersion !== undefined) parsed.signalRContractVersion = stringValue(config.signalRContractVersion, 'signalRContractVersion');
   configureApiConfig(parsed);
   return parsed;
 }
@@ -92,6 +104,9 @@ export async function loadRuntimeConfig(
         import.meta.env.VITE_PUBLIC_BASE_URL?.trim() || window.location.origin,
       applicationVersion:
         import.meta.env.VITE_BUILD_VERSION?.trim() || 'development',
+      commitHash: import.meta.env.VITE_COMMIT_HASH?.trim() || 'development',
+      apiContractVersion: '1',
+      signalRContractVersion: '1',
       signalRBaseUrl:
         import.meta.env.VITE_SIGNALR_BASE_URL?.trim() || developmentApiBaseUrl,
       publicAppUrl:

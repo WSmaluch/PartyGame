@@ -58,10 +58,12 @@ public sealed class GameEngineWorker(
 
         foreach (var candidate in sessionsToProcess)
         {
-            var roomLock = lockProvider.For(candidate.RoomCode);
-            await roomLock.WaitAsync(cancellationToken);
             try
             {
+                var roomLock = lockProvider.For(candidate.RoomCode);
+                await roomLock.WaitAsync(cancellationToken);
+                try
+                {
                 // Re-evaluate in a fresh scope under lock to ensure consistency
                 await using var scope = serviceProvider.CreateAsyncScope();
                 var stateMachine = scope.ServiceProvider.GetRequiredService<GameStateMachine>();
@@ -84,12 +86,17 @@ public sealed class GameEngineWorker(
                         room.PublicStateChanged(clock.UtcNow);
                         await dbContext.SaveChangesAsync(cancellationToken);
                         await notifier.NotifyAsync(new RoomMutationResult(room, true, false), cancellationToken);
+                        logger.LogDebug("Game timeout transition accepted for room {RoomCode}; state version {StateVersion}", room.Code, room.StateVersion);
                     }
                 }
+                }
+                finally { roomLock.Release(); }
             }
-            finally
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
-                roomLock.Release();
+                // A single corrupt or concurrently changed room must not starve the
+                // rest of the timeout batch. The next interval retries safely.
+                logger.LogError(exception, "GameEngineWorker failed to process room {RoomCode}; error code {ErrorCode}", candidate.RoomCode, "INTERNAL_ERROR");
             }
         }
     }

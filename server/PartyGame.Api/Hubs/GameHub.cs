@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Contracts;
 using PartyGame.GameEngine;
 using PartyGame.Infrastructure.Rooms;
@@ -34,6 +35,12 @@ public sealed class GameHub : Hub
 
     public HubPingResponse Ping() => new("pong", clock.UtcNow);
 
+    public override Task OnConnectedAsync()
+    {
+        logger.LogInformation("SignalR connection opened {ConnectionId} correlation {CorrelationId}", Context.ConnectionId, CorrelationId.ForHub(Context));
+        return base.OnConnectedAsync();
+    }
+
     public async Task<RoomSnapshot> AttachPlayer(string roomCode, Guid playerId, string reconnectToken)
     {
         try
@@ -49,6 +56,7 @@ public sealed class GameHub : Hub
                 await Groups.RemoveFromGroupAsync(previousConnection, RoomNotifier.GroupName(code));
             }
             var result = await roomService.AttachPlayerAsync(code, playerId, reconnectToken, Context.ConnectionAborted);
+            logger.LogInformation("SignalR command accepted {EventName} {ConnectionId} {ConnectionRole} {RoomCode} {PlayerId} {CorrelationId}", "AttachPlayer", Context.ConnectionId, "player", code, playerId, CorrelationId.ForHub(Context));
             await NotifyAsync(result);
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(code, playerId, Context.ConnectionAborted);
             await Clients.Caller.SendAsync("PlayerPrivateGameStateUpdated", privateState, Context.ConnectionAborted);
@@ -56,6 +64,7 @@ public sealed class GameHub : Hub
         }
         catch (RoomException exception)
         {
+            logger.LogWarning("SignalR command rejected {EventName} {ConnectionId} {ErrorCode} {CorrelationId}", "AttachPlayer", Context.ConnectionId, "AUTH_INVALID", CorrelationId.ForHub(Context));
             throw new HubException(exception.Message);
         }
     }
@@ -76,7 +85,7 @@ public sealed class GameHub : Hub
                 await Groups.RemoveFromGroupAsync(previousConnection, RoomNotifier.GroupName(code));
             }
             var result = await roomService.AttachDisplayAsync(code, Context.ConnectionAborted);
-            logger.LogInformation("Display attached to room {RoomCode}", code);
+            logger.LogInformation("SignalR command accepted {EventName} {ConnectionId} {ConnectionRole} {RoomCode} {CorrelationId}", "AttachDisplay", Context.ConnectionId, "display", code, CorrelationId.ForHub(Context));
             await NotifyAsync(result);
             return result.Room.ToSnapshot();
         }
@@ -97,7 +106,7 @@ public sealed class GameHub : Hub
             var result = await roomService.DisconnectDisplayAsync(code, Context.ConnectionAborted);
             connectionRegistry.RemoveIfActive(Context.ConnectionId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomNotifier.GroupName(code), Context.ConnectionAborted);
-            logger.LogInformation("Display detached from room {RoomCode}", code);
+            logger.LogInformation("SignalR command accepted {EventName} {ConnectionId} {ConnectionRole} {RoomCode} {CorrelationId}", "DetachDisplay", Context.ConnectionId, "display", code, CorrelationId.ForHub(Context));
             await NotifyAsync(result);
             return result.Room.ToSnapshot();
         }
@@ -270,7 +279,7 @@ public sealed class GameHub : Hub
                     : await roomService.DisconnectDisplayAsync(assignment.RoomCode);
                 if (assignment.Role == ConnectionRole.Display)
                 {
-                    logger.LogInformation("Display disconnected from room {RoomCode}", assignment.RoomCode);
+                    logger.LogInformation("SignalR connection closed {ConnectionId} {ConnectionRole} {RoomCode} {CorrelationId}", Context.ConnectionId, "display", assignment.RoomCode, CorrelationId.ForHub(Context));
                 }
                 await NotifyAsync(result);
             }
@@ -278,6 +287,10 @@ public sealed class GameHub : Hub
             {
                 logger.LogWarning(roomException, "Could not update room after SignalR disconnection");
             }
+        }
+        else
+        {
+            logger.LogInformation("SignalR connection closed {ConnectionId} {CorrelationId}", Context.ConnectionId, CorrelationId.ForHub(Context));
         }
         await base.OnDisconnectedAsync(exception);
     }

@@ -20,6 +20,7 @@ using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 using PartyGame.Infrastructure.Rooms;
 using Serilog;
+using Serilog.Formatting.Compact;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInMemoryCollection(ReleaseRuntimeConfiguration.EnvironmentOverrides());
@@ -27,6 +28,7 @@ builder.Configuration.AddInMemoryCollection(ReleaseRuntimeConfiguration.Environm
 var releaseRuntime = builder.Configuration.GetSection(ReleaseRuntimeOptions.SectionName).Get<ReleaseRuntimeOptions>() ?? new ReleaseRuntimeOptions();
 var deployment = builder.Configuration.GetSection(DeploymentOptions.SectionName).Get<DeploymentOptions>() ?? new DeploymentOptions();
 var configuredTransportSecurity = builder.Configuration.GetSection(TransportSecurityOptions.SectionName).Get<TransportSecurityOptions>() ?? new TransportSecurityOptions();
+var diagnosticsOptions = builder.Configuration.GetSection(DiagnosticsOptions.SectionName).Get<DiagnosticsOptions>() ?? new DiagnosticsOptions();
 if (builder.Environment.IsProduction() && !configuredTransportSecurity.AllowInsecureLanHttp &&
     (releaseRuntime.PublicBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
      releaseRuntime.ListeningUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)))
@@ -47,12 +49,38 @@ if (builder.Environment.IsProduction())
         mustBeOutsideContentRoot: true);
     builder.Configuration["ConnectionStrings:PartyGame"] = $"Data Source={databasePath}";
     builder.Configuration["MediaStorage:RootPath"] = mediaRoot;
+    diagnosticsOptions.LogDirectory = ReleaseRuntimeConfiguration.ResolveRuntimePath(
+        diagnosticsOptions.LogDirectory, builder.Environment.ContentRootPath, "Diagnostics:LogDirectory", mustBeOutsideContentRoot: true);
+    diagnosticsOptions.SupportBundleDirectory = ReleaseRuntimeConfiguration.ResolveRuntimePath(
+        diagnosticsOptions.SupportBundleDirectory, builder.Environment.ContentRootPath, "Diagnostics:SupportBundleDirectory", mustBeOutsideContentRoot: true);
+    builder.Configuration["Diagnostics:LogDirectory"] = diagnosticsOptions.LogDirectory;
+    builder.Configuration["Diagnostics:SupportBundleDirectory"] = diagnosticsOptions.SupportBundleDirectory;
 }
 
-builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
-    .ReadFrom.Configuration(context.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext());
+var resolvedLogDirectory = Path.GetFullPath(diagnosticsOptions.LogDirectory);
+Directory.CreateDirectory(resolvedLogDirectory);
+
+builder.Host.UseSerilog((context, services, loggerConfiguration) =>
+{
+    loggerConfiguration.ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "PartyGame.Api");
+    var file = Path.Combine(resolvedLogDirectory, "partygame-.log");
+    if (diagnosticsOptions.IsJson)
+    {
+        loggerConfiguration.WriteTo.File(new CompactJsonFormatter(), file, rollingInterval: RollingInterval.Day,
+            fileSizeLimitBytes: diagnosticsOptions.LogFileSizeLimitBytes, rollOnFileSizeLimit: true,
+            retainedFileCountLimit: diagnosticsOptions.LogRetainedFileCount, shared: true, flushToDiskInterval: TimeSpan.FromSeconds(1));
+    }
+    else
+    {
+        loggerConfiguration.WriteTo.File(path: file, outputTemplate: "[{Timestamp:O} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}",
+            rollingInterval: RollingInterval.Day, fileSizeLimitBytes: diagnosticsOptions.LogFileSizeLimitBytes,
+            rollOnFileSizeLimit: true, retainedFileCountLimit: diagnosticsOptions.LogRetainedFileCount,
+            shared: true, flushToDiskInterval: TimeSpan.FromSeconds(1));
+    }
+});
 
 builder.Services.AddProblemDetails();
 builder.Services.Configure<FormOptions>(options =>
@@ -71,6 +99,9 @@ builder.Services.AddSingleton<IRoomCodeGenerator, RoomCodeGenerator>();
 builder.Services.AddSingleton<IPlayerSessionService, PlayerSessionService>();
 builder.Services.AddSingleton<RoomLockProvider>();
 builder.Services.AddSingleton<IRoomConnectionRegistry, RoomConnectionRegistry>();
+builder.Services.AddSingleton<BuildVersionInfo>();
+builder.Services.AddSingleton<IRuntimeDiagnosticsService, RuntimeDiagnosticsService>();
+builder.Services.AddSingleton<ISupportBundleService, SupportBundleService>();
 builder.Services.AddScoped<GamePlanner>();
 builder.Services.AddScoped<IContentValidationService, PartyGame.Infrastructure.Content.ContentValidationService>();
 builder.Services.AddSingleton<PartyGame.Infrastructure.Content.ContentPackageLockProvider>();
@@ -126,6 +157,12 @@ builder.Services.AddOptions<OperatorTokenOptions>().Bind(builder.Configuration.G
     .ValidateOnStart();
 builder.Services.AddOptions<TransportSecurityOptions>()
     .Bind(builder.Configuration.GetSection(TransportSecurityOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddOptions<DiagnosticsOptions>()
+    .Bind(builder.Configuration.GetSection(DiagnosticsOptions.SectionName))
+    .Validate(options => options.LogFileSizeLimitMb is >= 1 and <= 1024, "Diagnostics:LogFileSizeLimitMb must be in 1..1024.")
+    .Validate(options => options.LogRetainedFileCount is >= 1 and <= 365, "Diagnostics:LogRetainedFileCount must be in 1..365.")
+    .Validate(options => string.Equals(options.LogFormat, "json", StringComparison.OrdinalIgnoreCase) || string.Equals(options.LogFormat, "text", StringComparison.OrdinalIgnoreCase), "Diagnostics:LogFormat must be json or text.")
     .ValidateOnStart();
 
 var allowedOrigins = builder.Environment.IsProduction()
@@ -191,22 +228,25 @@ if (dataOperation is not null)
     return;
 }
 
+app.Use(CorrelationId.UseAsync);
 app.UseExceptionHandler(exceptionHandlerApp =>
 {
     exceptionHandlerApp.Run(async context =>
     {
         var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        var correlationId = context.Items[CorrelationId.HeaderName]?.ToString() ?? CorrelationId.Create();
         IResult result = exception switch
         {
-            DomainValidationException validation => Results.ValidationProblem(validation.Errors, statusCode: StatusCodes.Status400BadRequest),
-            RoomNotFoundException or PlayerNotFoundException => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: exception.Message),
-            InvalidPlayerTokenException => Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: exception.Message),
-            PhotoAnswerException photo => Results.Problem(statusCode: PhotoStatus(photo.Code), title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = photo.Code }),
-            DrawingAnswerException drawing => Results.Problem(statusCode: DrawingStatus(drawing.Code), title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = drawing.Code }),
-            RoomConflictException or RoomCodeGenerationException => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: exception.Message),
-            DbUpdateConcurrencyException => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "The requested data changed concurrently; refresh and retry."),
-            DbUpdateException { InnerException: SqliteException { SqliteErrorCode: 5 or 6 } } => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "The requested data changed concurrently; refresh and retry."),
-            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "An unexpected error occurred.")
+            DomainValidationException validation => Results.ValidationProblem(validation.Errors, statusCode: StatusCodes.Status400BadRequest, extensions: ErrorExtensions("INVALID_REQUEST", correlationId)),
+            RoomNotFoundException => SafeProblem(StatusCodes.Status404NotFound, "ROOM_NOT_FOUND", exception.Message, correlationId),
+            PlayerNotFoundException => SafeProblem(StatusCodes.Status404NotFound, "PLAYER_NOT_FOUND", exception.Message, correlationId),
+            InvalidPlayerTokenException => SafeProblem(StatusCodes.Status401Unauthorized, "AUTH_INVALID", "Authentication is invalid.", correlationId),
+            PhotoAnswerException photo => SafeProblem(PhotoStatus(photo.Code), photo.Code, photo.Message, correlationId),
+            DrawingAnswerException drawing => SafeProblem(DrawingStatus(drawing.Code), drawing.Code, drawing.Message, correlationId),
+            RoomConflictException or RoomCodeGenerationException => SafeProblem(StatusCodes.Status409Conflict, "SUBMISSION_CONFLICT", exception.Message, correlationId),
+            DbUpdateConcurrencyException => SafeProblem(StatusCodes.Status409Conflict, "SUBMISSION_CONFLICT", "The requested data changed concurrently; refresh and retry.", correlationId),
+            DbUpdateException { InnerException: SqliteException { SqliteErrorCode: 5 or 6 } } => SafeProblem(StatusCodes.Status409Conflict, "SUBMISSION_CONFLICT", "The requested data changed concurrently; refresh and retry.", correlationId),
+            _ => SafeProblem(StatusCodes.Status500InternalServerError, "INTERNAL_ERROR", "An unexpected error occurred.", correlationId)
         };
         if (exception is RoomException or DomainValidationException)
         {
@@ -355,19 +395,11 @@ app.MapGet("/health/ready", async (
     .Produces<RuntimeReadinessResult>(StatusCodes.Status200OK)
     .Produces<RuntimeReadinessResult>(StatusCodes.Status503ServiceUnavailable);
 
-app.MapGet("/api/system/version", (IHostEnvironment environment) =>
+app.MapGet("/api/system/version", async (BuildVersionInfo buildVersion, DatabaseSchemaService schema, CancellationToken cancellationToken) =>
 {
-    var assembly = Assembly.GetExecutingAssembly();
-    var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-    var releaseVersion = informationalVersion.Split('+', 2)[0];
-    var metadata = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-        .ToDictionary(attribute => attribute.Key, attribute => attribute.Value, StringComparer.OrdinalIgnoreCase);
-    return Results.Ok(new SystemVersionResponse(
-        releaseVersion,
-        informationalVersion,
-        metadata.GetValueOrDefault("CommitHash") ?? "unknown",
-        metadata.GetValueOrDefault("BuildTimestampUtc") ?? "unknown",
-        environment.EnvironmentName));
+    var status = await schema.GetStatusAsync(cancellationToken);
+    var contract = buildVersion.ToContract(status.DatabaseSchemaVersion);
+    return Results.Ok(new SystemVersionResponse(contract.ApplicationVersion, contract.InformationalVersion, contract.CommitHash, contract.BuildTimestampUtc, contract.Environment, contract.ApiContractVersion, contract.SignalRContractVersion, contract.DatabaseSchemaVersion, contract.BackupFormatVersion, contract.SupportBundleFormatVersion, contract.DisplayVersion, contract.AdminVersion, contract.IosClientVersion, contract.MinimumSupportedIosVersion));
 })
     .WithName("GetSystemVersion")
     .Produces<SystemVersionResponse>(StatusCodes.Status200OK);
@@ -390,6 +422,25 @@ app.MapGet("/health/storage", async (
     .WithName("GetMediaStorageHealth")
     .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status200OK)
     .Produces<MediaStorageDiagnosticsResult>(StatusCodes.Status503ServiceUnavailable);
+
+var diagnosticsAdmin = app.MapGroup("/api/admin/diagnostics")
+    .AddEndpointFilter<OperatorTokenEndpointFilter>()
+    .RequireRateLimiting("operator");
+diagnosticsAdmin.MapGet("/summary", async (IRuntimeDiagnosticsService diagnostics, CancellationToken cancellationToken) =>
+    Results.Ok(await diagnostics.GetSummaryAsync(cancellationToken)));
+diagnosticsAdmin.MapPost("/support-bundles", async (string? mode, ISupportBundleService bundles, CancellationToken cancellationToken) =>
+{
+    try { return Results.Ok(await bundles.CreateAsync(mode ?? "standard", cancellationToken)); }
+    catch (SupportBundleBusyException) { return SafeProblem(StatusCodes.Status409Conflict, "BACKUP_OPERATION_LOCKED", "A support bundle operation is already running.", CorrelationId.Create()); }
+    catch (ArgumentException) { return SafeProblem(StatusCodes.Status400BadRequest, "INVALID_REQUEST", "Unsupported support bundle mode.", CorrelationId.Create()); }
+});
+diagnosticsAdmin.MapGet("/support-bundles/{id:guid}", (Guid id, ISupportBundleService bundles) =>
+    bundles.Get(id) is { } result ? Results.Ok(result) : Results.NotFound());
+diagnosticsAdmin.MapGet("/support-bundles/{id:guid}/download", (Guid id, ISupportBundleService bundles) =>
+{
+    var stream = bundles.Open(id, out var fileName);
+    return stream is null ? Results.NotFound() : Results.File(stream, "application/zip", fileName, enableRangeProcessing: true);
+});
 
 app.MapHub<GameHub>("/hubs/game").RequireRateLimiting("room-operations");
 app.MapRoomEndpoints();
@@ -423,6 +474,16 @@ static string RoomRatePartition(PathString path)
         : path.Value ?? "unknown";
 }
 
+static IResult SafeProblem(int statusCode, string errorCode, string message, string correlationId) =>
+    Results.Problem(statusCode: statusCode, title: message, extensions: ErrorExtensions(errorCode, correlationId));
+
+static Dictionary<string, object?> ErrorExtensions(string errorCode, string correlationId) => new()
+{
+    ["code"] = errorCode,
+    ["errorCode"] = errorCode,
+    ["correlationId"] = correlationId
+};
+
 public sealed record HealthResponse(
     string Status,
     string Service,
@@ -434,6 +495,15 @@ public sealed record SystemVersionResponse(
     string InformationalVersion,
     string CommitHash,
     string BuildTimestampUtc,
-    string Environment);
+    string Environment,
+    string ApiContractVersion,
+    string SignalRContractVersion,
+    string DatabaseSchemaVersion,
+    string BackupFormatVersion,
+    string SupportBundleFormatVersion,
+    string DisplayVersion,
+    string AdminVersion,
+    string? IosClientVersion,
+    string? MinimumSupportedIosVersion);
 
 public partial class Program;

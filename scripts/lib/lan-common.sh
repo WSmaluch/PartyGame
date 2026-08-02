@@ -128,6 +128,11 @@ PARTYGAME_URLS=http://0.0.0.0:$LAN_PORT
 PARTYGAME_DATABASE_PATH=$(lan_runtime_dir)/database/partygame.db
 PARTYGAME_MEDIA_ROOT=$(lan_runtime_dir)/media
 PARTYGAME_LOG_LEVEL=Information
+PARTYGAME_LOG_DIRECTORY=$(lan_runtime_dir)/logs
+PARTYGAME_LOG_FILE_SIZE_LIMIT_MB=10
+PARTYGAME_LOG_RETAINED_FILE_COUNT=14
+PARTYGAME_LOG_FORMAT=json
+PARTYGAME_SUPPORT_BUNDLE_DIRECTORY=$(lan_runtime_dir)/support-bundles
 PARTYGAME_OPERATOR_TOKEN=$operator_token
 # deploy-lan.sh targets a private LAN HTTP endpoint; this is an explicit opt-in.
 PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true

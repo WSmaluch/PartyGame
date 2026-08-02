@@ -6,13 +6,16 @@ import path from 'node:path';
 const [command, ...args] = process.argv.slice(2);
 
 if (command === 'config') {
-  const [target, apiBaseUrl, publicAppUrl, version] = args;
+  const [target, apiBaseUrl, publicAppUrl, version, commitHash = 'unknown'] = args;
   if (!target || !version) usage();
   await fs.writeFile(target, `${JSON.stringify({
     apiBaseUrl: apiBaseUrl ?? '',
     signalRHubUrl: '/hubs/game',
     publicBaseUrl: publicAppUrl ?? '',
     applicationVersion: version,
+    commitHash,
+    apiContractVersion: '1',
+    signalRContractVersion: '1',
     // Legacy names remain available for artifacts generated before the LAN contract.
     signalRBaseUrl: apiBaseUrl ?? '',
     publicAppUrl: publicAppUrl ?? '',
@@ -34,8 +37,10 @@ if (command === 'config') {
   const artifacts = ['api', 'display', 'admin'].map(name => ({ name, files: included.filter(file => file.startsWith(`${name}/`)).length }));
   const manifest = {
     version,
+    applicationVersion: version,
     commitHash,
     buildTimestampUtc: timestamp,
+    contracts: { apiContractVersion: '1', signalRContractVersion: '1', backupFormatVersion: '1', supportBundleFormatVersion: '1' },
     tools: { dotnet: dotnetVersion, node: nodeVersion, npm: npmVersion },
     artifacts,
     checksums,
@@ -46,6 +51,10 @@ if (command === 'config') {
     `PartyGame release ${version}`,
     `Commit: ${commitHash}`,
     `Built at: ${timestamp}`,
+    'API contract: 1',
+    'SignalR contract: 1',
+    'Backup format: 1',
+    'Support bundle format: 1',
     `dotnet: ${dotnetVersion}`,
     `node: ${nodeVersion}`,
     `npm: ${npmVersion}`,
