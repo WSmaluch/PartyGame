@@ -140,6 +140,16 @@ final class GameSessionStore {
 
     var baseURL: URL? { ServerConfiguration.validatedURL(from: session?.serverBaseURL ?? configuration.baseURL) }
 
+    var realtimeDiagnosticState: String {
+        switch realtimeStatus {
+        case .disconnected: "Disconnected"
+        case .connecting: "Connecting"
+        case .connected: "Connected"
+        case .reconnecting: "Reconnecting"
+        case .failed: "Failed"
+        }
+    }
+
     var photoActionsExpired: Bool {
         guard let value = snapshot?.game?.stageEndsAtUtc,
               let end = ISO8601DateFormatter().date(from: value) else { return false }

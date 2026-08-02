@@ -2,7 +2,7 @@
 
 ## Cel i granice
 
-Ta instrukcja tworzy lokalny artefakt release oraz uruchamia go chwilowo w izolowanym runtime. Nie wdraża aplikacji do LAN i nie definiuje polityki backupu lub migracji produkcyjnych; to kolejne etapy 8.2 i 8.3.
+Ta instrukcja tworzy lokalny artefakt release oraz uruchamia go chwilowo w izolowanym runtime. Nie wdraża aplikacji do LAN; politykę backupu, migracji i restore opisuje [data-backup-and-restore.md](data-backup-and-restore.md).
 
 ## Wymagania
 
@@ -20,6 +20,8 @@ Polecenie wykonuje restore i testy .NET, `npm ci` bez aktualizacji zależności,
 - `manifest.json`, `checksums.sha256`, `BUILD_INFO.txt` — identyfikacja builda i integralność.
 
 Artefakt nie zawiera `node_modules`, DerivedData, runtimeowych DB/mediów, logów, danych testowych ani sekretów. Manifest nie zawiera ścieżek deweloperskich.
+
+Artefakt release nie jest backupem danych. SQLite i media pozostają na trwałym runtime volume; ich migracje, backup, verify i restore opisuje [data-backup-and-restore.md](data-backup-and-restore.md).
 
 ## Kontrakt środowiska API
 

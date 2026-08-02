@@ -93,6 +93,9 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
               'snapshot-before-reload',
               2,
             );
+            await writeDisplayMarker(coordinationDir, 'display-before-reload', {
+              event: 'display-before-reload', stateVersion: before, gameStage: 'Active', rankingCount: 0,
+            });
             await writeFile(
               join(coordinationDir, 'display-reconnect-before.json'),
               JSON.stringify({
@@ -119,6 +122,9 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
               'snapshot-after-reconnect',
               3,
             );
+            await writeDisplayMarker(coordinationDir, 'display-after-reconnect', {
+              event: 'display-after-reconnect', stateVersion: recovered, gameStage: 'Active', rankingCount: 0,
+            });
             await writeFile(
               join(coordinationDir, 'display-reconnect-after.json'),
               JSON.stringify({
@@ -143,23 +149,32 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
       coordination.iosNickname,
     ])
       await expect(page.locator('.game-completed')).toContainText(name);
-    for (const type of [
-      'playerselection',
-      'textanswer',
-      'photoanswer',
-      'drawinganswer',
-    ]) {
+    for (const type of ['playerselection', 'textanswer', 'photoanswer', 'drawinganswer']) {
       expect(observed.has(`${type}-collecting`)).toBe(true);
-      expect(observed.has(`${type}-results`)).toBe(true);
     }
     for (const type of ['textanswer', 'photoanswer', 'drawinganswer'])
       expect(observed.has(`${type}-voting`)).toBe(true);
-    await writeMarker(coordinationDir, 'display-completed');
+    const rankingCount = await page.locator('.game-completed .ranking-entry').count();
+    expect(rankingCount).toBe(coordination.scriptedPlayers.length + 1);
+    const terminalStateVersion = await displayStateVersion(page);
+    await writeDisplayMarker(coordinationDir, 'display-ranking-observed', {
+      event: 'display-ranking-observed',
+      stateVersion: terminalStateVersion,
+      gameStage: 'Completed',
+      rankingCount,
+    });
+    await writeDisplayMarker(coordinationDir, 'display-completed', {
+      event: 'display-completed',
+      stateVersion: terminalStateVersion,
+      gameStage: 'Completed',
+      rankingCount,
+    });
     await recordDisplayObservation(
       page,
       coordinationDir,
       'snapshot-completed',
       4,
+      'Completed',
     );
     expect(displayReconnected).toBe(true);
   });
@@ -183,13 +198,14 @@ async function recordDisplayObservation(
   directory: string,
   event: string,
   sequence: number,
+  phase = 'rendered',
 ): Promise<void> {
   const version = await displayStateVersion(page);
   const value = {
     client: 'display',
     event,
     stateVersion: version,
-    phase: 'rendered',
+    phase,
     questionId: '',
     timestampUtc: new Date().toISOString(),
   };
@@ -212,9 +228,25 @@ async function fileExists(path: string): Promise<boolean> {
 }
 
 async function writeMarker(directory: string, name: string): Promise<void> {
+  await writeDisplayMarker(directory, name, { event: name });
+}
+
+async function writeDisplayMarker(
+  directory: string,
+  name: string,
+  value: Record<string, unknown>,
+): Promise<void> {
   const path = join(directory, name);
+  try {
+    const existing = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    if (JSON.stringify(existing) !== JSON.stringify(value))
+      throw new Error(`Conflicting Display marker: ${name}`);
+    return;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
   const temporaryPath = `${path}.tmp`;
-  await writeFile(temporaryPath, '');
+  await writeFile(temporaryPath, JSON.stringify(value));
   await rename(temporaryPath, path);
-  await readFile(path);
+  JSON.parse(await readFile(path, 'utf8'));
 }

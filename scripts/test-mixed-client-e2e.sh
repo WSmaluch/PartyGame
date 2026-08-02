@@ -434,6 +434,12 @@ wait_for_marker "${COORDINATION_DIR}/ios-observed-game-start" "iOS game start" 6
 wait_for_process xcodebuild 240 "XCUITest completed" backend vite playwright || exit "$PRIMARY_EXIT_CODE"
 wait_for_process playwright 240 "Display Playwright completed" backend vite || exit "$PRIMARY_EXIT_CODE"
 STAGE="outcome-validation"; jq -e '.status == "passed" and .roomPhase == "Completed" and .roomStartedEvents == 1 and .playedQuestionCount == 4 and .uniqueQuestionIdCount == 4 and .playerSelectionCount == 1 and .textAnswerCount == 1 and .photoAnswerCount == 1 and .drawingAnswerCount == 1 and .rankingCount == 3 and .stateVersionMonotonic == true and .iosReconnectCount == 1 and .iosSamePlayerRecovered == true and .iosVersionRegressionCount == 0 and .displayReconnectCount == 1 and .displayVersionRegressionCount == 0 and .iosObservationCount > 0 and .displayObservationCount > 0 and .scriptedPlayerAObservationCount > 0 and .scriptedPlayerBObservationCount > 0 and .backendObservationCount > 0 and .scriptedPlayerAVersionRegressionCount == 0 and .scriptedPlayerBVersionRegressionCount == 0 and .backendVersionRegressionCount == 0 and .stateVersionLedgerPassed == true and .stateVersionLedgerFailureCount == 0 and .ios == "completed" and .display == "completed" and .scriptedPlayers == "completed" and (.questions | length == 4)' "${COORDINATION_DIR}/outcome.json" >/dev/null || { set_primary_failure $?; exit "$PRIMARY_EXIT_CODE"; }
+for marker in ios-terminal-snapshot-received ios-completed-rendered ios-ranking-rendered; do
+  jq -e '.stateVersion >= 0 and .gameStage != "" and .roomPhase != "" and .connectionState != "" and .timestampUtc != ""' "${COORDINATION_DIR}/${marker}" >/dev/null || { set_primary_failure $?; exit "$PRIMARY_EXIT_CODE"; }
+done
+for marker in display-completed display-ranking-observed; do
+  jq -e '.stateVersion >= 0 and .gameStage == "Completed" and .rankingCount == 3' "${COORDINATION_DIR}/${marker}" >/dev/null || { set_primary_failure $?; exit "$PRIMARY_EXIT_CODE"; }
+done
 [[ -s "${COORDINATION_DIR}/outcome.json" && -s "${COORDINATION_DIR}/state-version-ledger.json" ]] || { set_primary_failure 1; exit "$PRIMARY_EXIT_CODE"; }
 STAGE="completed"; LAST_KNOWN_MARKER="outcome validated"; printf 'PASS: full Mixed Client E2E completed for room %s.\n' "$(mask_room)"
 exit 0

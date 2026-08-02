@@ -118,7 +118,9 @@ PARTYGAME_URLS=http://0.0.0.0:$LAN_PORT
 PARTYGAME_DATABASE_PATH=$(lan_runtime_dir)/database/partygame.db
 PARTYGAME_MEDIA_ROOT=$(lan_runtime_dir)/media
 PARTYGAME_LOG_LEVEL=Information
-PARTYGAME_APPLY_MIGRATIONS=true
+# Production starts in compatibility-check mode. deploy-lan.sh runs the explicit
+# migration operation (including its pre-migration backup) before starting the API.
+PARTYGAME_APPLY_MIGRATIONS=false
 PARTYGAME_DEPLOYMENT_ENABLED=true
 PARTYGAME_DISPLAY_ROOT=$(lan_current_link)/display
 PARTYGAME_ADMIN_ROOT=$(lan_current_link)/admin

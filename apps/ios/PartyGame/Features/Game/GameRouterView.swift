@@ -19,7 +19,7 @@ struct GameRouterView: View {
                 case .pausedForDisplay:
                     PausedForDisplayView()
                 case .completed:
-                    CompletedView(summary: game.roundSummary, players: store.snapshot?.players ?? [])
+                    CompletedView(summary: game.roundSummary, ranking: game.ranking, players: store.snapshot?.players ?? [])
                 case .collectingTextAnswers:
                     CollectingTextAnswersView(store: store, question: game.currentQuestion)
                 case .revealingTextAnswers:
@@ -92,6 +92,9 @@ struct GameRouterView: View {
                 Color.clear.frame(width: 1, height: 1)
                     .accessibilityElement()
                     .accessibilityIdentifier(snapshotIdentifier)
+                Color.clear.frame(width: 1, height: 1)
+                    .accessibilityElement()
+                    .accessibilityIdentifier("game.connection|state=\(store.realtimeDiagnosticState)")
             }
         }
         .task(id: store.snapshot?.game?.resolvedQuestionInstanceId) {

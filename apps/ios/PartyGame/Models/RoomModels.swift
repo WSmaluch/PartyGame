@@ -565,6 +565,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
     let currentQuestion: GameQuestionSnapshot?
     let playerSelectionResults: PlayerSelectionResults?
     let roundSummary: RoundSummarySnapshot?
+    let ranking: [RankingEntry]?
     let textAnswerResults: TextAnswerResults?
     let photoAnswerResults: PhotoAnswerResults?
     let drawingAnswerResults: DrawingAnswerResultsSnapshot?
@@ -575,6 +576,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         pausedRemainingMilliseconds: Double?, scores: [PlayerScoreSnapshot], categories: [GameCategorySnapshot]?,
         currentQuestion: GameQuestionSnapshot?, playerSelectionResults: PlayerSelectionResults?,
         roundSummary: RoundSummarySnapshot?, textAnswerResults: TextAnswerResults?, photoAnswerResults: PhotoAnswerResults? = nil,
+        ranking: [RankingEntry]? = nil,
         drawingAnswerResults: DrawingAnswerResultsSnapshot? = nil
     ) {
         self.stage = stage; self.currentRoundNumber = currentRoundNumber; self.totalRounds = totalRounds
@@ -582,14 +584,14 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         self.stageEndsAtUtc = stageEndsAtUtc; self.pausedAtUtc = pausedAtUtc; self.pausedStage = pausedStage
         self.pausedRemainingMilliseconds = pausedRemainingMilliseconds; self.scores = scores; self.categories = categories
         self.currentQuestion = currentQuestion; self.playerSelectionResults = playerSelectionResults
-        self.roundSummary = roundSummary; self.textAnswerResults = textAnswerResults; self.photoAnswerResults = photoAnswerResults
+        self.roundSummary = roundSummary; self.ranking = ranking; self.textAnswerResults = textAnswerResults; self.photoAnswerResults = photoAnswerResults
         self.drawingAnswerResults = drawingAnswerResults
     }
 
     private enum CodingKeys: String, CodingKey {
         case stage, currentRoundNumber, totalRounds, currentQuestionNumber, questionsInCurrentRound, stageEndsAtUtc
         case pausedAtUtc, pausedStage, pausedRemainingMilliseconds, scores, categories, category, currentQuestion, question
-        case playerSelectionResults, results, roundSummary, textAnswerResults, textResults, photoAnswerResults, drawingAnswerResults
+        case playerSelectionResults, results, roundSummary, ranking, textAnswerResults, textResults, photoAnswerResults, drawingAnswerResults
     }
 
     init(from decoder: Decoder) throws {
@@ -611,6 +613,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         playerSelectionResults = try values.decodeIfPresent(PlayerSelectionResults.self, forKey: .playerSelectionResults)
             ?? values.decodeIfPresent(PlayerSelectionResults.self, forKey: .results)
         roundSummary = try values.decodeIfPresent(RoundSummarySnapshot.self, forKey: .roundSummary)
+        ranking = try values.decodeIfPresent([RankingEntry].self, forKey: .ranking)
         textAnswerResults = try values.decodeIfPresent(TextAnswerResults.self, forKey: .textAnswerResults)
             ?? values.decodeIfPresent(TextAnswerResults.self, forKey: .textResults)
         photoAnswerResults = try values.decodeIfPresent(PhotoAnswerResults.self, forKey: .photoAnswerResults)
@@ -633,6 +636,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         try values.encodeIfPresent(currentQuestion, forKey: .currentQuestion)
         try values.encodeIfPresent(playerSelectionResults, forKey: .playerSelectionResults)
         try values.encodeIfPresent(roundSummary, forKey: .roundSummary)
+        try values.encodeIfPresent(ranking, forKey: .ranking)
         try values.encodeIfPresent(textAnswerResults, forKey: .textAnswerResults)
         try values.encodeIfPresent(photoAnswerResults, forKey: .photoAnswerResults)
         try values.encodeIfPresent(drawingAnswerResults, forKey: .drawingAnswerResults)

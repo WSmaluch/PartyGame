@@ -12,7 +12,7 @@ Etap 8 przygotowuje powtarzalne artefakty i operacyjne zasady uruchomienia Party
    - **8.2D:** walidacja z użyciem adresu LAN;
    - **8.2E:** rollback i ponowne wdrożenie bez utraty danych.
    - **8.2F:** stabilizacja walidacji SQLite i końcowa regresja release/LAN.
-3. **8.3 — trwałość, migracje, backup i recovery.** Polityka wykonywania migracji, kopie zapasowe SQLite/mediów oraz ćwiczenie odtworzenia.
+3. **8.3 — trwałość, migracje, backup i recovery.** Kontrolowane migracje, backup/verify/restore SQLite i mediów, rollback restore oraz retencja.
 4. **8.4 — bezpieczeństwo, sekrety, CORS i ograniczenia sieciowe.** Uprawnienia procesu, źródła sekretów, firewall i produkcyjna polityka originów.
 5. **8.5 — diagnostyka, logi, wersjonowanie i support bundle.** Retencja logów, format diagnostyki oraz pakiet wsparcia bez danych wrażliwych.
 6. **8.6 — RC i końcowy test instalacyjny.** Powtarzalny scenariusz instalacji na czystym hoście i akceptacja release candidate.
@@ -21,7 +21,7 @@ Etap 8 przygotowuje powtarzalne artefakty i operacyjne zasady uruchomienia Party
 
 W zakresie 8.1 API ma jawny kontrakt `PARTYGAME_*`, nie zapisuje danych runtime do katalogu publish w Production, a `/health/ready` sprawdza nieinwazyjnie bazę i katalog mediów. `scripts/build-release.sh` tworzy artefakt oraz uruchamia kontrolowany smoke test. Szczegółowa instrukcja jest w [local-release-build.md](deployment/local-release-build.md).
 
-Polityka migracji i kopii zapasowych nie jest zamknięta w 8.1. `PARTYGAME_APPLY_MIGRATIONS=true` służy wyłącznie do jednorazowego, izolowanego smoke testu; reguły użycia w instalacji produkcyjnej należą do 8.3.
+Produkcja startuje w trybie kontroli zgodności schematu. `PARTYGAME_APPLY_MIGRATIONS=true` pozostaje wyłącznie świadomym trybem operatora; standardowy deployment 8.3 wykonuje pre-migration backup i jawną migrację przed startem API. Szczegóły opisuje instrukcja danych.
 
 ## Dowody walidacji 8.1
 
@@ -44,6 +44,6 @@ Polityka migracji i kopii zapasowych nie jest zamknięta w 8.1. `PARTYGAME_APPLY
 
 Końcowa walidacja 8.2F: Backend Release 285/285 PASS; clean release build, manifest, SHA-256 i smoke PASS; pełna regresja deploymentu LAN (deploy/start/status/health/readiness/version/Display/Admin/SignalR/restart/redeploy/runtime preservation/rollback/stop) PASS przez rzeczywisty nie-loopbackowy adres hosta. Pełny Mixed Client E2E PASS: cztery różne typy pytań, `Completed`, ranking 3, dokładnie jedno `RoomStarted` i monotoniczny ledger `stateVersion`; evidence: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p`. To nie jest test na drugim fizycznym urządzeniu — ta walidacja pozostaje **manual validation pending**.
 
-**Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — niewykonany; Etap 8 — nieukończony.
+**Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — ukończony; 8.4 — niewykonany; Etap 8 — nieukończony. Instrukcja: [data-backup-and-restore.md](deployment/data-backup-and-restore.md).
 
 **Etap 8 — nieukończony.**

@@ -1,10 +1,12 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.FileProviders;
 using PartyGame.Api.Configuration;
+using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Endpoints;
 using PartyGame.Api.Health;
 using PartyGame.Api.Hubs;
@@ -101,6 +103,7 @@ builder.Services.AddSingleton<PartyGame.Api.Contracts.IPhotoMediaUrlProvider, Pa
 builder.Services.AddSingleton<RoomNotifier>();
 builder.Services.AddDbContext<PartyGameDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("PartyGame")));
+builder.Services.AddScoped<DatabaseSchemaService>();
 
 var allowedOrigins = builder.Environment.IsProduction()
     ? releaseRuntime.AllowedOrigins
@@ -126,6 +129,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+var dataOperation = args.SingleOrDefault(argument => argument is "check" or "migrate");
+if (dataOperation is not null)
+{
+    await using var operationScope = app.Services.CreateAsyncScope();
+    var schema = operationScope.ServiceProvider.GetRequiredService<DatabaseSchemaService>();
+    var result = dataOperation == "migrate"
+        ? await schema.MigrateAsync()
+        : await schema.GetStatusAsync();
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
+    return;
+}
+
 app.UseExceptionHandler(exceptionHandlerApp =>
 {
     exceptionHandlerApp.Run(async context =>
@@ -139,6 +154,8 @@ app.UseExceptionHandler(exceptionHandlerApp =>
             PhotoAnswerException photo => Results.Problem(statusCode: PhotoStatus(photo.Code), title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = photo.Code }),
             DrawingAnswerException drawing => Results.Problem(statusCode: DrawingStatus(drawing.Code), title: exception.Message, extensions: new Dictionary<string, object?> { ["code"] = drawing.Code }),
             RoomConflictException or RoomCodeGenerationException => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: exception.Message),
+            DbUpdateConcurrencyException => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "The requested data changed concurrently; refresh and retry."),
+            DbUpdateException { InnerException: SqliteException { SqliteErrorCode: 5 or 6 } } => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "The requested data changed concurrently; refresh and retry."),
             _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "An unexpected error occurred.")
         };
         if (exception is RoomException or DomainValidationException)
@@ -159,8 +176,16 @@ if (app.Environment.IsDevelopment() || releaseRuntime.ApplyMigrations)
     app.UseSwaggerUI();
 
     await using var scope = app.Services.CreateAsyncScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
-    await dbContext.Database.MigrateAsync();
+    var schema = scope.ServiceProvider.GetRequiredService<DatabaseSchemaService>();
+    await schema.MigrateAsync();
+}
+else if (app.Environment.IsProduction())
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var schema = scope.ServiceProvider.GetRequiredService<DatabaseSchemaService>();
+    var status = await schema.GetStatusAsync();
+    if (status.DatabaseCompatibility != "compatible" || status.MigrationRequired)
+        throw new InvalidOperationException("Database schema is not compatible with this release; run the explicit migrate operation before starting the API.");
 }
 
 await using (var scope = app.Services.CreateAsyncScope())
@@ -271,6 +296,11 @@ app.MapGet("/api/system/version", (IHostEnvironment environment) =>
 })
     .WithName("GetSystemVersion")
     .Produces<SystemVersionResponse>(StatusCodes.Status200OK);
+
+app.MapGet("/api/system/schema", async (DatabaseSchemaService schema, CancellationToken cancellationToken) =>
+    Results.Ok(await schema.GetStatusAsync(cancellationToken)))
+    .WithName("GetDatabaseSchema")
+    .Produces<DatabaseSchemaStatus>(StatusCodes.Status200OK);
 
 app.MapGet("/health/storage", async (
     IMediaStorageDiagnosticsService diagnostics,

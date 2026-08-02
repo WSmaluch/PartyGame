@@ -38,9 +38,14 @@ struct LobbyView: View {
         .navigationBarBackButtonHidden()
         .overlay(alignment: .topLeading) {
             if let snapshot = store.snapshot {
-                Color.clear.frame(width: 1, height: 1)
-                    .accessibilityElement()
-                    .accessibilityIdentifier(SnapshotAccessibilityMetadata.identifier(snapshot: snapshot, phase: snapshot.phase.rawValue, questionId: nil))
+                ZStack {
+                    Color.clear.frame(width: 1, height: 1)
+                        .accessibilityElement()
+                        .accessibilityIdentifier(SnapshotAccessibilityMetadata.identifier(snapshot: snapshot, phase: snapshot.phase.rawValue, questionId: nil))
+                    Color.clear.frame(width: 1, height: 1)
+                        .accessibilityElement()
+                        .accessibilityIdentifier("game.connection|state=\(store.realtimeDiagnosticState)")
+                }
             }
         }
         .alert("session.forget.title", isPresented: $confirmsForget) {

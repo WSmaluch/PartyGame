@@ -35,7 +35,10 @@ public sealed record StateVersionLedgerResult(
 public sealed class StateVersionLedgerAggregator
 {
     public static readonly IReadOnlyList<string> RequiredClients = ["ios", "display", "scripted-player-a", "scripted-player-b", "backend"];
-    private static readonly HashSet<string> ObservationFields = ["client", "event", "stateVersion", "phase", "questionId", "timestampUtc"];
+    // iOS adds these diagnostic fields to its shared observations.  They are
+    // deliberately enumerated here so the ledger remains strict about schema
+    // drift while accepting the cross-client diagnostic contract.
+    private static readonly HashSet<string> ObservationFields = ["client", "event", "stateVersion", "phase", "questionId", "timestampUtc", "gameStage", "roomPhase", "questionInstanceId", "connectionState"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public StateVersionLedgerResult Aggregate(string coordinationDirectory)

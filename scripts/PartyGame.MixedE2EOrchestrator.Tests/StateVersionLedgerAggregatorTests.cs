@@ -149,6 +149,26 @@ public sealed class StateVersionLedgerAggregatorTests
     }
 
     [Fact]
+    public void AcceptsDeclaredIosDiagnosticObservationFields()
+    {
+        using var fixture = LedgerFixture.Empty();
+        fixture.WriteRaw("ios-observation-000001.json", "{\"client\":\"ios\",\"event\":\"snapshot-before-disconnect\",\"stateVersion\":20,\"phase\":\"collectingPhotoAnswers\",\"questionId\":\"question\",\"timestampUtc\":\"2026-07-28T00:00:00Z\",\"gameStage\":\"collectingPhotoAnswers\",\"roomPhase\":\"Started\",\"questionInstanceId\":\"question\",\"connectionState\":\"Connected\"}");
+        fixture.WriteRaw("ios-observation-000002.json", "{\"client\":\"ios\",\"event\":\"snapshot-after-recovery\",\"stateVersion\":21,\"phase\":\"completed\",\"questionId\":\"question\",\"timestampUtc\":\"2026-07-28T00:00:01Z\",\"gameStage\":\"completed\",\"roomPhase\":\"Completed\",\"questionInstanceId\":\"question\",\"connectionState\":\"Connected\"}");
+        fixture.Write("display", 1, 20, "snapshot-before-reload");
+        fixture.Write("display", 2, 21, "snapshot-after-reconnect", phase: "Completed");
+        fixture.Write("scripted-player-a", 1, 21, "snapshot-accepted", phase: "Completed");
+        fixture.Write("scripted-player-b", 1, 21, "snapshot-accepted", phase: "Completed");
+        fixture.Write("backend", 1, 20, "snapshot-accepted");
+        fixture.Write("backend", 2, 21, "snapshot-accepted", phase: "Completed");
+
+        var ledger = new StateVersionLedgerAggregator().Aggregate(fixture.Directory);
+
+        Assert.True(ledger.Passed);
+        Assert.True(ledger.Clients["ios"].Passed);
+        Assert.Equal(2, ledger.Clients["ios"].ObservationCount);
+    }
+
+    [Fact]
     public void SortsFilesByParsedSequenceRatherThanEnumerationOrder()
     {
         using var fixture = LedgerFixture.Empty();

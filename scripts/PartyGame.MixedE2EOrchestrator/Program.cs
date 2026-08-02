@@ -144,6 +144,11 @@ try
         }
         var active = Active(hostSnapshot, questionTypes);
         var nodeActive = Active(nodeSnapshot, questionTypes);
+        // Snapshot delivery is asynchronous. Record each independently observed
+        // active question before requiring both clients to agree on the exact
+        // actionable state, so a terminal transition cannot hide a valid round.
+        if (active is not null) tracker.ObserveQuestion(active);
+        if (nodeActive is not null) tracker.ObserveQuestion(nodeActive);
         if (active is null || nodeActive is null || active.Id != nodeActive.Id || active.Stage != nodeActive.Stage || active.StateVersion != nodeActive.StateVersion)
         {
             await Task.Delay(100);
@@ -226,6 +231,9 @@ try
     tracker.AssertComplete(completed, Volatile.Read(ref startedEvents));
     await WaitForMarker("display-completed", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-completed-observed", TimeSpan.FromSeconds(30));
+    await WaitForMarker("ios-terminal-snapshot-received", TimeSpan.FromSeconds(30));
+    await WaitForMarker("ios-completed-rendered", TimeSpan.FromSeconds(30));
+    await WaitForMarker("ios-ranking-rendered", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-recovered-state", TimeSpan.FromSeconds(30));
     await WaitForMarker("display-reconnected", TimeSpan.FromSeconds(30));
     var ledger = new StateVersionLedgerAggregator().Aggregate(coordinationDir);

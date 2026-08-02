@@ -16,8 +16,8 @@ public sealed class ReleaseRuntimeOptions
     public string AdminPublicUrl { get; set; } = string.Empty;
     public string[] AllowedOrigins { get; set; } = [];
 
-    // This is intentionally opt-in. Migration/backup policy is completed in stage 8.3;
-    // the release smoke test uses it only against a disposable runtime directory.
+    // This is intentionally opt-in. Production deployments normally migrate through
+    // scripts/migrate-data.sh, which takes the lifecycle lock and pre-migration backup.
     public bool ApplyMigrations { get; set; }
 }
 

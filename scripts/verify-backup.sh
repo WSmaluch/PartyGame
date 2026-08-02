@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/data-lifecycle-common.sh"
+BACKUP="${1:-}"
+[[ -n "$BACKUP" && $# -eq 1 ]] || data_die "usage: verify-backup.sh BACKUP_DIRECTORY"
+data_require_absolute backup "$BACKUP"
+data_validate_backup_layout "$BACKUP"
+data_verify_checksums "$BACKUP" >/dev/null || data_die "checksum mismatch" "$DATA_EXIT_CHECKSUM"
+data_sqlite_integrity "$BACKUP/database/partygame.db" || data_die "SQLite integrity_check failed" "$DATA_EXIT_SQLITE"
+schema="$(data_schema_version "$BACKUP/database/partygame.db")"; expected="$(jq -r '.databaseSchemaVersion' "$BACKUP/backup-manifest.json")"
+[[ -n "$schema" && "$schema" == "$expected" ]] || data_die "unsupported database schema version" "$DATA_EXIT_SCHEMA"
+expected_count="$(jq -r '.mediaFileCount' "$BACKUP/backup-manifest.json")"; actual_count="$(find "$BACKUP/media" -type f -not -type l | wc -l | tr -d ' ')"
+[[ "$expected_count" == "$actual_count" ]] || data_die "media file count differs from manifest" "$DATA_EXIT_INCOMPLETE"
+expected_db_size="$(jq -r '.databaseSize' "$BACKUP/backup-manifest.json")"; [[ "$expected_db_size" == "$(data_size "$BACKUP/database/partygame.db")" ]] || data_die "database size differs from manifest" "$DATA_EXIT_INCOMPLETE"
+expected_media_size="$(jq -r '.mediaTotalSize' "$BACKUP/backup-manifest.json")"; [[ "$expected_media_size" == "$(data_tree_size "$BACKUP/media")" ]] || data_die "media size differs from manifest" "$DATA_EXIT_INCOMPLETE"
+data_validate_media_consistency "$BACKUP"
+echo "PartyGame backup verification PASS: $BACKUP"

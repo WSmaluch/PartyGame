@@ -58,7 +58,7 @@ Dodaj `--host` i `--port`, gdy różnią się od zapisanej konfiguracji. API jes
 
 ## Aktualizacja i rollback
 
-Deploy nowego artefaktu zachowuje runtime. Przed rollbackiem nie zmieniaj ręcznie bazy: etap 8.3 zdefiniuje kompatybilność migracji oraz backup i restore.
+Deploy nowego artefaktu zachowuje runtime. Przepływ 8.3 to `backup → stop → deploy → migrate → start → readiness → smoke`; `deploy-lan.sh` wykonuje ten kontrolowany przebieg i blokuje rollback release, jeżeli aktualny schemat bazy jest niezgodny ze starszym API. Ręczne procedury backupu i recovery opisuje [data-backup-and-restore.md](data-backup-and-restore.md).
 
 ```bash
 scripts/deploy-lan.sh --deploy-root "$HOME/PartyGame" --rollback <version> --host 192.168.1.50
@@ -75,6 +75,8 @@ Na drugim komputerze lub telefonie, bez uruchamiania lokalnego Vite, otwórz `/d
 macOS: zezwól `dotnet` na połączenia przychodzące w **Ustawienia systemowe → Sieć → Zapora sieciowa**. Linux: otwórz wybrany port TCP w lokalnym firewallu (np. `ufw allow 5050/tcp`) tylko dla zaufanej podsieci. Przy błędach sprawdź `runtime/logs`, `status-lan.sh`, zajęty port, izolację klientów Wi-Fi i VPN. Aby usunąć instalację bez danych, usuń wyłącznie wskazane katalogi w `releases/` i symlink `current`; zachowaj `runtime/` oraz `config/`.
 
 Automatyczna regresja używa realnego nie-loopbackowego adresu hosta. Walidacja na drugim fizycznym urządzeniu pozostaje **manual validation pending**; automatyczny test LAN nie jest deklarowany jako jej substytut.
+
+Przed update release wykonaj zweryfikowany backup danych. Procedura `backup → stop → deploy → migrate → start → readiness → smoke` oraz rollback przez pre-migration backup opisuje [backup i restore danych](data-backup-and-restore.md). Nie cofaj release do wersji nieobsługującej aktualnego schematu.
 
 ## Wynik regresji 8.2F
 

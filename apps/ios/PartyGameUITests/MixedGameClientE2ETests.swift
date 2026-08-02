@@ -100,12 +100,28 @@ final class MixedGameClientE2ETests: XCTestCase {
             // rendered terminal state rather than an unrelated accessibility
             // container.
             if app.staticTexts["game-completed-view"].exists {
-                _ = try recordCurrentSnapshot(event: "snapshot-completed", stage: "completed")
+                let terminal = try recordCurrentSnapshot(event: "ios-terminal-snapshot-received", stage: "completed")
+                try observationWriter.writeMarkerOnce("ios-terminal-snapshot-received", observation: terminal)
+                try waitUntil(timeout: 10, description: "trzy wyrenderowane pozycje rankingu") {
+                    self.rankingEntryCount() == 3
+                }
+                let completed = try snapshot(from: app, event: "ios-completed-rendered")
+                try observationWriter.writeMarkerOnce("ios-completed-rendered", observation: completed, rankingCount: rankingEntryCount())
+                try observationWriter.writeMarkerOnce("ios-ranking-rendered", observation: completed, rankingCount: rankingEntryCount())
                 mark("ios-completed-observed")
                 return
             }
 
             var performedAction = false
+            if let current = try? snapshot(from: app, event: "snapshot-stage-observed") {
+                if current.phase == "showingPhotoAnswerResults" {
+                    let photoResults = try snapshot(from: app, event: "ios-photo-results-observed")
+                    try observationWriter.writeMarkerOnce("ios-photo-results-observed", observation: photoResults)
+                }
+                if current.phase == "completed" {
+                    try observationWriter.writeMarkerOnce("ios-terminal-snapshot-received", observation: current)
+                }
+            }
             if let current = try? snapshot(from: app, event: "drawing-question-detected"),
                current.phase == "collectingDrawingAnswers",
                diagnosedDrawingQuestions.insert(current.questionId).inserted {
@@ -243,6 +259,7 @@ final class MixedGameClientE2ETests: XCTestCase {
             }
             if !didReconnect, !submitted.isEmpty {
                 let before = try recordCurrentSnapshot(event: "snapshot-before-disconnect", stage: "before-disconnect")
+                try observationWriter.writeMarkerOnce("ios-before-reconnect", observation: before)
                 mark("ios-reconnect-requested")
                 app.terminate()
                 mark("ios-terminated")
@@ -254,6 +271,7 @@ final class MixedGameClientE2ETests: XCTestCase {
                 }
                 let recovered = try recordCurrentSnapshot(event: "snapshot-after-recovery", stage: "after-recovery")
                 XCTAssertGreaterThanOrEqual(recovered.stateVersion, before.stateVersion)
+                try observationWriter.writeMarkerOnce("ios-after-reconnect", observation: recovered)
                 mark("ios-reconnected")
                 mark("ios-recovered-state")
                 didReconnect = true
@@ -364,11 +382,28 @@ final class MixedGameClientE2ETests: XCTestCase {
         guard identifier.hasPrefix(prefix) else {
             throw NSError(domain: "MixedGameClientE2E", code: 7, userInfo: [NSLocalizedDescriptionKey: "\(event): brak accessibility identifier snapshotu."])
         }
-        return try IOSStateVersionObservation.parse(identifier: identifier, event: event)
+        return try IOSStateVersionObservation.parse(identifier: identifier, event: event, connectionState: connectionState())
     }
 
     private func recordCurrentSnapshot(event: String, stage: String) throws -> IOSStateVersionObservation {
         do { let value = try snapshot(from: app, event: event); try observationWriter.record(value); return value }
         catch { XCTFail("\(stage): \(error.localizedDescription)"); throw error }
+    }
+
+    private func connectionState() -> String {
+        let prefix = "game.connection|state="
+        let elements = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", prefix))
+        let identifier = elements.firstMatch.identifier
+        return identifier.hasPrefix(prefix) ? String(identifier.dropFirst(prefix.count)) : "Unknown"
+    }
+
+    private func rankingEntryCount() -> Int {
+        Set(app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "game-ranking-entry-"))
+            .allElementsBoundByIndex
+            .filter(\.exists)
+            .map(\.identifier))
+            .count
     }
 }

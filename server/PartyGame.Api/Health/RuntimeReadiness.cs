@@ -1,12 +1,20 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PartyGame.Api.Configuration;
+using PartyGame.Api.Diagnostics;
 using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 
 namespace PartyGame.Api.Health;
 
-public sealed record RuntimeReadinessResult(string Status, string Database, string MediaStorage, string Display, string Admin);
+public sealed record RuntimeReadinessResult(
+    string Status,
+    string Database,
+    string Schema,
+    string MediaStorage,
+    string DataOperation,
+    string Display,
+    string Admin);
 
 public static class RuntimeReadiness
 {
@@ -17,11 +25,18 @@ public static class RuntimeReadiness
         CancellationToken cancellationToken)
     {
         var databaseReady = false;
+        var schemaReady = false;
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
             databaseReady = await dbContext.Database.CanConnectAsync(cancellationToken);
+            if (databaseReady)
+            {
+                var schema = scope.ServiceProvider.GetRequiredService<DatabaseSchemaService>();
+                var status = await schema.GetStatusAsync(cancellationToken);
+                schemaReady = status.DatabaseCompatibility == "compatible" && !status.MigrationRequired;
+            }
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -29,6 +44,7 @@ public static class RuntimeReadiness
         }
 
         var mediaReady = false;
+        var dataOperationActive = false;
         try
         {
             var root = MediaStoragePathResolver.ResolveRootPath(mediaOptions.Value.RootPath);
@@ -36,6 +52,8 @@ public static class RuntimeReadiness
             {
                 _ = Directory.EnumerateFileSystemEntries(root).Take(1).ToArray();
                 mediaReady = true;
+                var runtime = Directory.GetParent(root)?.FullName;
+                dataOperationActive = runtime is not null && Directory.Exists(Path.Combine(runtime, "operations", "data-operation.lock"));
             }
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
@@ -47,9 +65,11 @@ public static class RuntimeReadiness
         var adminReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.AdminRoot);
 
         return new RuntimeReadinessResult(
-            databaseReady && mediaReady && displayReady && adminReady ? "ready" : "not-ready",
+            databaseReady && schemaReady && mediaReady && !dataOperationActive && displayReady && adminReady ? "ready" : "not-ready",
             databaseReady ? "ready" : "unavailable",
+            schemaReady ? "compatible" : "migration-required-or-incompatible",
             mediaReady ? "ready" : "unavailable",
+            dataOperationActive ? "active" : "idle",
             displayReady ? "ready" : "unavailable",
             adminReady ? "ready" : "unavailable");
     }

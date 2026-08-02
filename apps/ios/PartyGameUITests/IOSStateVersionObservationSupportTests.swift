@@ -84,6 +84,25 @@ final class IOSStateVersionObservationSupportTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: target), Data("existing".utf8))
     }
 
+    func testDiagnosticMarkerIsAtomicAndWrittenOnlyOnce() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let writer = try IOSObservationWriter(directory: directory)
+        let first = observation(version: 41, event: "ios-photo-results-observed")
+        let later = observation(version: 42, event: "must-not-overwrite")
+
+        try writer.writeMarkerOnce("ios-photo-results-observed", observation: first)
+        try writer.writeMarkerOnce("ios-photo-results-observed", observation: later)
+
+        let target = directory.appendingPathComponent("ios-photo-results-observed")
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: target)) as? [String: Any]
+        XCTAssertEqual(json?["event"] as? String, "ios-photo-results-observed")
+        XCTAssertEqual(json?["stateVersion"] as? Int, 41)
+        XCTAssertEqual(json?["gameStage"] as? String, "Lobby")
+        XCTAssertEqual(json?["connectionState"] as? String, "Unknown")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent(".ios-photo-results-observed.tmp").path))
+    }
+
     func testWriterFailsClearlyForMissingCoordinationDirectory() {
         let missing = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("partygame-ios-observation-missing-\(UUID().uuidString)")
 

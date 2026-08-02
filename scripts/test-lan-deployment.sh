@@ -23,7 +23,7 @@ lan_is_private_ipv4 "$host" || { echo "--host must be private IPv4" >&2; exit 64
 
 port="$(node "$SCRIPT_DIR/find-free-port.mjs")"
 test_root="$(mktemp -d "${TMPDIR:-/private/tmp}/partygame-lan-test.XXXXXX")"
-runtime_marker="$test_root/runtime/media/preserved-marker"
+runtime_marker="$test_root/runtime/preserved-marker"
 cleanup() {
   "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$test_root" --host "$host" --port "$port" >/dev/null 2>&1 || true
   chmod -R u+w "$test_root" 2>/dev/null || true

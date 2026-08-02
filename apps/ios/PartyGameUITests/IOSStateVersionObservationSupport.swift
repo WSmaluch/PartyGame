@@ -26,18 +26,33 @@ struct IOSStateVersionObservation: Codable, Equatable {
     let stateVersion: Int64
     let phase: String
     let questionId: String
+    let gameStage: String
+    let roomPhase: String
+    let questionInstanceId: String
+    let connectionState: String
     let timestampUtc: String
 
-    init(event: String, stateVersion: Int64, phase: String, questionId: String, timestampUtc: String = ISO8601DateFormatter().string(from: Date())) {
+    init(
+        event: String,
+        stateVersion: Int64,
+        phase: String,
+        questionId: String,
+        connectionState: String = "Unknown",
+        timestampUtc: String = ISO8601DateFormatter().string(from: Date())
+    ) {
         self.client = "ios"
         self.event = event
         self.stateVersion = stateVersion
         self.phase = phase
         self.questionId = questionId
+        self.gameStage = phase
+        self.roomPhase = phase == "Lobby" ? "Lobby" : (phase == "completed" ? "Completed" : "Started")
+        self.questionInstanceId = questionId
+        self.connectionState = connectionState
         self.timestampUtc = timestampUtc
     }
 
-    static func parse(identifier: String, event: String) throws -> Self {
+    static func parse(identifier: String, event: String, connectionState: String = "Unknown") throws -> Self {
         guard !event.isEmpty else { throw IOSStateVersionObservationError.invalidIdentifier(identifier) }
         let segments = identifier.split(separator: "|", omittingEmptySubsequences: false)
         guard segments.count == 4, segments[0] == "game.snapshot" else {
@@ -66,7 +81,7 @@ struct IOSStateVersionObservation: Codable, Equatable {
             throw IOSStateVersionObservationError.invalidIdentifier(identifier)
         }
 
-        return Self(event: event, stateVersion: stateVersion, phase: phase, questionId: questionId)
+        return Self(event: event, stateVersion: stateVersion, phase: phase, questionId: questionId, connectionState: connectionState)
     }
 }
 
@@ -114,5 +129,43 @@ final class IOSObservationWriter {
         try FileManager.default.moveItem(at: temporary, to: target)
         _ = try JSONDecoder().decode(IOSStateVersionObservation.self, from: Data(contentsOf: target))
         sequence = nextSequence
+    }
+
+    func writeMarkerOnce(_ name: String, observation: IOSStateVersionObservation, rankingCount: Int? = nil) throws {
+        let target = directory.appendingPathComponent(name)
+        if FileManager.default.fileExists(atPath: target.path) {
+            _ = try JSONDecoder().decode(IOSDiagnosticMarker.self, from: Data(contentsOf: target))
+            return
+        }
+
+        let marker = IOSDiagnosticMarker(observation: observation, rankingCount: rankingCount)
+        let temporary = directory.appendingPathComponent(".\(name).tmp")
+        let data = try JSONEncoder().encode(marker)
+        try data.write(to: temporary)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try FileManager.default.moveItem(at: temporary, to: target)
+        _ = try JSONDecoder().decode(IOSDiagnosticMarker.self, from: Data(contentsOf: target))
+    }
+}
+
+private struct IOSDiagnosticMarker: Codable {
+    let event: String
+    let stateVersion: Int64
+    let gameStage: String
+    let roomPhase: String
+    let questionInstanceId: String
+    let connectionState: String
+    let timestampUtc: String
+    let rankingCount: Int?
+
+    init(observation: IOSStateVersionObservation, rankingCount: Int?) {
+        event = observation.event
+        stateVersion = observation.stateVersion
+        gameStage = observation.gameStage
+        roomPhase = observation.roomPhase
+        questionInstanceId = observation.questionInstanceId
+        connectionState = observation.connectionState
+        timestampUtc = observation.timestampUtc
+        self.rankingCount = rankingCount
     }
 }

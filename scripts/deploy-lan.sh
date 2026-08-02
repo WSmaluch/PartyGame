@@ -53,11 +53,21 @@ restore_previous() {
   fi
 }
 
+check_schema_compatibility() {
+  local release="$1"
+  PARTYGAME_APPLY_MIGRATIONS=false dotnet "$release/api/PartyGame.Api.dll" check >/dev/null
+}
+
 if [[ -n "$rollback_version" ]]; then
   target="$LAN_DEPLOY_ROOT/releases/$rollback_version"
   [[ -d "$target" ]] || lan_die "rollback version does not exist: $rollback_version"
   lan_verify_installed_release "$target"
   "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
+  lan_load_environment
+  if ! check_schema_compatibility "$target"; then
+    echo "PartyGame LAN: rollback blocked because the current database is incompatible with $rollback_version." >&2
+    exit 1
+  fi
   switch_current "$target"
   lan_write_environment
   if ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
@@ -88,9 +98,12 @@ else
 fi
 
 "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
+if [[ -f "$(lan_runtime_dir)/database/partygame.db" ]]; then
+  "$SCRIPT_DIR/backup-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --maintenance
+fi
 switch_current "$target"
 lan_write_environment
-if ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
+if ! "$SCRIPT_DIR/migrate-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --migrate || ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
   restore_previous
   echo "PartyGame LAN: deployment failed and previous current was restored." >&2
   exit 1

@@ -147,6 +147,58 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot?.players[0].isReady, false)
     }
 
+    func testAppliesPhotoResultsThenNewerDrawingSnapshot() {
+        let playerId = UUID()
+        let photo = roomSnapshot(playerId: playerId, version: 40, game: game(stage: .showingPhotoAnswerResults, questionId: UUID()))
+        let drawing = roomSnapshot(playerId: playerId, version: 41, game: game(stage: .collectingDrawingAnswers, questionId: UUID()))
+
+        store.apply(photo)
+        store.apply(drawing)
+
+        XCTAssertEqual(store.snapshot?.stateVersion, 41)
+        XCTAssertEqual(store.snapshot?.game?.stage, .collectingDrawingAnswers)
+    }
+
+    func testDelayedPhotoResultsSnapshotCannotOverwriteNewerDrawingSnapshot() {
+        let playerId = UUID()
+        let drawing = roomSnapshot(playerId: playerId, version: 41, game: game(stage: .collectingDrawingAnswers, questionId: UUID()))
+        let delayedPhoto = roomSnapshot(playerId: playerId, version: 40, game: game(stage: .showingPhotoAnswerResults, questionId: UUID()))
+
+        store.apply(drawing)
+        store.apply(delayedPhoto)
+
+        XCTAssertEqual(store.snapshot?.stateVersion, 41)
+        XCTAssertEqual(store.snapshot?.game?.stage, .collectingDrawingAnswers)
+    }
+
+    func testReconnectRecoveryAppliesHigherSnapshotWithoutIntermediatePhase() async {
+        let playerId = UUID()
+        let photo = roomSnapshot(playerId: playerId, version: 40, game: game(stage: .showingPhotoAnswerResults, questionId: UUID()))
+        let completed = completedSnapshot(playerId: playerId, version: 42)
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: photo,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = photo
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+
+        realtime.attachPlayerResult = completed
+        api.resumeResult = ResumePlayerResponse(player: completed.players[0], snapshot: completed,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        await store.retryConnection()
+
+        XCTAssertEqual(store.snapshot?.stateVersion, 42)
+        XCTAssertEqual(store.snapshot?.game?.stage, .completed)
+    }
+
+    func testRealtimeCallbackAppliesHigherSnapshotOnMainActor() async {
+        let playerId = UUID()
+        let completed = completedSnapshot(playerId: playerId, version: 42)
+        await Task { @MainActor in realtime.onSnapshot?(completed) }.value
+
+        XCTAssertTrue(Thread.isMainThread)
+        XCTAssertEqual(store.snapshot?.stateVersion, 42)
+        XCTAssertEqual(store.snapshot?.game?.stage, .completed)
+    }
+
     func testApplicationBecameActiveRetriesConnection() async {
         let playerId = UUID()
         let snapshot = RoomSnapshot(roomCode: "TEST", phase: .lobby, stateVersion: 1, displayConnected: false, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: false, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)], createdAtUtc: "", startedAtUtc: nil, game: nil)
@@ -326,6 +378,22 @@ final class GameSessionStoreTests: XCTestCase {
             scores: [], categories: nil, currentQuestion: GameQuestionSnapshot(instanceId: questionId, categoryId: UUID(),
                 questionText: LocalizedText(defaultText: "Text", translations: nil), requiredAnswerType: "TextAnswer"),
             playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil)
+    }
+
+    private func game(stage: GameStage, questionId: UUID?) -> GameSnapshot {
+        GameSnapshot(stage: stage, currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1,
+            questionsInCurrentRound: 4, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil,
+            pausedRemainingMilliseconds: nil, scores: [], categories: nil,
+            currentQuestion: questionId.map { GameQuestionSnapshot(instanceId: $0, categoryId: UUID(), questionText: LocalizedText(defaultText: "Question", translations: nil), requiredAnswerType: "PhotoAnswer") },
+            playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil)
+    }
+
+    private func completedSnapshot(playerId: UUID, version: Int64) -> RoomSnapshot {
+        RoomSnapshot(roomCode: "TEST", phase: .completed, stateVersion: version, displayConnected: true,
+            minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(),
+            players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: true, isConnected: true,
+                hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)], createdAtUtc: "", startedAtUtc: "",
+            game: game(stage: .completed, questionId: nil))
     }
 }
 

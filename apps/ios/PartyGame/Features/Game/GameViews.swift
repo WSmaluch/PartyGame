@@ -147,6 +147,7 @@ struct RoundSummaryView: View {
                         Spacer()
                         Text("\(ranking.score) pts")
                     }
+                    .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                 }
             } else {
                 Text("round.summary.no_data")
@@ -168,14 +169,20 @@ struct PausedForDisplayView: View {
 
 struct CompletedView: View {
     let summary: RoundSummarySnapshot?
+    let ranking: [RankingEntry]?
     let players: [RoomPlayer]
+
+    private var finalRanking: [RankingEntry] {
+        summary?.rankings ?? ranking ?? []
+    }
+
     var body: some View {
         VStack {
             Text("game.completed")
                 .font(.largeTitle)
             
-            if let summary = summary {
-                List(summary.rankings.sorted(by: { $0.position < $1.position }), id: \.playerId) { ranking in
+            if !finalRanking.isEmpty {
+                List(finalRanking.sorted(by: { $0.position < $1.position }), id: \.playerId) { ranking in
                     HStack {
                         Text("#\(ranking.position)")
                             .font(.headline)
@@ -185,6 +192,7 @@ struct CompletedView: View {
                         Spacer()
                         Text("\(ranking.score) pts")
                     }
+                    .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                 }
             }
         }

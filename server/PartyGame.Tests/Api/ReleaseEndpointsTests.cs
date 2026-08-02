@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using PartyGame.Api.Health;
 using PartyGame.Api.Configuration;
+using PartyGame.Api.Diagnostics;
 using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 
@@ -45,6 +46,21 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
     }
 
     [Fact]
+    public async Task GetDatabaseSchema_ReturnsSafeMigrationCompatibility()
+    {
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/system/schema");
+        var body = await response.Content.ReadFromJsonAsync<DatabaseSchemaStatus>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("compatible", body.DatabaseCompatibility);
+        Assert.False(body.MigrationRequired);
+        Assert.DoesNotContain(Path.DirectorySeparatorChar.ToString(), body.DatabaseSchemaVersion);
+    }
+
+    [Fact]
     public async Task Readiness_ReportsUnavailableMediaWithoutWritingAProbeFile()
     {
         var root = Path.Combine(Path.GetTempPath(), "PartyGame.Tests", Guid.NewGuid().ToString("N"));
@@ -56,7 +72,7 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
             var provider = CreateProvider($"Data Source={databasePath}");
             await using (var scope = provider.CreateAsyncScope())
             {
-                await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().Database.EnsureCreatedAsync();
+                await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().Database.MigrateAsync();
             }
 
             var result = await RuntimeReadiness.CheckAsync(
@@ -94,6 +110,35 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
             Assert.Equal("not-ready", result.Status);
             Assert.Equal("unavailable", result.Database);
             Assert.Equal("ready", result.MediaStorage);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Readiness_ReportsAnActiveDataOperation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PartyGame.Tests", Guid.NewGuid().ToString("N"));
+        var media = Path.Combine(root, "media");
+        Directory.CreateDirectory(media);
+        Directory.CreateDirectory(Path.Combine(root, "operations", "data-operation.lock"));
+        try
+        {
+            var provider = CreateProvider($"Data Source={Path.Combine(root, "test.db")}");
+            await using (var scope = provider.CreateAsyncScope())
+                await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().Database.MigrateAsync();
+
+            var result = await RuntimeReadiness.CheckAsync(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(new MediaOptions { RootPath = media }),
+                Options.Create(new DeploymentOptions()),
+                CancellationToken.None);
+
+            Assert.Equal("not-ready", result.Status);
+            Assert.Equal("active", result.DataOperation);
+            Assert.Equal("compatible", result.Schema);
         }
         finally
         {
@@ -153,7 +198,7 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
         {
             var provider = CreateProvider($"Data Source={Path.Combine(root, "test.db")}");
             await using (var scope = provider.CreateAsyncScope())
-                await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().Database.EnsureCreatedAsync();
+                await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().Database.MigrateAsync();
             var media = Path.Combine(root, "media");
             Directory.CreateDirectory(media);
 
@@ -177,6 +222,7 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
     {
         var services = new ServiceCollection();
         services.AddDbContext<PartyGameDbContext>(options => options.UseSqlite(connectionString));
+        services.AddScoped<DatabaseSchemaService>();
         return services.BuildServiceProvider();
     }
 
