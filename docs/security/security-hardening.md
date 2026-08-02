@@ -17,3 +17,7 @@ Media names are server-generated. Storage validates declared MIME type, signatur
 Room traffic is limited per source IP and room. Uploads have a stricter limiter; operator attempts are limited per source IP. Rejections return `429` with `Retry-After: 60`. Limits are deliberately high enough for the normal Mixed Client flow and are not disabled in test profiles.
 
 Responses receive `nosniff`, `no-referrer`, `DENY` framing, restrictive permissions policy, and a CSP restricted to same-origin scripts, connections and assets. Blob/data images are allowed only for the client media previews.
+
+## SignalR Display lifecycle
+
+An attached Display may issue `DetachDisplay` for its own room. The hub verifies the active Display identity, removes only that assignment, updates room connectivity and publishes the resulting public state. This gives clients a controlled disconnect path while `OnDisconnectedAsync` remains the fallback for transport loss.

@@ -47,3 +47,13 @@ Końcowa walidacja 8.2F: Backend Release 285/285 PASS; clean release build, mani
 **Status:** 8.1 — ukończony; 8.2A–8.2F — ukończone; 8.2 — ukończony i w pełni zwalidowany; 8.3 — ukończony; 8.4A–8.4E — ukończone; 8.4 — ukończony; 8.5 — niewykonany; Etap 8 — nieukończony. Instrukcja: [data-backup-and-restore.md](deployment/data-backup-and-restore.md), [security hardening](security/security-hardening.md).
 
 **Etap 8 — nieukończony.**
+
+## Finalizacja 8.4
+
+Źródło dwóch niestabilności release zostało usunięte bez wyłączania globalnej równoległości. `PhotoAnswerUploadEndpointTests.ExpiredStage_RejectsUpload` ustawiał ręcznie wygasły etap, podczas gdy aktywny `GameEngineWorker` mógł przejść tę samą sesję przed asercją. `PhotoAnswerTestHarness` ma teraz kontrolowany interwał workera 60 s, nadal własny runtime/SQLite/media, a test potwierdza brak rekordu, assetu i pliku po odrzuceniu uploadu.
+
+`LobbySignalRTests` ma osobny host/runtime na test i pełny cleanup połączeń. Transport Long Polling nie gwarantował, że automatyczne `OnDisconnectedAsync` zostanie obsłużone przed asercją testową; normalne polecenie SignalR `DetachDisplay` zapewnia kontrolowane odpięcie aktywnego Display bez pozostawiania tożsamości połączenia. Nie zastosowano retry testów, `Task.Delay` jako synchronizacji ani kolekcji sekwencyjnej.
+
+Końcowa walidacja: dwie pełne regresje Backend Release, każda 292/292 PASS, oraz 10/10 współbieżnych uruchomień obu wcześniej niestabilnych testów PASS. Orkiestrator 38/38, Display 37/37 i Admin 82/82 przeszły wraz z lint/build; skan sekretów PASS. Clean release `0.8.1-bb1d46a5bda1` przeszedł manifest, SHA-256, release smoke i security smoke. Pełny Mixed Client E2E PASS: 4 pytania (po jednym każdego typu), `Completed`, ranking 3, jedno `RoomStarted`, reconnect iOS/Display, monotoniczny ledger oraz dwa idempotentne replaye bez konfliktów i duplikatów. Evidence: `/private/tmp/partygame-mixed-e2e-pass.PYyUNp`.
+
+**Status:** 8.1 — ukończony; 8.2 — ukończony; 8.3 — ukończony; 8.4 — ukończony; 8.5 — niewykonany; Etap 8 — nieukończony.
