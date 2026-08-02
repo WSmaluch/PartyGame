@@ -47,6 +47,13 @@ if (builder.Environment.IsProduction())
         builder.Environment.ContentRootPath,
         "ReleaseRuntime:MediaRoot",
         mustBeOutsideContentRoot: true);
+    // Deployment scripts set these paths explicitly. The fallback keeps an
+    // isolated release-smoke runtime safe as well: diagnostic output must never
+    // fall back into the immutable publish directory.
+    if (string.Equals(diagnosticsOptions.LogDirectory, "data/logs", StringComparison.OrdinalIgnoreCase))
+        diagnosticsOptions.LogDirectory = Path.Combine(Path.GetDirectoryName(databasePath)!, "logs");
+    if (string.Equals(diagnosticsOptions.SupportBundleDirectory, "data/support-bundles", StringComparison.OrdinalIgnoreCase))
+        diagnosticsOptions.SupportBundleDirectory = Path.Combine(Path.GetDirectoryName(databasePath)!, "support-bundles");
     builder.Configuration["ConnectionStrings:PartyGame"] = $"Data Source={databasePath}";
     builder.Configuration["MediaStorage:RootPath"] = mediaRoot;
     diagnosticsOptions.LogDirectory = ReleaseRuntimeConfiguration.ResolveRuntimePath(
