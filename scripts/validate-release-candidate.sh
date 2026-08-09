@@ -3,6 +3,8 @@
 set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+[[ -x "$DEVELOPER_DIR/usr/bin/xcodebuild" ]] || { echo "full Xcode is required; invalid DEVELOPER_DIR: $DEVELOPER_DIR" >&2; exit 69; }
 host="${PARTYGAME_RC_HOST:-}"; ios_destination="${IOS_DESTINATION_ID:-}"
 [[ -n "$host" && -n "$ios_destination" ]] || { echo "PARTYGAME_RC_HOST and IOS_DESTINATION_ID are required" >&2; exit 64; }
 previous_package="${PARTYGAME_RC_PREVIOUS_PACKAGE:-}"
