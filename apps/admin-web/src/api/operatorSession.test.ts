@@ -14,7 +14,9 @@ describe('operatorSession', () => {
     const unsubscribe = subscribeOperatorToken(listener);
     setOperatorToken('operator-token');
     expect(getOperatorToken()).toBe('operator-token');
-    expect(window.localStorage.getItem('operatorToken')).toBeNull();
+    // Some headless clean-clone runners expose jsdom without a localStorage
+    // implementation. The contract is that this module never writes to it.
+    expect(window.localStorage?.getItem('operatorToken') ?? null).toBeNull();
     clearOperatorToken();
     expect(getOperatorToken()).toBeUndefined();
     expect(listener).toHaveBeenLastCalledWith(undefined);
