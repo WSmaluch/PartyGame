@@ -18,9 +18,11 @@ git status --porcelain | grep -q . && { echo "clean-tree check failed" >&2; exit
 run tracked-secret-scan scripts/scan-secrets.sh --tracked
 run backend dotnet test server/PartyGame.Tests/PartyGame.Tests.csproj --configuration Release
 run orchestrator dotnet test scripts/PartyGame.MixedE2EOrchestrator.Tests/PartyGame.MixedE2EOrchestrator.Tests.csproj --configuration Release
+run display-install npm --prefix apps/display-web ci
 run display-lint npm --prefix apps/display-web run lint
 run display-test npm --prefix apps/display-web run test
 run display-build npm --prefix apps/display-web run build
+run admin-install npm --prefix apps/admin-web ci
 run admin-lint npm --prefix apps/admin-web run lint
 run admin-test npm --prefix apps/admin-web run test
 run admin-build npm --prefix apps/admin-web run build
