@@ -23,7 +23,9 @@ api_dll="$release/api/PartyGame.Api.dll"
 (
   cd "$release/api"
   export ASPNETCORE_ENVIRONMENT=Production
-  exec dotnet "$api_dll"
+  # The launcher is normally invoked by an installer or deployment script.
+  # Ignore its SIGHUP so the API remains alive after that parent exits.
+  exec nohup dotnet "$api_dll"
 ) >>"$log_file" 2>&1 &
 pid=$!
 tmp_pid="$(lan_pid_file).tmp.$$"
