@@ -18,9 +18,15 @@ previous=""
 [[ -L "$(lan_current_link)" ]] && previous="$(lan_current_release)"
 
 switch_current() {
-  local target="$1" temporary="$LAN_DEPLOY_ROOT/.current.$$"
+  local target="$1" temporary="$LAN_DEPLOY_ROOT/.current.$$" link
+  link="$(lan_current_link)"
+  [[ ! -e "$link" || -L "$link" ]] || lan_die "current path must be a symlink when it exists."
   ln -s "$target" "$temporary"
-  mv -f "$temporary" "$(lan_current_link)"
+  # BSD mv follows a symlink to a directory, placing the temporary link inside
+  # the old release instead of replacing `current`. Deployment is stopped at
+  # every call site, so explicitly replacing this verified symlink is safe.
+  rm -f "$link"
+  mv "$temporary" "$link"
 }
 write_web_config() {
   local target="$1" version="$2" public; public="$(lan_url)"
