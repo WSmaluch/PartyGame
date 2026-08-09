@@ -1,0 +1,17 @@
+[Unit]
+Description=PartyGame LAN server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{INSTALL_ROOT}}
+ExecStart={{INSTALL_ROOT}}/scripts/start.sh --deploy-root {{INSTALL_ROOT}} --runtime-root {{RUNTIME_ROOT}} --host {{HOST}} --port {{PORT}}
+ExecStop={{INSTALL_ROOT}}/scripts/stop.sh --deploy-root {{INSTALL_ROOT}} --runtime-root {{RUNTIME_ROOT}} --host {{HOST}} --port {{PORT}}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ set -euo pipefail
 
 LAN_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LAN_DEPLOY_ROOT="${PARTYGAME_DEPLOY_ROOT:-}"
+LAN_RUNTIME_ROOT="${PARTYGAME_RUNTIME_ROOT:-}"
 LAN_RELEASE_DIR="${PARTYGAME_RELEASE_DIR:-}"
 LAN_HOST="${PARTYGAME_LAN_HOST:-}"
 LAN_PORT="${PARTYGAME_LAN_PORT:-5050}"
@@ -16,6 +17,7 @@ lan_parse_arguments() {
     case "$1" in
       --deploy-root) LAN_DEPLOY_ROOT="${2:-}"; shift 2 ;;
       --release-dir) LAN_RELEASE_DIR="${2:-}"; shift 2 ;;
+      --runtime-root) LAN_RUNTIME_ROOT="${2:-}"; shift 2 ;;
       --host) LAN_HOST="${2:-}"; shift 2 ;;
       --port) LAN_PORT="${2:-}"; shift 2 ;;
       *) lan_die "unknown option: $1" ;;
@@ -23,11 +25,17 @@ lan_parse_arguments() {
   done
   [[ -n "$LAN_DEPLOY_ROOT" ]] || lan_die "--deploy-root (or PARTYGAME_DEPLOY_ROOT) is required."
   [[ "$LAN_DEPLOY_ROOT" = /* ]] || lan_die "deploy root must be an absolute path."
+  if [[ -n "$LAN_RUNTIME_ROOT" ]]; then
+    [[ "$LAN_RUNTIME_ROOT" = /* ]] || lan_die "runtime root must be an absolute path."
+    LAN_RUNTIME_ROOT="${LAN_RUNTIME_ROOT%/}"
+  else
+    LAN_RUNTIME_ROOT="$LAN_DEPLOY_ROOT/runtime"
+  fi
   [[ "$LAN_PORT" =~ ^[1-9][0-9]{0,4}$ ]] && (( LAN_PORT <= 65535 )) || lan_die "port must be in 1..65535."
   LAN_DEPLOY_ROOT="${LAN_DEPLOY_ROOT%/}"
 }
 
-lan_runtime_dir() { printf '%s/runtime' "$LAN_DEPLOY_ROOT"; }
+lan_runtime_dir() { printf '%s' "$LAN_RUNTIME_ROOT"; }
 lan_pid_file() { printf '%s/pid/partygame-api.pid' "$(lan_runtime_dir)"; }
 lan_pid_meta_file() { printf '%s/pid/partygame-api.meta' "$(lan_runtime_dir)"; }
 lan_env_file() { printf '%s/config/partygame.env' "$LAN_DEPLOY_ROOT"; }
@@ -124,6 +132,7 @@ lan_write_environment() {
 PARTYGAME_LAN_HOST=$LAN_HOST
 PARTYGAME_LAN_PORT=$LAN_PORT
 PARTYGAME_DEPLOY_ROOT=$LAN_DEPLOY_ROOT
+PARTYGAME_RUNTIME_ROOT=$LAN_RUNTIME_ROOT
 PARTYGAME_URLS=http://0.0.0.0:$LAN_PORT
 PARTYGAME_DATABASE_PATH=$(lan_runtime_dir)/database/partygame.db
 PARTYGAME_MEDIA_ROOT=$(lan_runtime_dir)/media
@@ -149,6 +158,7 @@ PARTYGAME_DISPLAY_PUBLIC_URL=$url/display/
 PARTYGAME_ADMIN_PUBLIC_URL=$url/admin/
 PARTYGAME_ALLOWED_ORIGINS=$url
 EOF
+  chmod 600 "$file"
 }
 
 lan_load_environment() {
@@ -161,6 +171,7 @@ lan_load_environment() {
   set +a
   LAN_HOST="${PARTYGAME_LAN_HOST:-$LAN_HOST}"
   LAN_PORT="${PARTYGAME_LAN_PORT:-$LAN_PORT}"
+  LAN_RUNTIME_ROOT="${PARTYGAME_RUNTIME_ROOT:-$LAN_RUNTIME_ROOT}"
 }
 
 lan_pid_is_ours() {

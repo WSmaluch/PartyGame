@@ -32,7 +32,9 @@ public sealed class SupportBundleService(
             var id = Guid.NewGuid();
             var timestamp = DateTimeOffset.UtcNow;
             var safeVersion = Regex.Replace((await diagnostics.GetSummaryAsync(cancellationToken)).Version.ApplicationVersion, "[^A-Za-z0-9._-]", "-");
-            var fileName = $"partygame-support-{timestamp:yyyyMMddTHHmmssZ}-{safeVersion}.zip";
+            // Timestamp precision is intentionally human-friendly; append the bundle id so
+            // independent operator requests in the same second never collide.
+            var fileName = $"partygame-support-{timestamp:yyyyMMddTHHmmssZ}-{safeVersion}-{id.ToString("N")[..8]}.zip";
             var target = Path.Combine(root, fileName);
             var temporary = Path.Combine(root, $".{id:N}.tmp");
             var summary = await diagnostics.GetSummaryAsync(cancellationToken);

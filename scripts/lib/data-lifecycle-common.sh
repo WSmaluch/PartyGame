@@ -12,7 +12,7 @@ DATA_EXIT_SCHEMA=24
 DATA_EXIT_LOCK=75
 
 data_die() { echo "PartyGame data: $*" >&2; exit "${2:-64}"; }
-data_runtime_dir() { printf '%s/runtime' "$1"; }
+data_runtime_dir() { printf '%s' "${PARTYGAME_RUNTIME_ROOT:-$1/runtime}"; }
 data_database_path() { printf '%s/database/partygame.db' "$(data_runtime_dir "$1")"; }
 data_media_root() { printf '%s/media' "$(data_runtime_dir "$1")"; }
 data_lock_dir() { printf '%s/operations/data-operation.lock' "$(data_runtime_dir "$1")"; }

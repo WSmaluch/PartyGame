@@ -22,7 +22,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.8.1</Version>
+    <Version Condition="'$(Version)' == ''">$(PartyGameReleaseVersion)</Version>
     <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(Version)</InformationalVersion>
     <SourceRevisionId Condition="'$(SourceRevisionId)' == ''">unknown</SourceRevisionId>
     <PartyGameBuildTimestampUtc Condition="'$(PartyGameBuildTimestampUtc)' == ''">unknown</PartyGameBuildTimestampUtc>

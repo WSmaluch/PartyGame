@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- The tracked release/VERSION file is the single source of the public PartyGame release version. -->
+    <PartyGameReleaseVersion Condition="'$(PartyGameReleaseVersion)' == '' and Exists('$(MSBuildThisFileDirectory)release/VERSION')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)release/VERSION').Trim())</PartyGameReleaseVersion>
+    <PartyGameReleaseVersion Condition="'$(PartyGameReleaseVersion)' == ''">0.0.0-dev</PartyGameReleaseVersion>
+  </PropertyGroup>
+</Project>

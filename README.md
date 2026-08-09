@@ -182,7 +182,20 @@ W Production panel Admin wymaga `PARTYGAME_OPERATOR_TOKEN` (minimum 32 znaki, be
 
 Trwałe dane produkcyjne obsługują jawny check/migrate schematu EF Core oraz zweryfikowany backup/restore SQLite i mediów. Instrukcja operatora, kody wyjścia, dry-run, pre-restore backup i retencja: [backup i restore danych](docs/deployment/data-backup-and-restore.md).
 
-Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md). Gotowy artefakt można wdrożyć w LAN bez Node, Vite i IDE przez [instrukcję LAN](docs/deployment/lan-deployment.md), a backup, restore i retencję opisuje [instrukcja danych](docs/deployment/data-backup-and-restore.md). Logi, correlation ID i support bundle opisuje [diagnostyka](docs/diagnostics/logging-and-correlation.md). Etapy 8.1–8.5 są ukończone; Etap 8 jako całość pozostaje nieukończony do wykonania 8.6.
+Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md). Gotowy artefakt można wdrożyć w LAN bez Node, Vite i IDE przez [instrukcję LAN](docs/deployment/lan-deployment.md), a backup, restore i retencję opisuje [instrukcja danych](docs/deployment/data-backup-and-restore.md). Logi, correlation ID i support bundle opisuje [diagnostyka](docs/diagnostics/logging-and-correlation.md).
+
+## Release Candidate 1.0.0-rc.1
+
+Jedynym źródłem publicznej wersji RC jest [`release/VERSION`](release/VERSION). `scripts/build-release.sh` tworzy manifest z tą samą wersją dla API, Display, Admina i metadanych iOS, a `scripts/package-release.sh` tworzy przenośne `partygame-<version>.tar.gz`. Operator powinien najpierw sprawdzić archiwum, a następnie uruchomić instalator bez źródeł ani IDE:
+
+```bash
+scripts/verify-release-package.sh --package partygame-1.0.0-rc.1.tar.gz
+PARTYGAME_OPERATOR_TOKEN='<32+ character secret>' scripts/install-release.sh \
+  --package partygame-1.0.0-rc.1.tar.gz --install-root /opt/partygame \
+  --runtime-root /var/lib/partygame --host 192.168.1.20 --non-interactive
+```
+
+Instrukcje [quick start](docs/installation/quick-start.md), [upgrade](docs/installation/upgrade.md), [uninstall](docs/installation/uninstall.md) i [checklista urządzeń fizycznych](docs/installation/release-checklist.md) są częścią RC. Zautomatyzowana gotowość RC nie zastępuje physical-device acceptance przed finalnym `v1.0.0`.
 
 Walidacja 8.2F ustabilizowała `PhotoAnswerMixedGameE2ETests`: testowy worker nie ściga się już z ręcznie sterowanym przejściem SQLite, a każda fixture ma własny katalog runtime, bazę, media i cleanup po `DisposeAsync` (w tym WAL/SHM). Pełny backend Release (285/285), clean release build, regresja lifecycle LAN oraz pełny Mixed Client E2E przeszły. Evidence pełnego E2E: `/private/tmp/partygame-mixed-e2e-pass.QfbQ5p` (4 typy pytań, `Completed`, ranking 3, jedno `RoomStarted`, monotoniczny ledger wersji). Automatyczna regresja używa nie-loopbackowego adresu hosta, lecz test na drugim fizycznym urządzeniu pozostaje **manual validation pending**.
 

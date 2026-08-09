@@ -47,7 +47,7 @@ restore_previous() {
   if [[ -n "$previous" ]]; then
     switch_current "$previous"
     lan_write_environment
-    "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || true
+    "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || true
   else
     rm -f "$(lan_current_link)"
   fi
@@ -62,7 +62,7 @@ if [[ -n "$rollback_version" ]]; then
   target="$LAN_DEPLOY_ROOT/releases/$rollback_version"
   [[ -d "$target" ]] || lan_die "rollback version does not exist: $rollback_version"
   lan_verify_installed_release "$target"
-  "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
+  "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
   lan_load_environment
   if ! check_schema_compatibility "$target"; then
     echo "PartyGame LAN: rollback blocked because the current database is incompatible with $rollback_version." >&2
@@ -70,7 +70,7 @@ if [[ -n "$rollback_version" ]]; then
   fi
   switch_current "$target"
   lan_write_environment
-  if ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
+  if ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
     restore_previous; echo "PartyGame LAN: rollback failed and previous current was restored." >&2; exit 1
   fi
   lan_print_urls; exit 0
@@ -97,13 +97,13 @@ else
   trap - EXIT
 fi
 
-"$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
+"$SCRIPT_DIR/stop-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || [[ $? -eq 1 ]]
 if [[ -f "$(lan_runtime_dir)/database/partygame.db" ]]; then
-  "$SCRIPT_DIR/backup-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --maintenance
+  PARTYGAME_RUNTIME_ROOT="$LAN_RUNTIME_ROOT" "$SCRIPT_DIR/backup-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --maintenance
 fi
 switch_current "$target"
 lan_write_environment
-if ! "$SCRIPT_DIR/migrate-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --migrate || ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
+if ! PARTYGAME_RUNTIME_ROOT="$LAN_RUNTIME_ROOT" "$SCRIPT_DIR/migrate-data.sh" --deploy-root "$LAN_DEPLOY_ROOT" --backup-root "$LAN_DEPLOY_ROOT/backups" --migrate || ! "$SCRIPT_DIR/start-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT" || ! "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$LAN_DEPLOY_ROOT" --runtime-root "$LAN_RUNTIME_ROOT" --host "$LAN_HOST" --port "$LAN_PORT"; then
   restore_previous
   echo "PartyGame LAN: deployment failed and previous current was restored." >&2
   exit 1

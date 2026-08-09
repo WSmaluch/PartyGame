@@ -15,7 +15,10 @@ fi
 
 SHORT_HASH="$(git rev-parse --short=12 HEAD)"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-VERSION="${PARTYGAME_RELEASE_VERSION:-0.8.1-$SHORT_HASH}"
+VERSION_FILE="$REPO_DIR/release/VERSION"
+[[ -f "$VERSION_FILE" ]] || { echo "Missing release version source: $VERSION_FILE" >&2; exit 66; }
+VERSION="${PARTYGAME_RELEASE_VERSION:-$(tr -d '[:space:]' < "$VERSION_FILE")}"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "Invalid release version: $VERSION" >&2; exit 64; }
 RELEASE_DIR="$REPO_DIR/artifacts/release/$VERSION"
 IOS_DERIVED_DATA="$(mktemp -d "${TMPDIR:-/private/tmp}/partygame-release-ios.XXXXXX")"
 cleanup_ios_derived_data() { rm -rf "$IOS_DERIVED_DATA"; }
@@ -27,6 +30,7 @@ dotnet restore PartyGame.sln
 dotnet test PartyGame.sln --no-restore --configuration Release
 
 dotnet publish server/PartyGame.Api/PartyGame.Api.csproj --no-restore --configuration Release --output "$RELEASE_DIR/api" \
+  -p:PartyGameReleaseVersion="$VERSION" \
   -p:Version="$VERSION" \
   -p:InformationalVersion="$VERSION" \
   -p:SourceRevisionId="$SHORT_HASH" \
@@ -50,6 +54,7 @@ IOS_DESTINATION="${IOS_DESTINATION_ID:?IOS_DESTINATION_ID is required for the Re
 xcodebuild -project apps/ios/PartyGame.xcodeproj -scheme PartyGame -configuration Release \
   -destination "platform=iOS Simulator,id=$IOS_DESTINATION" \
   -derivedDataPath "$IOS_DERIVED_DATA" \
+  PARTYGAME_RELEASE_VERSION="$VERSION" \
   build-for-testing
 
 node "$REPO_DIR/scripts/release-assets.mjs" manifest "$RELEASE_DIR" "$VERSION" "$SHORT_HASH" "$TIMESTAMP" "$(dotnet --version)" "$(node --version)" "$(npm --version)"
