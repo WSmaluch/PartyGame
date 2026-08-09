@@ -4,6 +4,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/diagnostics-common.sh
 source "$SCRIPT_DIR/lib/diagnostics-common.sh"
+# shellcheck source=lib/lan-common.sh
+source "$SCRIPT_DIR/lib/lan-common.sh"
 DEPLOY_ROOT="${PARTYGAME_DEPLOY_ROOT:-}"; BASE_URL=""; TOKEN_ENV="PARTYGAME_OPERATOR_TOKEN"; OUTPUT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -20,8 +22,8 @@ diagnostics_require_absolute_directory "$DEPLOY_ROOT" "deploy root"
 if [[ -n "$OUTPUT" ]]; then [[ "$OUTPUT" = /* ]] || diagnostics_die "output must be absolute."; mkdir -p "$(dirname "$OUTPUT")"; exec > "$OUTPUT"; fi
 status=0
 check() { local name="$1" result="$2" detail="$3"; printf '%-28s %s %s\n' "$name" "$result" "$detail"; [[ "$result" == FAIL ]] && status=1; }
-release="$DEPLOY_ROOT/current"
-if [[ -L "$release" && -f "$release/manifest.json" ]]; then check RELEASE PASS "current release found"; else check RELEASE FAIL "current release or manifest missing"; fi
+release=""
+if release="$(resolve_current_release "$DEPLOY_ROOT")"; then check RELEASE PASS "current release found"; else check RELEASE FAIL "current release invalid"; fi
 if [[ -f "$DEPLOY_ROOT/runtime/pid/partygame-api.pid" ]] && kill -0 "$(tr -d '[:space:]' < "$DEPLOY_ROOT/runtime/pid/partygame-api.pid")" 2>/dev/null; then check PROCESS PASS "PID running"; else check PROCESS WARN "PID not running or unavailable"; fi
 curl --silent --show-error --max-time 10 --fail "$BASE_URL/health" >/dev/null && check HEALTH PASS "reachable" || check HEALTH FAIL "unreachable"
 curl --silent --show-error --max-time 10 --fail "$BASE_URL/health/ready" >/dev/null && check READINESS PASS "ready" || check READINESS WARN "not ready"
@@ -34,5 +36,5 @@ if [[ -n "$token" ]] && curl --silent --show-error --max-time 10 --fail -H "@$he
 [[ -d "$DEPLOY_ROOT/runtime/logs" ]] && check LOG_ROOT PASS "present" || check LOG_ROOT WARN "missing"
 [[ -d "$DEPLOY_ROOT/runtime/backups" ]] && check BACKUP_ROOT PASS "present" || check BACKUP_ROOT WARN "missing"
 df -k "$DEPLOY_ROOT" >/dev/null && check DISK_SPACE PASS "available" || check DISK_SPACE FAIL "unavailable"
-if [[ -L "$release" ]]; then "$REPO_DIR/scripts/smoke-release.sh" "$(cd "$release" && pwd -P)" >/dev/null && check MANIFEST_CHECKSUMS PASS "valid" || check MANIFEST_CHECKSUMS FAIL "invalid"; fi
+if [[ -n "$release" ]]; then "$REPO_DIR/scripts/smoke-release.sh" "$release" >/dev/null && check MANIFEST_CHECKSUMS PASS "valid" || check MANIFEST_CHECKSUMS FAIL "invalid"; fi
 exit "$status"

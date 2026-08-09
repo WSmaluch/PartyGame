@@ -4,6 +4,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=lib/diagnostics-common.sh
 source "$SCRIPT_DIR/lib/diagnostics-common.sh"
+# shellcheck source=lib/lan-common.sh
+source "$SCRIPT_DIR/lib/lan-common.sh"
 
 DEPLOY_ROOT="${PARTYGAME_DEPLOY_ROOT:-}"
 MODE="standard"
@@ -18,9 +20,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$MODE" == minimal || "$MODE" == standard || "$MODE" == extended ]] || diagnostics_die "mode must be minimal, standard, or extended."
 diagnostics_require_absolute_directory "$DEPLOY_ROOT" "deploy root"
-[[ -L "$DEPLOY_ROOT/current" ]] || diagnostics_die "deployment has no current release."
-RELEASE_DIR="$(cd "$DEPLOY_ROOT/current" && pwd -P)"
-[[ "$RELEASE_DIR" == "$DEPLOY_ROOT"/releases/* && -f "$RELEASE_DIR/manifest.json" ]] || diagnostics_die "current release is outside deploy-root/releases or incomplete."
+RELEASE_DIR="$(resolve_current_release "$DEPLOY_ROOT")" || diagnostics_die "current release is invalid."
 RUNTIME_ROOT="$DEPLOY_ROOT/runtime"
 if [[ -f "$DEPLOY_ROOT/config/partygame.env" && ! -L "$DEPLOY_ROOT/config/partygame.env" ]]; then
   configured_runtime_root="$(sed -n 's/^PARTYGAME_RUNTIME_ROOT=//p' "$DEPLOY_ROOT/config/partygame.env" | head -1)"

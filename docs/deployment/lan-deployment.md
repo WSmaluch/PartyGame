@@ -44,6 +44,8 @@ Webowe `config.json` zawierają `apiBaseUrl`, `signalRHubUrl`, `publicBaseUrl` i
 
 Baza SQLite, media, logi i PID są tylko w `runtime/`; ponowne wdrożenie nie usuwa ich. Katalog release jest po instalacji tylko do odczytu. `current` jest podmieniany atomowo. Konfiguracja webów jest jedynym deploymentowym plikiem podmienianym przed ustawieniem release jako niezmiennego i jest wyłączona z późniejszej kontroli jego checksumów; wszystkie pozostałe pliki są sprawdzane względem manifestu.
 
+Lifecycle oraz narzędzia diagnostyczne używają tego samego resolvera `current`: akceptuje on względny lub absolutny symlink, kanonikalizuje go przez `pwd -P` (także na macOS, gdzie `/var` może wskazywać na `/private/var`), wymaga celu pod `<deploy-root>/releases/` i sprawdza minimalny layout release. Link uszkodzony, zwykły plik zamiast linku, escape poza `releases/` albo niekompletny release są bezpiecznie odrzucane.
+
 ## Lifecycle i logi
 
 ```bash

@@ -15,11 +15,13 @@ token="rc-validation-$(node -e 'process.stdout.write(require("crypto").randomByt
 step() { printf 'RC package test step: %s\n' "$1" >&2; }
 cleanup() {
   code=$?
-  "$SCRIPT_DIR/uninstall-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null 2>&1 || true
   if (( code == 0 )); then
+    "$SCRIPT_DIR/uninstall-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null 2>&1 || true
     chmod -R u+w "$root" 2>/dev/null || true
     rm -rf "$root"
   else
+    # Keep the complete fixture, including the active-release link, for a
+    # post-failure inspection. It is an isolated temporary installation.
     echo "RC_PACKAGE_TEST_EVIDENCE=$root" >&2
   fi
   exit "$code"

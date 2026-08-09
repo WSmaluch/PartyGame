@@ -76,19 +76,46 @@ lan_prepare_runtime() {
   mkdir -p "$(lan_runtime_dir)"/{database,media,logs,pid,temp} "$LAN_DEPLOY_ROOT/config" "$LAN_DEPLOY_ROOT/releases"
 }
 
+lan_release_layout_missing() {
+  local release="$1" missing=()
+  [[ -f "$release/manifest.json" ]] || missing+=(manifest.json)
+  [[ -f "$release/BUILD_INFO.txt" ]] || missing+=(BUILD_INFO.txt)
+  [[ -f "$release/checksums.sha256" ]] || missing+=(checksums.sha256)
+  [[ -f "$release/api/PartyGame.Api.dll" ]] || missing+=(api/PartyGame.Api.dll)
+  [[ -f "$release/display/index.html" ]] || missing+=(display/index.html)
+  [[ -f "$release/admin/index.html" ]] || missing+=(admin/index.html)
+  if (( ${#missing[@]} > 0 )); then
+    (IFS=,; printf '%s' "${missing[*]}")
+  fi
+}
+
+# Resolves the active release in one place for lifecycle and diagnostics tools.
+# `pwd -P` is portable to macOS and canonicalizes both relative links and parent
+# aliases such as /var -> /private/var before the containment check.
+resolve_current_release() {
+  local deploy_root="$1" current normalized_root release releases_root missing
+  [[ "$deploy_root" = /* && -d "$deploy_root" ]] || { echo "active release deploy root is invalid" >&2; return 1; }
+  current="$deploy_root/current"
+  [[ -L "$current" ]] || { echo "active release symlink is missing or not a symlink" >&2; return 1; }
+  normalized_root="$(cd -P "$deploy_root" && pwd)" || { echo "active release deploy root cannot be canonicalized" >&2; return 1; }
+  release="$(cd -P "$current" && pwd)" || { echo "active release symlink is broken or does not target a directory" >&2; return 1; }
+  releases_root="$normalized_root/releases"
+  [[ "$release" == "$releases_root"/* ]] || { echo "active release resolves outside deploy-root/releases" >&2; return 1; }
+  missing="$(lan_release_layout_missing "$release")"
+  [[ -z "$missing" ]] || { echo "active release layout is incomplete: $missing" >&2; return 1; }
+  printf '%s' "$release"
+}
+
 lan_current_release() {
-  local current; current="$(lan_current_link)"
-  [[ -L "$current" ]] || lan_die "current release is not configured. Run deploy-lan.sh first."
-  local release; release="$(cd "$current" && pwd -P)"
-  local normalized_root; normalized_root="$(cd "$LAN_DEPLOY_ROOT" && pwd -P)"
-  [[ "$release" == "$normalized_root"/releases/* ]] || lan_die "current symlink points outside releases."
+  local release
+  release="$(resolve_current_release "$LAN_DEPLOY_ROOT")" || lan_die "current release is invalid."
   printf '%s' "$release"
 }
 
 lan_assert_release_layout() {
-  local release="$1"
-  [[ -f "$release/manifest.json" && -f "$release/checksums.sha256" && -f "$release/api/PartyGame.Api.dll" ]] || lan_die "release is incomplete: $release"
-  [[ -f "$release/display/index.html" && -f "$release/admin/index.html" ]] || lan_die "release is missing Display or Admin static files: $release"
+  local release="$1" missing
+  missing="$(lan_release_layout_missing "$release")"
+  [[ -z "$missing" ]] || lan_die "release is incomplete: $release (missing: $missing)"
 }
 
 lan_release_version() {
