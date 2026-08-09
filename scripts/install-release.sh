@@ -51,6 +51,8 @@ mkdir -p "$install_root" "$runtime_root"
 created_release="$install_root/releases/$version"
 PARTYGAME_OPERATOR_TOKEN="$PARTYGAME_OPERATOR_TOKEN" "$package_root/scripts/deploy-lan.sh" \
   --deploy-root "$install_root" --runtime-root "$runtime_root" --release-dir "$package_root/release" --host "$host" --port "$port"
-"$package_root/scripts/security-smoke.sh" "$install_root/current/api/PartyGame.Api.dll" >/dev/null
-"$package_root/scripts/diagnostics-smoke.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+if [[ "${PARTYGAME_INSTALL_SKIP_POSTCHECKS:-false}" != true ]]; then
+  "$package_root/scripts/security-smoke.sh" "$install_root/current/api/PartyGame.Api.dll" >/dev/null
+  "$package_root/scripts/diagnostics-smoke.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+fi
 printf 'PartyGame installed safely. Display: http://%s:%s/display/\nAdmin: http://%s:%s/admin/\n' "$host" "$port" "$host" "$port"

@@ -21,7 +21,13 @@ diagnostics_require_absolute_directory "$DEPLOY_ROOT" "deploy root"
 [[ -L "$DEPLOY_ROOT/current" ]] || diagnostics_die "deployment has no current release."
 RELEASE_DIR="$(cd "$DEPLOY_ROOT/current" && pwd -P)"
 [[ "$RELEASE_DIR" == "$DEPLOY_ROOT"/releases/* && -f "$RELEASE_DIR/manifest.json" ]] || diagnostics_die "current release is outside deploy-root/releases or incomplete."
-if [[ -z "$OUTPUT" ]]; then OUTPUT="$DEPLOY_ROOT/runtime/support-bundles"; fi
+RUNTIME_ROOT="$DEPLOY_ROOT/runtime"
+if [[ -f "$DEPLOY_ROOT/config/partygame.env" && ! -L "$DEPLOY_ROOT/config/partygame.env" ]]; then
+  configured_runtime_root="$(sed -n 's/^PARTYGAME_RUNTIME_ROOT=//p' "$DEPLOY_ROOT/config/partygame.env" | head -1)"
+  [[ -z "$configured_runtime_root" || "$configured_runtime_root" = /* ]] || diagnostics_die "configured runtime root must be absolute."
+  [[ -z "$configured_runtime_root" ]] || RUNTIME_ROOT="$configured_runtime_root"
+fi
+if [[ -z "$OUTPUT" ]]; then OUTPUT="$RUNTIME_ROOT/support-bundles"; fi
 [[ "$OUTPUT" = /* ]] || diagnostics_die "output must be an absolute path."
 mkdir -p "$OUTPUT"
 [[ ! -L "$OUTPUT" ]] || diagnostics_die "output directory must not be a symlink."
@@ -55,7 +61,7 @@ if [[ -n "$BASE_URL" ]]; then
   curl --silent --show-error --max-time 10 "$BASE_URL/api/system/version" | diagnostics_redact_stream > "$STAGE/version/api-version.json" || true
 fi
 
-LOG_ROOT="$DEPLOY_ROOT/runtime/logs"
+LOG_ROOT="$RUNTIME_ROOT/logs"
 MAX_FILES=3; MAX_BYTES=$((2 * 1024 * 1024)); [[ "$MODE" == extended ]] && { MAX_FILES=8; MAX_BYTES=$((8 * 1024 * 1024)); }
 [[ "$MODE" == minimal ]] && { MAX_FILES=1; MAX_BYTES=$((256 * 1024)); }
 count=0; truncated=false
@@ -70,8 +76,8 @@ if [[ -d "$LOG_ROOT" && ! -L "$LOG_ROOT" ]]; then
 fi
 printf '{"logFilesIncluded":%s,"logsTruncated":%s,"databaseIncluded":false,"mediaIncluded":false}\n' "$count" "$truncated" > "$STAGE/diagnostics/collection.json"
 
-if [[ -d "$DEPLOY_ROOT/runtime/backups" && ! -L "$DEPLOY_ROOT/runtime/backups" ]]; then
-  find "$DEPLOY_ROOT/runtime/backups" -maxdepth 2 -type f -name '*manifest*.json' ! -type l -print 2>/dev/null | head -1 | while IFS= read -r file; do diagnostics_redact_stream < "$file" > "$STAGE/backup/last-backup-manifest.redacted.json"; done
+if [[ -d "$RUNTIME_ROOT/backups" && ! -L "$RUNTIME_ROOT/backups" ]]; then
+  find "$RUNTIME_ROOT/backups" -maxdepth 2 -type f -name '*manifest*.json' ! -type l -print 2>/dev/null | head -1 | while IFS= read -r file; do diagnostics_redact_stream < "$file" > "$STAGE/backup/last-backup-manifest.redacted.json"; done
 fi
 df -k "$DEPLOY_ROOT" | diagnostics_redact_stream > "$STAGE/deployment/disk-space.txt" || true
 printf 'dotnet=%s\nnode=%s\n' "$(dotnet --version 2>/dev/null || echo unavailable)" "$(node --version 2>/dev/null || echo unavailable)" > "$STAGE/deployment/runtime-versions.txt"

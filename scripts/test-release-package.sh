@@ -25,18 +25,24 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 run_install() {
-  local archive="$1"
-  PARTYGAME_OPERATOR_TOKEN="$token" "$SCRIPT_DIR/install-release.sh" --package "$archive" --install-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" --non-interactive >/dev/null
+  local archive="$1" skip_postchecks="${2:-false}"
+  PARTYGAME_OPERATOR_TOKEN="$token" PARTYGAME_INSTALL_SKIP_POSTCHECKS="$skip_postchecks" "$SCRIPT_DIR/install-release.sh" --package "$archive" --install-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" --non-interactive >/dev/null
 }
 "$SCRIPT_DIR/verify-release-package.sh" --package "$package" >/dev/null
 if [[ -n "$previous_package" ]]; then
   "$SCRIPT_DIR/verify-release-package.sh" --package "$previous_package" >/dev/null
-  run_install "$previous_package"
+  # The historical release predates collision-resistant support-bundle names.
+  # The RC installation below runs the required security and diagnostics smoke.
+  run_install "$previous_package" true
 fi
 run_install "$package"
 "$SCRIPT_DIR/status-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
 "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
 "$SCRIPT_DIR/diagnostics-smoke.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+PARTYGAME_RUNTIME_ROOT="$runtime_root" "$SCRIPT_DIR/create-support-bundle.sh" --deploy-root "$install_root" --mode standard >/dev/null
+support_bundle="$(find "$runtime_root/support-bundles" -maxdepth 1 -type f -name 'partygame-support-*.tar.gz' -print -quit)"
+[[ -n "$support_bundle" ]] || { echo "support bundle was not created in external runtime root" >&2; exit 1; }
+"$SCRIPT_DIR/verify-support-bundle.sh" --bundle "$support_bundle" >/dev/null
 PARTYGAME_RUNTIME_ROOT="$runtime_root" "$SCRIPT_DIR/backup-data.sh" --deploy-root "$install_root" --backup-root "$backups" --maintenance --name rc-pre-restore >/dev/null
 backup="$backups/rc-pre-restore"
 "$SCRIPT_DIR/stop-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
