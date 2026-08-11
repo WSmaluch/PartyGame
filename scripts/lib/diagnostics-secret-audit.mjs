@@ -11,7 +11,7 @@ if (!root || !path.isAbsolute(root)) {
 
 // This deliberately matches only values which should have been redacted. Names
 // of headers and fields are safe to include in diagnostics and support bundles.
-const unredacted = /(?:authorization["\s:=]+bearer\s+(?!\[REDACTED\])[^,\s"']+|bearer\s*[:=]\s*(?!\[REDACTED\])[^,\s"']+|(?:operator|reconnect)[_ -]?token["\s:=]+(?!\[REDACTED\])[^,\s"']+)/i;
+const unredacted = /(?:authorization[" \t:=]+bearer[ \t]+(?!\[REDACTED\])[^,\s"']+|bearer[ \t]*[:=][ \t]*(?!\[REDACTED\])[^,\s"']+|(?:operator|reconnect)[_ -]?token[" \t:=]+(?!\[REDACTED\])[^,\s"']+)/i;
 
 function* files(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
