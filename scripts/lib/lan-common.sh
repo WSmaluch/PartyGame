@@ -141,7 +141,8 @@ lan_verify_installed_release() {
 
 lan_write_environment() {
   lan_prepare_runtime
-  local file; file="$(lan_env_file)"
+  local file release; file="$(lan_env_file)"
+  release="$(lan_current_release)"
   local url; url="$(lan_url)"
   local operator_token="${PARTYGAME_OPERATOR_TOKEN:-}"
   if [[ -z "$operator_token" && -f "$file" ]]; then
@@ -176,8 +177,11 @@ PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true
 # migration operation (including its pre-migration backup) before starting the API.
 PARTYGAME_APPLY_MIGRATIONS=false
 PARTYGAME_DEPLOYMENT_ENABLED=true
-PARTYGAME_DISPLAY_ROOT=$(lan_current_link)/display
-PARTYGAME_ADMIN_ROOT=$(lan_current_link)/admin
+# PhysicalFileProvider does not serve files reliably through the `current`
+# symlink on macOS. Resolve it before starting Kestrel; deploy-lan.sh writes
+# this environment after every atomic current switch.
+PARTYGAME_DISPLAY_ROOT=$release/display
+PARTYGAME_ADMIN_ROOT=$release/admin
 PARTYGAME_DISPLAY_PATH_BASE=/display
 PARTYGAME_ADMIN_PATH_BASE=/admin
 PARTYGAME_PUBLIC_BASE_URL=$url

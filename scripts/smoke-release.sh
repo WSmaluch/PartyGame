@@ -43,6 +43,9 @@ PARTYGAME_ADMIN_PUBLIC_URL="http://127.0.0.1:5174/admin" \
 PARTYGAME_APPLY_MIGRATIONS=true \
 PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true \
 PARTYGAME_OPERATOR_TOKEN="release-smoke-operator-token-that-is-not-a-secret" \
+PARTYGAME_DEPLOYMENT_ENABLED=true \
+PARTYGAME_DISPLAY_ROOT="$RELEASE_DIR/display" \
+PARTYGAME_ADMIN_ROOT="$RELEASE_DIR/admin" \
 dotnet "$API_DLL" >"$LOG_FILE" 2>&1 &
 PID=$!
 
@@ -54,6 +57,24 @@ done
 curl --silent --fail "http://127.0.0.1:$PORT/health" >/dev/null
 curl --silent --fail "http://127.0.0.1:$PORT/health/ready" >/dev/null
 curl --silent --fail "http://127.0.0.1:$PORT/api/content/packages" >/dev/null
+
+smoke_dir="$RUNTIME_DIR/static-smoke"
+mkdir -p "$smoke_dir"
+assert_html() {
+  local path="$1" headers="$smoke_dir/headers" body="$smoke_dir/body"
+  curl --silent --show-error --fail --dump-header "$headers" "http://127.0.0.1:$PORT$path" -o "$body"
+  grep -Eiq '^Content-Type: text/html([;[:space:]]|$)' "$headers" || { echo "Release smoke: $path is not HTML." >&2; exit 1; }
+}
+assert_json_config() {
+  local path="$1" headers="$smoke_dir/headers" body="$smoke_dir/body"
+  curl --silent --show-error --fail --dump-header "$headers" "http://127.0.0.1:$PORT$path" -o "$body"
+  grep -Eiq '^Content-Type: application/json([;[:space:]]|$)' "$headers" || { echo "Release smoke: $path is not JSON." >&2; exit 1; }
+  node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$body"
+}
+assert_html /display/
+assert_html /admin/
+assert_json_config /display/config.json
+assert_json_config /admin/config.json
 
 EXPECTED_VERSION="$(node "$REPO_DIR/scripts/release-assets.mjs" version "$MANIFEST")"
 ACTUAL_VERSION="$(curl --silent --fail "http://127.0.0.1:$PORT/api/system/version" | node -e 'let body=""; process.stdin.on("data", part => body += part); process.stdin.on("end", () => process.stdout.write(JSON.parse(body).version));')"

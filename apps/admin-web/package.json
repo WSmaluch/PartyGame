@@ -16,6 +16,7 @@
     "test:e2e:question-forms:playwright": "playwright test e2e/content-question-forms.spec.ts",
     "test:e2e:publishing": "bash ../../scripts/test-admin-package-publishing-e2e.sh",
     "test:e2e:publishing:playwright": "playwright test e2e/content-package-publishing.spec.ts",
+    "test:e2e:lan": "playwright test e2e/lan-deployment.spec.ts",
     "format:check": "prettier --check .",
     "preview": "vite preview"
   },

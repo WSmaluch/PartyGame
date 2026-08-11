@@ -11,6 +11,7 @@
     "format:check": "prettier --check .",
     "preview": "vite preview",
     "test:e2e": "playwright test",
+    "test:e2e:lan": "playwright test e2e/lan-deployment.spec.ts",
     "test:e2e:drawing": "playwright test e2e/drawing-answer-display.spec.ts",
     "test:e2e:mixed": "playwright test e2e/mixed-game-display.spec.ts"
   },

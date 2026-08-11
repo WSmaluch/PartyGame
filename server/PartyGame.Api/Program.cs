@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.StaticFiles;
 using PartyGame.Api.Configuration;
 using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Endpoints;
@@ -372,10 +372,29 @@ if (deployment.Enabled)
         app.Logger.LogError("Deployment Display root is unavailable or missing index.html: {DisplayRoot}", displayRoot);
     if (!Directory.Exists(adminRoot) || !File.Exists(Path.Combine(adminRoot, "index.html")))
         app.Logger.LogError("Deployment Admin root is unavailable or missing index.html: {AdminRoot}", adminRoot);
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(displayRoot), RequestPath = deployment.DisplayPathBase });
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(adminRoot), RequestPath = deployment.AdminPathBase });
-    app.MapFallback($"{deployment.DisplayPathBase}/{{**path}}", () => Results.File(Path.Combine(displayRoot, "index.html"), "text/html"));
-    app.MapFallback($"{deployment.AdminPathBase}/{{**path}}", () => Results.File(Path.Combine(adminRoot, "index.html"), "text/html"));
+    app.MapMethods($"{deployment.DisplayPathBase}/{{**path}}", [HttpMethods.Get, HttpMethods.Head],
+        (string? path) => StaticFileOrSpaFallback(displayRoot, path));
+    app.MapMethods($"{deployment.AdminPathBase}/{{**path}}", [HttpMethods.Get, HttpMethods.Head],
+        (string? path) => StaticFileOrSpaFallback(adminRoot, path));
+}
+
+static IResult StaticFileOrSpaFallback(string staticRoot, string? relativePath)
+{
+    var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(staticRoot));
+    var relative = relativePath?.TrimStart('/') ?? string.Empty;
+    var candidate = Path.GetFullPath(Path.Combine(root, relative));
+    if (!candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) && !string.Equals(candidate, root, StringComparison.Ordinal))
+        return Results.NotFound();
+
+    if (File.Exists(candidate))
+    {
+        var contentTypes = new FileExtensionContentTypeProvider();
+        return Results.File(candidate, contentTypes.TryGetContentType(candidate, out var contentType) ? contentType : "application/octet-stream");
+    }
+
+    return Path.HasExtension(relative)
+        ? Results.NotFound()
+        : Results.File(Path.Combine(root, "index.html"), "text/html");
 }
 
 app.MapGet("/health", (IGameClock clock) =>

@@ -1,13 +1,19 @@
 import { expect, test } from '@playwright/test';
 
-test('loads the deployed Display through its LAN origin and runtime config', async ({
+test('boots the deployed Admin with a JSON runtime config', async ({
   page,
 }) => {
-  await page.goto('/display/');
-  await expect(page.getByText('Połącz ekran')).toBeVisible();
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await page.goto('/admin/');
+  await expect(
+    page.getByRole('heading', { name: 'PartyGame Admin' }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
 
   const config = await page.evaluate(async () => {
-    const response = await fetch('/display/config.json', { cache: 'no-store' });
+    const response = await fetch('/admin/config.json', { cache: 'no-store' });
     return {
       ok: response.ok,
       contentType: response.headers.get('content-type'),
@@ -20,5 +26,5 @@ test('loads the deployed Display through its LAN origin and runtime config', asy
   expect(config.body).not.toContain('<html');
   expect(config.body).not.toContain('localhost');
   expect(config.body).not.toContain('127.0.0.1');
-  expect(config.body).toContain('"signalRHubUrl": "/hubs/game"');
+  expect(pageErrors).toEqual([]);
 });

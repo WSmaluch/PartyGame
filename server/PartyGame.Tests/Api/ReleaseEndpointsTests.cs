@@ -156,6 +156,12 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
         Directory.CreateDirectory(admin);
         await File.WriteAllTextAsync(Path.Combine(display, "index.html"), "<html>display</html>");
         await File.WriteAllTextAsync(Path.Combine(admin, "index.html"), "<html>admin</html>");
+        await File.WriteAllTextAsync(Path.Combine(display, "config.json"), "{\"app\":\"display\"}");
+        await File.WriteAllTextAsync(Path.Combine(admin, "config.json"), "{\"app\":\"admin\"}");
+        Directory.CreateDirectory(Path.Combine(display, "assets"));
+        Directory.CreateDirectory(Path.Combine(admin, "assets"));
+        await File.WriteAllTextAsync(Path.Combine(display, "assets", "app.js"), "display asset");
+        await File.WriteAllTextAsync(Path.Combine(admin, "assets", "app.js"), "admin asset");
         try
         {
             using var deploymentFactory = new PartyGameApiFactory(
@@ -172,6 +178,18 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
             Assert.Equal("<html>admin</html>", await client.GetStringAsync("/admin/"));
             Assert.Equal("<html>display</html>", await client.GetStringAsync("/display/room/ABCD"));
             Assert.Equal("<html>admin</html>", await client.GetStringAsync("/admin/content/packages"));
+            var displayConfig = await client.GetAsync("/display/config.json");
+            var adminConfig = await client.GetAsync("/admin/config.json");
+            Assert.Equal(HttpStatusCode.OK, displayConfig.StatusCode);
+            Assert.Equal("application/json", displayConfig.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("{\"app\":\"display\"}", await displayConfig.Content.ReadAsStringAsync());
+            Assert.Equal(HttpStatusCode.OK, adminConfig.StatusCode);
+            Assert.Equal("application/json", adminConfig.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("{\"app\":\"admin\"}", await adminConfig.Content.ReadAsStringAsync());
+            Assert.Equal("display asset", await client.GetStringAsync("/display/assets/app.js"));
+            Assert.Equal("admin asset", await client.GetStringAsync("/admin/assets/app.js"));
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/display/missing.js")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/admin/missing.json")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/not-a-spa-route")).StatusCode);
             Assert.NotEqual("text/html", (await client.PostAsync("/hubs/game/negotiate?negotiateVersion=1", null)).Content.Headers.ContentType?.MediaType);
         }
