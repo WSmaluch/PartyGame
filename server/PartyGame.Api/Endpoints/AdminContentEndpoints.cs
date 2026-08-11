@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Api.Contracts;
+using PartyGame.Api.Security;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Rooms;
 using PartyGame.GameEngine;
 using PartyGame.Infrastructure.Content;
 using PartyGame.Infrastructure.Persistence;
-using PartyGame.Api.Security;
 
 namespace PartyGame.Api.Endpoints;
 
@@ -15,6 +16,7 @@ public static class AdminContentEndpoints
     {
         var admin = endpoints.MapGroup("/api/admin/content-packages").WithTags("Admin Content")
             .AddEndpointFilter<OperatorTokenEndpointFilter>()
+            .AddEndpointFilter(SerializePackageMutationAsync)
             .RequireRateLimiting("operator");
 
         // --- Packages ---
@@ -208,7 +210,7 @@ public static class AdminContentEndpoints
                 return Results.Json(new { code = "content_package_not_found", message = "Package not found." }, statusCode: 404);
 
             if (package.Status != ContentPackageStatus.Draft)
-                return Results.Json(new { code = "content_package_not_editable", message = "Tylko wersja robocza (Draft) może być edytowana." }, statusCode: 400);
+                return Results.Json(new { code = "content_package_not_editable", message = "Tylko wersja robocza (Draft) może być edytowana." }, statusCode: 409);
 
             if (!string.IsNullOrEmpty(request.ConcurrencyToken) && package.ConcurrencyToken != request.ConcurrencyToken)
                 return Results.Json(new { code = "content_concurrency_conflict", message = "Ta treść została zmieniona w innej sesji. Odśwież dane przed ponownym zapisem." }, statusCode: 409);
@@ -231,70 +233,58 @@ public static class AdminContentEndpoints
             return Results.Ok(ToPackageResponse(package));
         });
 
-        admin.MapPost("/{packageVersionId:guid}/publish", async (Guid packageVersionId, PublishPackageRequest request, PartyGameDbContext dbContext, IContentValidationService validator, IGameClock clock, ContentPackageLockProvider packageLocks, CancellationToken cancellationToken) =>
+        admin.MapPost("/{packageVersionId:guid}/publish", async (Guid packageVersionId, PublishPackageRequest request, PartyGameDbContext dbContext, IContentValidationService validator, IGameClock clock, CancellationToken cancellationToken) =>
         {
-            var packageLock = packageLocks.ForVersion(packageVersionId);
-            await packageLock.WaitAsync(cancellationToken);
-            try
-            {
-                var package = await dbContext.GamePackages
-                    .Include(p => p.Categories)
-                        .ThenInclude(c => c.Questions)
-                    .FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
+            var package = await dbContext.GamePackages
+                .Include(p => p.Categories)
+                    .ThenInclude(c => c.Questions)
+                .FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
 
-                if (package is null)
-                    return Results.Json(new { code = "content_package_not_found", message = "Package not found." }, statusCode: 404);
+            if (package is null)
+                return Results.Json(new { code = "content_package_not_found", message = "Package not found." }, statusCode: 404);
 
-                if (package.Status != ContentPackageStatus.Draft)
-                    return Results.Json(new { code = "content_package_already_published", message = "Pakiet został już opublikowany lub zarchiwizowany." }, statusCode: 400);
+            if (package.Status != ContentPackageStatus.Draft)
+                return Results.Json(new { code = "content_package_already_published", message = "Pakiet został już opublikowany lub zarchiwizowany." }, statusCode: 409);
 
-                if (!string.IsNullOrEmpty(request.ConcurrencyToken) && package.ConcurrencyToken != request.ConcurrencyToken)
-                    return Results.Json(new { code = "content_concurrency_conflict", message = "Ta treść została zmieniona w innej sesji. Odśwież dane przed ponownym zapisem." }, statusCode: 409);
+            if (!string.IsNullOrEmpty(request.ConcurrencyToken) && package.ConcurrencyToken != request.ConcurrencyToken)
+                return Results.Json(new { code = "content_concurrency_conflict", message = "Ta treść została zmieniona w innej sesji. Odśwież dane przed ponownym zapisem." }, statusCode: 409);
 
-                var valResult = validator.ValidateForPublish(package);
-                if (!valResult.IsValid)
-                    return Results.Json(new { code = "content_package_validation_failed", errors = valResult.Errors }, statusCode: 400);
+            var valResult = validator.ValidateForPublish(package);
+            if (!valResult.IsValid)
+                return Results.Json(new { code = "content_package_validation_failed", errors = valResult.Errors }, statusCode: 400);
 
-                var now = clock.UtcNow;
-                package.Status = ContentPackageStatus.Published;
-                package.PublishedAtUtc = now;
-                package.UpdatedAtUtc = now;
-                package.ConcurrencyToken = Guid.NewGuid().ToString("N");
+            var now = clock.UtcNow;
+            package.Status = ContentPackageStatus.Published;
+            package.PublishedAtUtc = now;
+            package.UpdatedAtUtc = now;
+            package.ConcurrencyToken = Guid.NewGuid().ToString("N");
 
-                try { await dbContext.SaveChangesAsync(cancellationToken); }
-                catch (DbUpdateConcurrencyException) { return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet został zmieniony w innej sesji." }, statusCode: 409); }
-                return Results.Ok(ToPackageResponse(package));
-            }
-            finally { packageLock.Release(); }
+            try { await dbContext.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateConcurrencyException) { return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet został zmieniony w innej sesji." }, statusCode: 409); }
+            return Results.Ok(ToPackageResponse(package));
         });
 
-        admin.MapPost("/{packageVersionId:guid}/archive", async (Guid packageVersionId, ArchivePackageRequest request, PartyGameDbContext dbContext, IGameClock clock, ContentPackageLockProvider packageLocks, CancellationToken cancellationToken) =>
+        admin.MapPost("/{packageVersionId:guid}/archive", async (Guid packageVersionId, ArchivePackageRequest request, PartyGameDbContext dbContext, IGameClock clock, CancellationToken cancellationToken) =>
         {
-            var packageLock = packageLocks.ForVersion(packageVersionId);
-            await packageLock.WaitAsync(cancellationToken);
-            try
-            {
-                var package = await dbContext.GamePackages.FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-                if (package is null)
-                    return Results.Json(new { code = "content_package_not_found", message = "Package not found." }, statusCode: 404);
+            var package = await dbContext.GamePackages.FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
+            if (package is null)
+                return Results.Json(new { code = "content_package_not_found", message = "Package not found." }, statusCode: 404);
 
-                if (package.Status != ContentPackageStatus.Published)
-                    return Results.Json(new { code = "content_package_not_archivable", message = "Tylko opublikowana wersja pakietu może zostać zarchiwizowana." }, statusCode: 400);
+            if (package.Status != ContentPackageStatus.Published)
+                return Results.Json(new { code = "content_package_not_archivable", message = "Tylko opublikowana wersja pakietu może zostać zarchiwizowana." }, statusCode: 400);
 
-                if (!string.IsNullOrEmpty(request.ConcurrencyToken) && package.ConcurrencyToken != request.ConcurrencyToken)
-                    return Results.Json(new { code = "content_concurrency_conflict", message = "Ta treść została zmieniona w innej sesji. Odśwież dane przed ponownym zapisem." }, statusCode: 409);
+            if (!string.IsNullOrEmpty(request.ConcurrencyToken) && package.ConcurrencyToken != request.ConcurrencyToken)
+                return Results.Json(new { code = "content_concurrency_conflict", message = "Ta treść została zmieniona w innej sesji. Odśwież dane przed ponownym zapisem." }, statusCode: 409);
 
-                var now = clock.UtcNow;
-                package.Status = ContentPackageStatus.Archived;
-                package.ArchivedAtUtc = now;
-                package.UpdatedAtUtc = now;
-                package.ConcurrencyToken = Guid.NewGuid().ToString("N");
+            var now = clock.UtcNow;
+            package.Status = ContentPackageStatus.Archived;
+            package.UpdatedAtUtc = now;
+            package.ConcurrencyToken = Guid.NewGuid().ToString("N");
+            package.ArchivedAtUtc = now;
 
-                try { await dbContext.SaveChangesAsync(cancellationToken); }
-                catch (DbUpdateConcurrencyException) { return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet został zmieniony w innej sesji." }, statusCode: 409); }
-                return Results.Ok(ToPackageResponse(package));
-            }
-            finally { packageLock.Release(); }
+            try { await dbContext.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateConcurrencyException) { return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet został zmieniony w innej sesji." }, statusCode: 409); }
+            return Results.Ok(ToPackageResponse(package));
         });
 
         // --- Categories ---
@@ -310,7 +300,7 @@ public static class AdminContentEndpoints
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
             if (package is null) return Results.Json(new { code = "content_package_not_found" }, statusCode: 404);
-            if (package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
             if (string.IsNullOrEmpty(request.PackageConcurrencyToken) || package.ConcurrencyToken != request.PackageConcurrencyToken)
                 return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet został zmieniony w innej sesji." }, statusCode: 409);
 
@@ -343,7 +333,7 @@ public static class AdminContentEndpoints
         admin.MapPatch("/{packageVersionId:guid}/categories/{categoryId:guid}", async (Guid packageVersionId, Guid categoryId, UpdateCategoryRequest request, PartyGameDbContext dbContext, IContentValidationService validator, CancellationToken cancellationToken) =>
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var category = package.Categories.FirstOrDefault(c => c.Id == categoryId);
             if (category is null) return Results.Json(new { code = "content_category_not_found" }, statusCode: 404);
@@ -376,7 +366,7 @@ public static class AdminContentEndpoints
                     .ThenInclude(c => c.Questions)
                 .FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
 
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var category = package.Categories.FirstOrDefault(c => c.Id == categoryId);
             if (category is null) return Results.Json(new { code = "content_category_not_found" }, statusCode: 404);
@@ -436,7 +426,7 @@ public static class AdminContentEndpoints
         admin.MapPost("/{packageVersionId:guid}/categories/reorder", async (Guid packageVersionId, ReorderRequest request, PartyGameDbContext dbContext, CancellationToken cancellationToken) =>
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             if (string.IsNullOrEmpty(request.PackageConcurrencyToken) || package.ConcurrencyToken != request.PackageConcurrencyToken)
                 return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet zmieniony w innej sesji." }, statusCode: 409);
@@ -536,7 +526,7 @@ public static class AdminContentEndpoints
                     .ThenInclude(c => c.Questions)
                 .FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
 
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var category = package.Categories.FirstOrDefault(c => c.Id == request.CategoryId);
             if (category is null) return Results.Json(new { code = "content_category_not_found" }, statusCode: 404);
@@ -580,7 +570,7 @@ public static class AdminContentEndpoints
                     .ThenInclude(c => c.Questions)
                 .FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
 
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var allQuestions = package.Categories.SelectMany(c => c.Questions).ToList();
             var question = allQuestions.FirstOrDefault(q => q.Id == questionId);
@@ -621,7 +611,7 @@ public static class AdminContentEndpoints
         admin.MapDelete("/{packageVersionId:guid}/questions/{questionId:guid}", async (Guid packageVersionId, Guid questionId, string? concurrencyToken, string? packageConcurrencyToken, PartyGameDbContext dbContext, CancellationToken cancellationToken) =>
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).ThenInclude(c => c.Questions).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var question = dbContext.GameQuestions.FirstOrDefault(q => q.Id == questionId);
             if (question is null) return Results.Json(new { code = "content_question_not_found" }, statusCode: 404);
@@ -641,7 +631,7 @@ public static class AdminContentEndpoints
         admin.MapPost("/{packageVersionId:guid}/questions/{questionId:guid}/duplicate", async (Guid packageVersionId, Guid questionId, QuestionMutationRequest? request, PartyGameDbContext dbContext, IGameClock clock, CancellationToken cancellationToken) =>
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).ThenInclude(c => c.Questions).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             var allQuestions = package.Categories.SelectMany(c => c.Questions).ToList();
             var orig = allQuestions.FirstOrDefault(q => q.Id == questionId);
@@ -685,7 +675,7 @@ public static class AdminContentEndpoints
         admin.MapPost("/{packageVersionId:guid}/questions/reorder", async (Guid packageVersionId, ReorderRequest request, PartyGameDbContext dbContext, CancellationToken cancellationToken) =>
         {
             var package = await dbContext.GamePackages.Include(p => p.Categories).ThenInclude(c => c.Questions).FirstOrDefaultAsync(p => p.Id == packageVersionId, cancellationToken);
-            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 400);
+            if (package is null || package.Status != ContentPackageStatus.Draft) return Results.Json(new { code = "content_package_not_editable" }, statusCode: 409);
 
             if (!string.IsNullOrEmpty(request.PackageConcurrencyToken) && package.ConcurrencyToken != request.PackageConcurrencyToken)
                 return Results.Json(new { code = "content_concurrency_conflict", message = "Pakiet zmieniony w innej sesji." }, statusCode: 409);
@@ -713,6 +703,30 @@ public static class AdminContentEndpoints
         });
 
         return endpoints;
+    }
+
+    private static async ValueTask<object?> SerializePackageMutationAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var request = context.HttpContext.Request;
+        if (HttpMethods.IsGet(request.Method) ||
+            !context.HttpContext.Request.RouteValues.TryGetValue("packageVersionId", out var routeValue) ||
+            !Guid.TryParse(routeValue?.ToString(), out var packageVersionId))
+        {
+            return await next(context);
+        }
+
+        var packageLock = context.HttpContext.RequestServices
+            .GetRequiredService<ContentPackageLockProvider>()
+            .ForVersion(packageVersionId);
+        await packageLock.WaitAsync(context.HttpContext.RequestAborted);
+        try
+        {
+            return await next(context);
+        }
+        finally
+        {
+            packageLock.Release();
+        }
     }
 
     private static object ToPackageResponse(GamePackage p)

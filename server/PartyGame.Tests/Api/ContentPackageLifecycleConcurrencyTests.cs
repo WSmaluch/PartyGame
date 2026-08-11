@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Api.Contracts;
 using PartyGame.Domain.Content;
+using PartyGame.Infrastructure.Content;
 using PartyGame.Infrastructure.Persistence;
 using Xunit;
 
@@ -107,9 +108,7 @@ public sealed class ContentPackageLifecycleConcurrencyTests : IClassFixture<Part
         var responses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{draft.Id}/publish", new { concurrencyToken = draft.Token }),
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{draft.Id}/publish", new { concurrencyToken = draft.Token }));
-        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
-        Assert.Single(responses, response => response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest);
-        Assert.DoesNotContain(responses, response => (int)response.StatusCode >= 500);
+        await AssertRaceAsync("publish vs publish", responses);
         var package = await GetPackageAsync(draft.Id);
         Assert.Equal("Published", package.GetProperty("status").GetString());
         Assert.False(string.IsNullOrWhiteSpace(package.GetProperty("publishedAtUtc").GetString()));
@@ -124,31 +123,112 @@ public sealed class ContentPackageLifecycleConcurrencyTests : IClassFixture<Part
         var metadataResponses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{metadata.Id}/publish", new { concurrencyToken = metadata.Token }),
             _factory.CreateClient().PatchAsJsonAsync($"/api/admin/content-packages/{metadata.Id}", new { namePl = "Równoległa nazwa", concurrencyToken = metadata.Token }));
-        AssertRace(metadataResponses);
+        await AssertRaceAsync("publish vs package metadata", metadataResponses);
 
         var category = await CreateValidDraftAsync("publish_category", questionCount: 2);
         var categoryResponses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{category.Id}/publish", new { concurrencyToken = category.Token }),
             _factory.CreateClient().PatchAsJsonAsync($"/api/admin/content-packages/{category.Id}/categories/{category.CategoryIds[0]}", new { namePl = "Równoległa kategoria", concurrencyToken = category.CategoryTokens[0], packageConcurrencyToken = category.Token }));
-        AssertRace(categoryResponses);
+        await AssertRaceAsync("publish vs category", categoryResponses);
 
         var question = await CreateValidDraftAsync("publish_question", questionCount: 2);
         var questionResponses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{question.Id}/publish", new { concurrencyToken = question.Token }),
             _factory.CreateClient().PatchAsJsonAsync($"/api/admin/content-packages/{question.Id}/questions/{question.QuestionIds[0]}", new { textPl = "Równoległe pytanie", concurrencyToken = question.QuestionTokens[0], packageConcurrencyToken = question.Token }));
-        AssertRace(questionResponses);
+        await AssertRaceAsync("publish vs question", questionResponses);
 
         var categoryOrder = await CreateValidDraftAsync("publish_category_order", questionCount: 2, categoryCount: 2);
         var categoryOrderResponses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{categoryOrder.Id}/publish", new { concurrencyToken = categoryOrder.Token }),
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{categoryOrder.Id}/categories/reorder", new { packageConcurrencyToken = categoryOrder.Token, items = categoryOrder.CategoryIds.Select((id, index) => new { id, sortOrder = categoryOrder.CategoryIds.Count - index - 1 }) }));
-        AssertRace(categoryOrderResponses);
+        await AssertRaceAsync("publish vs category reorder", categoryOrderResponses);
 
         var questionOrder = await CreateValidDraftAsync("publish_question_order", questionCount: 2);
         var questionOrderResponses = await Task.WhenAll(
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{questionOrder.Id}/publish", new { concurrencyToken = questionOrder.Token }),
             _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{questionOrder.Id}/questions/reorder", new { packageConcurrencyToken = questionOrder.Token, items = questionOrder.QuestionIds.Select((id, index) => new { id, sortOrder = questionOrder.QuestionIds.Count - index - 1 }) }));
-        AssertRace(questionOrderResponses);
+        await AssertRaceAsync("publish vs question reorder", questionOrderResponses);
+    }
+
+    [Fact]
+    public async Task Publish_OneHundredConcurrentRequests_HasOneWinnerAndNinetyNineConflicts()
+    {
+        var draft = await CreateValidDraftAsync("publish_stress", questionCount: 1);
+        var responses = await Task.WhenAll(Enumerable.Range(0, 100).Select(_ =>
+            _factory.CreateClient().PostAsJsonAsync($"/api/admin/content-packages/{draft.Id}/publish", new { concurrencyToken = draft.Token })));
+
+        Assert.Equal(1, responses.Count(response => response.StatusCode == HttpStatusCode.OK));
+        Assert.Equal(99, responses.Count(response => response.StatusCode == HttpStatusCode.Conflict));
+        Assert.DoesNotContain(responses, response => (int)response.StatusCode >= 500);
+        var package = await GetPackageAsync(draft.Id);
+        Assert.Equal("Published", package.GetProperty("status").GetString());
+        Assert.Equal(1, package.GetProperty("categoryCount").GetInt32());
+        Assert.Equal(1, package.GetProperty("questionCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task PackageLocks_DifferentPackages_AcquireIndependently()
+    {
+        var locks = _factory.Services.GetRequiredService<ContentPackageLockProvider>();
+        var first = locks.ForVersion(Guid.NewGuid());
+        var second = locks.ForVersion(Guid.NewGuid());
+        Assert.NotSame(first, second);
+
+        await first.WaitAsync();
+        try
+        {
+            Assert.True(await second.WaitAsync(TimeSpan.FromSeconds(1)));
+            second.Release();
+        }
+        finally
+        {
+            first.Release();
+        }
+    }
+
+    [Fact]
+    public async Task PackageLock_CancelledWaiter_DoesNotPoisonSubsequentMutation()
+    {
+        var locks = _factory.Services.GetRequiredService<ContentPackageLockProvider>();
+        var packageLock = locks.ForVersion(Guid.NewGuid());
+        await packageLock.WaitAsync();
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            var waiting = packageLock.WaitAsync(cancellation.Token);
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await waiting);
+        }
+        finally
+        {
+            packageLock.Release();
+        }
+
+        Assert.True(await packageLock.WaitAsync(TimeSpan.FromSeconds(1)));
+        packageLock.Release();
+    }
+
+    [Fact]
+    public async Task PackageLock_ExceptionalMutation_DoesNotPoisonSubsequentMutation()
+    {
+        var locks = _factory.Services.GetRequiredService<ContentPackageLockProvider>();
+        var packageLock = locks.ForVersion(Guid.NewGuid());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await packageLock.WaitAsync();
+            try
+            {
+                throw new InvalidOperationException("Injected handler failure.");
+            }
+            finally
+            {
+                packageLock.Release();
+            }
+        });
+
+        Assert.True(await packageLock.WaitAsync(TimeSpan.FromSeconds(1)));
+        packageLock.Release();
     }
 
     [Fact]
@@ -197,12 +277,37 @@ public sealed class ContentPackageLifecycleConcurrencyTests : IClassFixture<Part
         Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync("/api/rooms", new CreateRoomRequest("Draft", null, null, null, Guid.NewGuid()))).StatusCode);
     }
 
-    private static void AssertRace(IEnumerable<HttpResponseMessage> responses)
+    private static async Task AssertRaceAsync(string operation, IEnumerable<HttpResponseMessage> responses)
     {
         var list = responses.ToList();
-        Assert.Contains(list, response => response.StatusCode == HttpStatusCode.OK);
-        Assert.Contains(list, response => response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest);
-        Assert.DoesNotContain(list, response => (int)response.StatusCode >= 500);
+        var details = await Task.WhenAll(list.Select(DescribeResponseAsync));
+        var observed = $"{operation}: {string.Join(" | ", details)}";
+        Assert.True(list.Count == 2, observed);
+        Assert.True(list.Count(response => response.StatusCode == HttpStatusCode.OK) == 1, observed);
+        Assert.True(list.Count(response => response.StatusCode == HttpStatusCode.Conflict) == 1, observed);
+        Assert.True(list.All(response => (int)response.StatusCode < 500), observed);
+        Assert.True(list.All(response => response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Conflict), observed);
+    }
+
+    private static async Task<string> DescribeResponseAsync(HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        string? code = null;
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(body);
+                if (document.RootElement.TryGetProperty("code", out var codeProperty))
+                    code = codeProperty.GetString();
+            }
+            catch (JsonException)
+            {
+                code = "invalid-json";
+            }
+        }
+
+        return $"{response.RequestMessage?.Method} {response.RequestMessage?.RequestUri?.AbsolutePath} -> {(int)response.StatusCode} {response.StatusCode} {code}";
     }
 
     private async Task<JsonElement> GetPackageAsync(Guid id)
@@ -241,7 +346,9 @@ public sealed class ContentPackageLifecycleConcurrencyTests : IClassFixture<Part
         }
         for (var questionIndex = 0; questionIndex < questionCount; questionIndex++)
         {
-            var questionResponse = await _client.PostAsJsonAsync($"/api/admin/content-packages/{id}/questions", new { categoryId = categoryIds[0], key = $"{prefix}_question_{questionIndex}", type = 0, textPl = "Kto wybiera {player}?", textEn = "Who chooses {player}?", isActive = true, minimumPlayers = 3, sortOrder = questionIndex });
+            var categoryId = categoryIds[questionIndex % categoryIds.Count];
+            var categoryQuestionIndex = questionIndex / categoryIds.Count;
+            var questionResponse = await _client.PostAsJsonAsync($"/api/admin/content-packages/{id}/questions", new { categoryId, key = $"{prefix}_question_{questionIndex}", type = 0, textPl = "Kto wybiera {player}?", textEn = "Who chooses {player}?", isActive = true, minimumPlayers = 3, sortOrder = categoryQuestionIndex });
             Assert.Equal(HttpStatusCode.Created, questionResponse.StatusCode);
             var question = await questionResponse.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
             questionIds.Add(question.GetProperty("id").GetGuid()); questionTokens.Add(question.GetProperty("concurrencyToken").GetString()!);
