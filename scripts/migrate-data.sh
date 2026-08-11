@@ -17,8 +17,8 @@ data_acquire_lock "$DEPLOY_ROOT" "migration"; trap data_release_lock EXIT
 DB="$(data_database_path "$DEPLOY_ROOT")"
 if [[ -f "$DB" ]]; then
   before="$(PARTYGAME_APPLY_MIGRATIONS=false dotnet "$API_DLL" check)"
-  source_schema="$(printf '%s' "$before" | jq -r '.databaseSchemaVersion')"
-  target_schema="$(printf '%s' "$before" | jq -r '.latestSupportedSchemaVersion')"
+  source_schema="$(printf '%s' "$before" | node -e 'let body=""; process.stdin.on("data", chunk => body += chunk); process.stdin.on("end", () => { try { const value=JSON.parse(body).databaseSchemaVersion; if (typeof value !== "string" || !value) process.exit(1); process.stdout.write(value); } catch { process.exit(1); } })')"
+  target_schema="$(printf '%s' "$before" | node -e 'let body=""; process.stdin.on("data", chunk => body += chunk); process.stdin.on("end", () => { try { const value=JSON.parse(body).latestSupportedSchemaVersion; if (typeof value !== "string" || !value) process.exit(1); process.stdout.write(value); } catch { process.exit(1); } })')"
   if [[ "$source_schema" != "$target_schema" ]]; then
     pre_output="$(DATA_LOCK_PARENT=true PARTYGAME_APPLICATION_VERSION="${PARTYGAME_DEPLOYMENT_VERSION:-unknown}" "$SCRIPT_DIR/backup-data.sh" --deploy-root "$DEPLOY_ROOT" --backup-root "$BACKUP_ROOT" --maintenance --name "$(date -u +%Y%m%dT%H%M%SZ)-$$-pre-migration")"
     pre_backup="${pre_output#BACKUP_PATH=}"

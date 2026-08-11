@@ -15,6 +15,12 @@ if node "$SCRIPT_DIR/audit-release-dependencies.mjs" --package "$work/undeclared
   echo "dependency audit accepted an undeclared rg command" >&2
   exit 1
 fi
+printf '%s\n' 'jq -r ".version" manifest.json' > "$root/scripts/security-smoke.sh"
+tar -czf "$work/undeclared-jq.tar.gz" -C "$work" partygame-test
+if node "$SCRIPT_DIR/audit-release-dependencies.mjs" --package "$work/undeclared-jq.tar.gz" >/dev/null 2>&1; then
+  echo "dependency audit accepted an undeclared jq command" >&2
+  exit 1
+fi
 printf '%s\n' 'grep -q "token" api.log' > "$root/scripts/security-smoke.sh"
 tar -czf "$work/declared-system-tool.tar.gz" -C "$work" partygame-test
 node "$SCRIPT_DIR/audit-release-dependencies.mjs" --package "$work/declared-system-tool.tar.gz" >/dev/null
