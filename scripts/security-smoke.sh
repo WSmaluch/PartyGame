@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_DLL="${1:-$REPO_DIR/server/PartyGame.Api/bin/Release/net10.0/PartyGame.Api.dll}"
 [[ -f "$API_DLL" ]] || { echo "API DLL not found: $API_DLL" >&2; exit 66; }
-for tool in curl dotnet node; do command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 69; }; done
+for tool in curl dotnet node grep; do command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 69; }; done
 
 port="$(node "$REPO_DIR/scripts/find-free-port.mjs")"
 runtime="$(mktemp -d "${TMPDIR:-/private/tmp}/partygame-security-smoke.XXXXXX")"
@@ -50,12 +50,12 @@ for _ in $(seq 1 24); do
   if [[ "$status" == 429 ]]; then rate_limited=true; break; fi
 done
 [[ "$rate_limited" == true ]] || { echo "Operator rate limit did not return 429." >&2; exit 1; }
-[[ -z "$(curl --silent -D - -o /dev/null -H 'Origin: http://blocked.example' "$admin" | tr -d '\r' | rg '^Access-Control-Allow-Origin:' || true)" ]]
+[[ -z "$(curl --silent -D - -o /dev/null -H 'Origin: http://blocked.example' "$admin" | tr -d '\r' | grep '^Access-Control-Allow-Origin:' || true)" ]]
 curl --silent -D "$runtime/cors" -o /dev/null -H 'Origin: http://allowed.example' "http://127.0.0.1:$port/health"
-rg -q '^Access-Control-Allow-Origin: http://allowed.example' "$runtime/cors" || { echo "Allowed CORS origin was not accepted." >&2; exit 1; }
+grep -q '^Access-Control-Allow-Origin: http://allowed.example' "$runtime/cors" || { echo "Allowed CORS origin was not accepted." >&2; exit 1; }
 curl --silent -D "$runtime/headers" -o /dev/null "http://127.0.0.1:$port/health"
-for header in X-Content-Type-Options Referrer-Policy X-Frame-Options Permissions-Policy Content-Security-Policy; do rg -qi "^${header}:" "$runtime/headers" || { echo "Missing security header: $header" >&2; exit 1; }; done
-if rg -F "$token" "$log"; then echo "Operator token appeared in log." >&2; exit 1; fi
+for header in X-Content-Type-Options Referrer-Policy X-Frame-Options Permissions-Policy Content-Security-Policy; do grep -qi "^${header}:" "$runtime/headers" || { echo "Missing security header: $header" >&2; exit 1; }; done
+if grep -F "$token" "$log"; then echo "Operator token appeared in log." >&2; exit 1; fi
 
 success=true
 echo "Security smoke PASS"

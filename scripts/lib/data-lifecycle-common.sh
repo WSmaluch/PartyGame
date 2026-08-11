@@ -68,7 +68,7 @@ data_validate_backup_layout() {
   local backup="$1"
   [[ -d "$backup/database" && -d "$backup/media" && -f "$backup/database/partygame.db" && -f "$backup/backup-manifest.json" && -f "$backup/checksums.sha256" && -f "$backup/BACKUP_INFO.txt" ]] || data_die "backup is incomplete" "$DATA_EXIT_INCOMPLETE"
   data_no_symlinks "$backup" || data_die "backup contains a symbolic link" "$DATA_EXIT_FORMAT"
-  jq -e '.backupFormatVersion == 1 and (.databaseFile == "database/partygame.db") and (.databaseSchemaVersion|type == "string") and (.checksums|type == "object")' "$backup/backup-manifest.json" >/dev/null || data_die "unsupported or invalid backup manifest" "$DATA_EXIT_FORMAT"
+  node -e 'const fs=require("fs"); try { const m=JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (m.backupFormatVersion !== 1 || m.databaseFile !== "database/partygame.db" || typeof m.databaseSchemaVersion !== "string" || !m.checksums || typeof m.checksums !== "object" || Array.isArray(m.checksums)) process.exit(1); } catch { process.exit(1); }' "$backup/backup-manifest.json" || data_die "unsupported or invalid backup manifest" "$DATA_EXIT_FORMAT"
 }
 data_validate_media_consistency() {
   local backup="$1" keys actual

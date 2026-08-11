@@ -2,6 +2,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/lan-common.sh"
+# shellcheck source=lib/diagnostics-common.sh
+source "$SCRIPT_DIR/lib/diagnostics-common.sh"
 lan_parse_arguments "$@"
 lan_load_environment
 for tool in curl node unzip; do command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 69; }; done
@@ -20,5 +22,5 @@ for required in support-manifest.json SUPPORT_INFO.txt diagnostics/summary.json 
 done
 node -e 'const m=require(process.argv[1]); if(m.supportBundleFormatVersion!=="1" || !m.applicationVersion || !Array.isArray(m.omittedSections)) process.exit(1)' "$work/support/support-manifest.json"
 if find "$work/support" -type f \( -iname '*.db' -o -iname '*.sqlite*' -o -iname '*.wal' -o -iname '*.shm' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) -print -quit | grep -q .; then echo "API support bundle contains forbidden data" >&2; exit 1; fi
-if rg -n --pcre2 '(?i)(operator[_ -]?token|authorization|bearer)\s*[:=]\s*(?!\[REDACTED\])[^\s,\"]+' "$work/support"; then echo "support bundle redaction failed" >&2; exit 1; fi
+diagnostics_assert_redacted "$work/support" || { echo "support bundle redaction failed" >&2; exit 1; }
 echo "Diagnostics smoke PASS"

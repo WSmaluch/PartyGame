@@ -26,10 +26,10 @@ cleanup() { rm -rf "$stage"; }
 trap cleanup EXIT INT TERM
 mkdir -p "$root"/{scripts/lib,config,docs,deployment/systemd,deployment/launchd}
 cp -R "$release_dir" "$root/release"
-for script in deploy-lan.sh start-lan.sh stop-lan.sh status-lan.sh restart-lan.sh smoke-lan.sh backup-data.sh restore-data.sh migrate-data.sh verify-backup.sh security-smoke.sh scan-secrets.sh create-support-bundle.sh verify-support-bundle.sh diagnose-lan.sh find-free-port.mjs release-assets.mjs diagnostics-smoke.sh uninstall-lan.sh render-autostart-template.sh; do
+for script in deploy-lan.sh start-lan.sh stop-lan.sh status-lan.sh restart-lan.sh smoke-lan.sh backup-data.sh restore-data.sh migrate-data.sh verify-backup.sh security-smoke.sh create-support-bundle.sh verify-support-bundle.sh diagnose-lan.sh find-free-port.mjs release-assets.mjs diagnostics-smoke.sh uninstall-lan.sh render-autostart-template.sh; do
   cp "$REPO_DIR/scripts/$script" "$root/scripts/$script"
 done
-cp "$REPO_DIR/scripts/lib/lan-common.sh" "$REPO_DIR/scripts/lib/data-lifecycle-common.sh" "$REPO_DIR/scripts/lib/diagnostics-common.sh" "$root/scripts/lib/"
+cp "$REPO_DIR/scripts/lib/lan-common.sh" "$REPO_DIR/scripts/lib/data-lifecycle-common.sh" "$REPO_DIR/scripts/lib/diagnostics-common.sh" "$REPO_DIR/scripts/lib/diagnostics-secret-audit.mjs" "$root/scripts/lib/"
 cp "$REPO_DIR/scripts/install-release.sh" "$root/scripts/install.sh"
 cp "$REPO_DIR/scripts/start-lan.sh" "$root/scripts/start.sh"
 cp "$REPO_DIR/scripts/stop-lan.sh" "$root/scripts/stop.sh"
@@ -65,11 +65,12 @@ const fs = require('fs'); const path = require('path');
 const [root, version] = process.argv.slice(2);
 function files(dir, prefix='') { return fs.readdirSync(dir, {withFileTypes:true}).flatMap(entry => { const rel = path.join(prefix, entry.name); const full = path.join(dir, entry.name); return entry.isDirectory() ? files(full, rel) : entry.isFile() ? [rel.split(path.sep).join('/')] : []; }); }
 const release = JSON.parse(fs.readFileSync(path.join(root, 'release/manifest.json'), 'utf8'));
-fs.writeFileSync(path.join(root, 'package-manifest.json'), JSON.stringify({ packageFormatVersion: 1, product: 'PartyGame', version, releaseManifest: 'release/manifest.json', releaseCommitHash: release.commitHash, requiredTools: ['dotnet','node','curl','shasum','tar'], runtimeOutsideRelease: true, scripts: ['install.sh','start.sh','stop.sh','status.sh','restart.sh','diagnose.sh','backup.sh','restore.sh','uninstall.sh'] }, null, 2) + '\n');
+fs.writeFileSync(path.join(root, 'package-manifest.json'), JSON.stringify({ packageFormatVersion: 1, product: 'PartyGame', version, releaseManifest: 'release/manifest.json', releaseCommitHash: release.commitHash, requiredTools: ['dotnet','node','curl','shasum','tar','sqlite3','unzip'], runtimeOutsideRelease: true, scripts: ['install.sh','start.sh','stop.sh','status.sh','restart.sh','diagnose.sh','backup.sh','restore.sh','uninstall.sh'] }, null, 2) + '\n');
 const crypto = require('crypto');
 const included = files(root).filter(file => !['checksums.sha256', 'package-manifest.json'].includes(file)).sort();
 const lines = included.map(file => `${crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')}  ${file}`);
 fs.writeFileSync(path.join(root, 'checksums.sha256'), lines.join('\n') + '\n');
 NODE
 tar -czf "$output" -C "$stage" "partygame-$version"
+node "$REPO_DIR/scripts/audit-release-dependencies.mjs" --package "$output"
 echo "PACKAGE_PATH=$output"

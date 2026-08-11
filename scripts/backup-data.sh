@@ -31,6 +31,30 @@ while IFS= read -r file; do key="${file#"$MEDIA/"}"; [[ "$key" == .* ]] && conti
 data_checksums "$STAGE"; data_verify_checksums "$STAGE" >/dev/null || data_die "checksum self-verification failed" "$DATA_EXIT_CHECKSUM"
 schema="$(data_schema_version "$STAGE/database/partygame.db")"; [[ -n "$schema" ]] || data_die "schema history is missing" "$DATA_EXIT_SCHEMA"; key_count="$(awk 'END {print NR}' "$keys_file")"; rm -f "$keys_file"
 dbsize="$(data_size "$STAGE/database/partygame.db")"; mediasize="$(data_tree_size "$STAGE/media")"; commit="${PARTYGAME_COMMIT_HASH:-unknown}"
-jq -n --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg app "${PARTYGAME_APPLICATION_VERSION:-unknown}" --arg commit "$commit" --arg schema "$schema" --arg mode "$MODE" --arg source "${PARTYGAME_DEPLOYMENT_VERSION:-unknown}" --arg runtime "${PARTYGAME_RUNTIME_ID:-$(basename "$DEPLOY_ROOT")}" --arg integrity "ok" --argjson dbsize "$dbsize" --argjson count "$key_count" --argjson mediasize "$mediasize" --slurpfile sums <(awk '{print $1 "  " $2}' "$STAGE/checksums.sha256" | jq -R . | jq -s 'map(split("  ") | {(.[1]): .[0]}) | add') '{backupFormatVersion:1,createdAtUtc:$created,applicationVersion:$app,commitHash:$commit,databaseSchemaVersion:$schema,databaseFile:"database/partygame.db",databaseSize:$dbsize,mediaFileCount:$count,mediaTotalSize:$mediasize,sourceDeploymentVersion:$source,sourceRuntimeId:$runtime,mode:$mode,integrityCheck:$integrity,checksums:$sums[0]}' > "$STAGE/backup-manifest.json"
+node - "$STAGE/checksums.sha256" "$STAGE/backup-manifest.json" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PARTYGAME_APPLICATION_VERSION:-unknown}" "$commit" "$schema" "$MODE" "${PARTYGAME_DEPLOYMENT_VERSION:-unknown}" "${PARTYGAME_RUNTIME_ID:-$(basename "$DEPLOY_ROOT")}" "$dbsize" "$key_count" "$mediasize" <<'NODE'
+const fs = require('fs');
+const [checksumsPath, outputPath, createdAtUtc, applicationVersion, commitHash, databaseSchemaVersion, mode, sourceDeploymentVersion, sourceRuntimeId, databaseSize, mediaFileCount, mediaTotalSize] = process.argv.slice(2);
+const checksums = Object.fromEntries(fs.readFileSync(checksumsPath, 'utf8').trim().split('\n').filter(Boolean).map(line => {
+  const match = line.match(/^([a-f0-9]{64})  (.+)$/i);
+  if (!match) throw new Error(`Invalid checksum line: ${line}`);
+  return [match[2], match[1]];
+}));
+fs.writeFileSync(outputPath, JSON.stringify({
+  backupFormatVersion: 1,
+  createdAtUtc,
+  applicationVersion,
+  commitHash,
+  databaseSchemaVersion,
+  databaseFile: 'database/partygame.db',
+  databaseSize: Number(databaseSize),
+  mediaFileCount: Number(mediaFileCount),
+  mediaTotalSize: Number(mediaTotalSize),
+  sourceDeploymentVersion,
+  sourceRuntimeId,
+  mode,
+  integrityCheck: 'ok',
+  checksums
+}, null, 2) + '\n');
+NODE
 printf 'PartyGame backup %s\nSchema: %s\nMode: %s\n' "$NAME" "$schema" "$MODE" > "$STAGE/BACKUP_INFO.txt"
 mv "$STAGE" "$FINAL"; STAGE=""; echo "BACKUP_PATH=$FINAL"

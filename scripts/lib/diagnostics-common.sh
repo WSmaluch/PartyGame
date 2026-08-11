@@ -33,3 +33,11 @@ diagnostics_is_safe_file() {
   resolved_candidate="$(cd -P "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
   [[ "$resolved_candidate" == "$resolved_root"/* ]]
 }
+
+diagnostics_assert_redacted() {
+  local directory="$1"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  [[ -d "$directory" && ! -L "$directory" ]] || diagnostics_die "secret audit directory must be a non-symlink directory."
+  node "$script_dir/diagnostics-secret-audit.mjs" "$directory"
+}

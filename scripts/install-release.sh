@@ -46,6 +46,9 @@ tar -xzf "$package" -C "$stage"
 roots=("$stage"/partygame-*)
 [[ ${#roots[@]} -eq 1 && -d "${roots[0]}" ]] || { echo "invalid package root" >&2; exit 65; }
 package_root="${roots[0]}"
+while IFS= read -r tool; do
+  command -v "$tool" >/dev/null || { echo "Missing required package tool: $tool" >&2; exit 69; }
+done < <(node -e 'const m=require(process.argv[1]); for (const tool of m.requiredTools || []) console.log(tool)' "$package_root/package-manifest.json")
 version="$(node "$package_root/scripts/release-assets.mjs" version "$package_root/release/manifest.json")"
 mkdir -p "$install_root" "$runtime_root"
 created_release="$install_root/releases/$version"

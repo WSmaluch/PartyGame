@@ -26,5 +26,5 @@ node -e 'const m=require(process.argv[1]); if(m.supportBundleFormatVersion!=="1"
 (cd "$DIRECTORY" && shasum -a 256 -c checksums.sha256) >/dev/null || diagnostics_die "checksum mismatch"
 if find "$DIRECTORY" -type l -print -quit | grep -q .; then diagnostics_die "bundle contains a symlink"; fi
 if find "$DIRECTORY" -type f \( -iname '*.db' -o -iname '*.sqlite*' -o -iname '*.wal' -o -iname '*.shm' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) -print -quit | grep -q .; then diagnostics_die "bundle contains forbidden database or media data"; fi
-if rg -n -i '(authorization["[:space:]:=]+bearer[[:space:]]+(?!\[REDACTED\])|operator[_ -]?token["[:space:]:=]+(?!\[REDACTED\])|reconnect[_ -]?token["[:space:]:=]+(?!\[REDACTED\]))' "$DIRECTORY" --pcre2 >/dev/null; then diagnostics_die "bundle secret scan failed"; fi
+diagnostics_assert_redacted "$DIRECTORY" || diagnostics_die "bundle secret scan failed"
 printf 'PASS support bundle verification\n'
