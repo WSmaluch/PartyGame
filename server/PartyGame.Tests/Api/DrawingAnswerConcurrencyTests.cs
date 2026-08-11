@@ -182,7 +182,7 @@ public sealed class DrawingAnswerConcurrencyTests
     {
         var roomLock = harness.Factory.Services.GetRequiredService<RoomLockProvider>().For(room.RoomCode);
         await roomLock.WaitAsync();
-        try { _ = await harness.ProcessAtAsync(room, now); }
+        try { _ = await harness.ProcessAtUnderLockAsync(room, now); }
         finally { roomLock.Release(); }
     }
 

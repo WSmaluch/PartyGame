@@ -314,6 +314,20 @@ internal sealed class PhotoAnswerTestHarness : IAsyncDisposable
 
     public async Task<GameStage> ProcessAtAsync(PhotoRoomAccess room, DateTimeOffset now)
     {
+        var roomLock = Factory.Services.GetRequiredService<RoomLockProvider>().For(room.RoomCode);
+        await roomLock.WaitAsync();
+        try
+        {
+            return await ProcessAtUnderLockAsync(room, now);
+        }
+        finally
+        {
+            roomLock.Release();
+        }
+    }
+
+    internal async Task<GameStage> ProcessAtUnderLockAsync(PhotoRoomAccess room, DateTimeOffset now)
+    {
         await using var scope = Factory.Services.CreateAsyncScope();
         var stateMachine = scope.ServiceProvider.GetRequiredService<GameStateMachine>();
         var db = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
