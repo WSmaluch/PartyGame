@@ -13,6 +13,9 @@ trap cleanup EXIT
 mkdir -p "$DEPLOY/runtime/database" "$MEDIA" "$BACKUPS"
 
 ASPNETCORE_ENVIRONMENT=Development ConnectionStrings__PartyGame="Data Source=$DB" MediaStorage__RootPath="$MEDIA" dotnet "$API_DLL" migrate >/dev/null
+# The release migration script consumes this exact production check contract.
+schema_check="$(ASPNETCORE_ENVIRONMENT=Development ConnectionStrings__PartyGame="Data Source=$DB" MediaStorage__RootPath="$MEDIA" PARTYGAME_APPLY_MIGRATIONS=false dotnet "$API_DLL" check)"
+printf '%s' "$schema_check" | node -e 'let body=""; process.stdin.on("data", chunk => body += chunk); process.stdin.on("end", () => { const value=JSON.parse(body); if (typeof value.DatabaseSchemaVersion !== "string" || typeof value.LatestSupportedSchemaVersion !== "string") process.exit(1); })'
 # The media copier needs records of both kinds. Foreign keys are intentionally
 # disabled only for this isolated storage-format fixture; the lifecycle code only
 # relies on the opaque keys and hashes, exactly as a real snapshot does.
