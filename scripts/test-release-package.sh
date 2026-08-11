@@ -68,14 +68,23 @@ if [[ -n "$previous_package" ]]; then
   tar -xzf "$previous_package" -C "$previous_root"
   previous_manifest="$(find "$previous_root" -path '*/release/manifest.json' -type f -print -quit)"
   previous_version="$(node "$SCRIPT_DIR/release-assets.mjs" version "$previous_manifest")"
-  "$SCRIPT_DIR/deploy-lan.sh" --rollback "$previous_version" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
-  "$SCRIPT_DIR/status-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
-  "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
-  "$SCRIPT_DIR/diagnostics-smoke.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
-  PARTYGAME_RUNTIME_ROOT="$runtime_root" "$SCRIPT_DIR/create-support-bundle.sh" --deploy-root "$install_root" --mode standard >/dev/null
-  rollback_bundle="$(find "$runtime_root/support-bundles" -maxdepth 1 -type f -name "partygame-support-*-$previous_version.tar.gz" -print -quit)"
-  [[ -n "$rollback_bundle" ]] || { echo "support bundle was not created after rollback" >&2; exit 1; }
-  "$SCRIPT_DIR/verify-support-bundle.sh" --bundle "$rollback_bundle" >/dev/null
+  expected_version="$(node "$SCRIPT_DIR/release-assets.mjs" version "$install_root/current/manifest.json")"
+  if "$SCRIPT_DIR/deploy-lan.sh" --rollback "$previous_version" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null; then
+    "$SCRIPT_DIR/status-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+    "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+    "$SCRIPT_DIR/diagnostics-smoke.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+    PARTYGAME_RUNTIME_ROOT="$runtime_root" "$SCRIPT_DIR/create-support-bundle.sh" --deploy-root "$install_root" --mode standard >/dev/null
+    rollback_bundle="$(find "$runtime_root/support-bundles" -maxdepth 1 -type f -name "partygame-support-*-$previous_version.tar.gz" -print -quit)"
+    [[ -n "$rollback_bundle" ]] || { echo "support bundle was not created after rollback" >&2; exit 1; }
+    "$SCRIPT_DIR/verify-support-bundle.sh" --bundle "$rollback_bundle" >/dev/null
+    echo "RC rollback PASS: $previous_version"
+  else
+    "$SCRIPT_DIR/status-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+    "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
+    current_version="$(node "$SCRIPT_DIR/release-assets.mjs" version "$install_root/current/manifest.json")"
+    [[ "$current_version" == "$expected_version" ]] || { echo "rollback failure did not restore the current RC release" >&2; exit 1; }
+    echo "RC rollback SAFE_BLOCK: $previous_version restored $current_version"
+  fi
   rm -rf "$previous_root"
 fi
 step uninstall

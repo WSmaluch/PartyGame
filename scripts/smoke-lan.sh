@@ -26,7 +26,9 @@ assert_json_config() {
 }
 
 assert_javascript_asset() {
-  local app="$1" index="$work/$app-index.html" headers="$work/headers" asset
+  local app="$1" index headers asset
+  index="$work/$app-index.html"
+  headers="$work/headers"
   curl --fail --silent --show-error "$base/$app/" -o "$index"
   asset="$(sed -nE "s#.*src=\"(/$app/assets/[^\"]+\\.js)\".*#\\1#p" "$index" | head -n 1)"
   [[ -n "$asset" ]] || { echo "PartyGame LAN: $app index does not reference a JavaScript asset." >&2; exit 1; }

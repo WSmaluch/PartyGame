@@ -177,7 +177,7 @@ PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true
 # migration operation (including its pre-migration backup) before starting the API.
 PARTYGAME_APPLY_MIGRATIONS=false
 PARTYGAME_DEPLOYMENT_ENABLED=true
-# PhysicalFileProvider does not serve files reliably through the `current`
+# PhysicalFileProvider does not serve files reliably through the current-release
 # symlink on macOS. Resolve it before starting Kestrel; deploy-lan.sh writes
 # this environment after every atomic current switch.
 PARTYGAME_DISPLAY_ROOT=$release/display
