@@ -43,6 +43,9 @@ if [[ -n "$previous_package" ]]; then
 fi
 step install-rc
 run_install "$package"
+if [[ -n "$previous_package" ]]; then
+  echo "RC upgrade PASS"
+fi
 step status-and-smoke
 "$SCRIPT_DIR/status-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
 "$SCRIPT_DIR/smoke-lan.sh" --deploy-root "$install_root" --runtime-root "$runtime_root" --host "$host" --port "$port" >/dev/null
