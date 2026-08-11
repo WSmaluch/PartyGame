@@ -213,10 +213,11 @@ lan_pid_is_ours() {
 }
 
 lan_pid_is_deployment_process() {
-  local pid="$1" command
+  local pid="$1" command deploy_root
   kill -0 "$pid" 2>/dev/null || return 1
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
-  [[ "$command" == *"$LAN_DEPLOY_ROOT/releases/"*"/api/PartyGame.Api.dll"* ]]
+  deploy_root="$(cd -P "$LAN_DEPLOY_ROOT" 2>/dev/null && pwd || printf '%s' "$LAN_DEPLOY_ROOT")"
+  [[ "$command" == *"$deploy_root/releases/"*"/api/PartyGame.Api.dll"* ]]
 }
 
 lan_stop_deployment_pid() {
