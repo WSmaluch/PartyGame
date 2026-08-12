@@ -31,6 +31,11 @@ export type TextAnswerResults = {
   votingOptions?: TextAnswerVotingOption[] | null;
 };
 
+export type AnonymousPhotoAnswer = { photoAnswerId: string; displayPhotoUrl?: string | null; thumbnailPhotoUrl?: string | null; displayOrder: number; width: number; height: number };
+export type PhotoAnswerResults = { questionInstanceId: string; submittedPlayers: number; requiredPlayers: number; anonymousOptions?: AnonymousPhotoAnswer[] | null };
+export type AnonymousDrawingAnswer = { drawingAnswerId: string; displayDrawingUrl?: string | null; thumbnailDrawingUrl?: string | null; width: number; height: number; revealOrder?: number | null; displayOrder?: number | null };
+export type DrawingAnswerResults = { questionInstanceId?: string | null; submittedPlayers?: number | null; requiredPlayers?: number | null; anonymousOptions?: AnonymousDrawingAnswer[] | null };
+
 export type GameSnapshot = {
   stage: string;
   currentRoundNumber: number;
@@ -44,6 +49,8 @@ export type GameSnapshot = {
   answeredPlayers?: number | null;
   requiredPlayers?: number | null;
   textResults?: TextAnswerResults | null;
+  photoAnswerResults?: PhotoAnswerResults | null;
+  drawingAnswerResults?: DrawingAnswerResults | null;
 };
 
 export function gameQuestion(game: GameSnapshot): GameQuestion | undefined {
@@ -57,7 +64,16 @@ export type PlayerPrivateGameState = {
   ownTextAnswerId?: string | null;
   hasSubmittedTextAnswerVote: boolean;
   isEligibleForTextAnswerVote: boolean;
+  hasSubmittedPhotoAnswer?: boolean;
+  ownPhotoAnswerId?: string | null;
+  hasSubmittedPhotoAnswerVote?: boolean;
+  hasSubmittedDrawingAnswer?: boolean;
+  ownDrawingAnswerId?: string | null;
+  hasSubmittedDrawingAnswerVote?: boolean;
+  isEligibleForDrawingAnswer?: boolean;
 };
+
+export type MediaUploadResponse = { playerPrivateGameState: PlayerPrivateGameState; roomSnapshot: RoomSnapshot };
 
 export type RoomSnapshot = {
   roomCode: string;

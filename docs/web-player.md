@@ -1,4 +1,4 @@
-# PartyGame Web Player (1C)
+# PartyGame Web Player (1D)
 
 Web Player to przeglądarkowy klient tego samego PartyGame API i SignalR Hub, co aplikacja iOS. Po wdrożeniu wejście to `http://HOST:PORT/play/`; konfiguracja runtime jest dostępna pod `/play/config.json`.
 
@@ -20,7 +20,21 @@ Wybór gracza używa listy zgodnej z klientem iOS (wszyscy pozostali gracze), od
 
 Każda akcja używa istniejących metod hubu `SubmitPlayerSelectionWithSubmission`, `SubmitTextAnswerWithSubmission` i `SubmitTextAnswerVoteWithSubmission`. Identyfikator `clientSubmissionId` jest stabilny dla tej samej instancji pytania, akcji i karty (`sessionStorage`), więc retry po błędzie sieci nie tworzy drugiej odpowiedzi ani głosu. Timer jest wyłącznie prezentacją deadline serwera; zerowy countdown nie zmienia etapu lokalnie. Sygnalizacja `Ping` koryguje zegar klienta, gdy jest dostępna.
 
-Etapy Photo i Drawing są na razie jawnie nieobsługiwane: klient pokazuje kontrolowany komunikat i nie wysyła fikcyjnych akcji. Results, Round Summary oraz ranking pozostają zakresem kolejnego etapu.
+## Gameplay: Photo, Drawing i media voting
+
+Etap 1D obsługuje `CollectingPhotoAnswers`, `CollectingDrawingAnswers`, `CollectingPhotoAnswerVotes` i `CollectingDrawingAnswerVotes`, nadal wyłącznie według authoritative `snapshot.game.stage`. Zdjęcie wybierane jest standardowym inputem `accept="image/*" capture="environment"`, więc przeglądarka mobilna może zaoferować aparat tylny lub galerię. Nie jest budowany własny subsystem kamery.
+
+Przed uploadem zdjęcie jest odczytywane jako obraz, zmniejszane maksymalnie do 2048 px na dłuższym boku, normalizowane do JPEG i kompresowane od jakości 0.86 do 0.62, aż mieści się w limicie 5 MiB. Nieobsługiwane, zbyt duże (wejściowo ponad 15 MiB), uszkodzone i nieprzetwarzalne pliki dostają kontrolowany komunikat. Preview i Blob są tylko w pamięci karty; SignalR reconnect bez reloadu ich nie usuwa, natomiast refresh przed zaakceptowaniem odpowiedzi wymaga ponownego wyboru zdjęcia.
+
+Photo upload używa istniejącego multipart `POST /api/rooms/{roomCode}/questions/{questionInstanceId}/photo-answers` z `playerId`, `reconnectToken`, `clientSubmissionId` i JPEG `photo`. Drawing exportuje białe płótno PNG 1024×1024 do analogicznego endpointu `drawing-answers` z polem `drawing`. Ten sam `clientSubmissionId`, utrwalony tylko dla danej sesji/pytania/akcji, jest ponownie używany przy retry; backend jest jedynym potwierdzeniem accepted submission. Po refreshu po sukcesie `resume` i private state pokazują stan „wysłano”, bez ponownego formularza.
+
+Canvas używa Pointer Events, z normalizacją współrzędnych względem aktualnego CSS `getBoundingClientRect`, `touch-action: none` i bitmapą 1024×1024 niezależną od rozmiaru CSS; działa dla myszy, dotyku i obsługiwanych pointerów rysika bez utraty jakości na ekranach o wysokim DPR. Ma Undo i potwierdzane Clear, a pusty rysunek jest lokalnie zablokowany. Nie przechowuje bitmapy ani stroke'ów w persistent browser storage; reconnect bez reloadu zachowuje lokalny stan płótna, odświeżenie przed sukcesem może go utracić.
+
+Voting renderuje wyłącznie anonimowe opcje przekazane przez backend (`photoAnswerResults` lub `drawingAnswerResults`), bez autora i bez tokenów w URL. Zdjęcia/rysunki zachowują proporcje przez `object-fit: contain`; podczas ładowania jest stan kontrolowany, a błąd, 404 lub brak URL jest lokalnym placeholderem, który nie wywraca etapu. Text voting pozostaje bez zmian. Results, Round Summary oraz ranking pozostają zakresem kolejnego etapu.
+
+### Feature QA package
+
+Do fizycznego QA 1D utwórz przez Admin osobny, opublikowany pakiet `Web Player 1D QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
 
 Lokalny development:
 

@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { ConnectionStatus } from '../realtime/gameHubConnection';
 import { gameHubConnection } from '../realtime/gameHubConnection';
 import { gameQuestion, localizedText, type GameSnapshot, type PlayerPrivateGameState, type PlayerSession, type PublicPlayer, type RoomSnapshot } from '../api/types';
 import { submissionIdentity } from './submissionIdentity';
 import type { Locale, TranslationKey } from '../translations';
+import { uploadDrawingAnswer, uploadPhotoAnswer } from '../api/playerApi';
+import { drawingPng, GameMediaError, preparePhotoAnswer } from '../media/gameMedia';
+import { DrawingCanvas } from './DrawingCanvas';
 
 type Translate = (key: TranslationKey) => string;
 type SubmissionState = 'idle' | 'submitting' | 'submitted' | 'failed';
@@ -21,10 +24,14 @@ export function GameRouter({ session, snapshot, privateState, locale, status, t,
   if (!game) return <GameShell status={status} t={t}><p>{t('gameLoading')}</p></GameShell>;
   const questionId = gameQuestion(game)?.instanceId ?? gameQuestion(game)?.id ?? game.stage;
   if (game.stage === 'CollectingPlayerSelections') return <PlayerSelection key={questionId} session={session} snapshot={snapshot} game={game} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
-  if ((game.stage === 'CollectingTextAnswers' || game.stage === 'CollectingTextAnswerVotes') && privateState?.questionInstanceId !== questionId) return <GameShell game={game} status={status} t={t}><p>{t('gameLoading')}</p></GameShell>;
+  if ((game.stage === 'CollectingTextAnswers' || game.stage === 'CollectingTextAnswerVotes' || game.stage === 'CollectingPhotoAnswers' || game.stage === 'CollectingPhotoAnswerVotes' || game.stage === 'CollectingDrawingAnswers' || game.stage === 'CollectingDrawingAnswerVotes') && privateState?.questionInstanceId !== questionId) return <GameShell game={game} status={status} t={t}><p>{t('gameLoading')}</p></GameShell>;
   if (game.stage === 'CollectingTextAnswers') return <TextAnswer key={questionId} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
   if (game.stage === 'CollectingTextAnswerVotes') return <TextVoting key={questionId} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
-  if (game.stage.includes('Photo') || game.stage.includes('Drawing')) return <GameShell game={game} status={status} t={t}><h1>{t('unsupportedQuestionType')}</h1><p>{t('unsupportedQuestionHint')}</p></GameShell>;
+  if (game.stage === 'CollectingPhotoAnswers') return <PhotoAnswer key={questionId} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage === 'CollectingDrawingAnswers') return <DrawingAnswer key={questionId} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage === 'CollectingPhotoAnswerVotes') return <MediaVoting key={questionId} kind="photo" session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage === 'CollectingDrawingAnswerVotes') return <MediaVoting key={questionId} kind="drawing" session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage.includes('Photo') || game.stage.includes('Drawing')) return <GameShell game={game} status={status} t={t}><h1>{t('stageWaiting')}</h1></GameShell>;
   return <GameShell game={game} status={status} t={t}><h1>{t('waitingForOthers')}</h1><p>{t('stageWaiting')}</p></GameShell>;
 }
 
@@ -101,6 +108,48 @@ function TextVoting({ session, game, privateState, locale, status, t, onSnapshot
     {submission === 'submitted' || !eligible ? <WaitingState label={submission === 'submitted' ? t('voteSubmitted') : t('notEligibleToVote')} t={t} /> : <fieldset><legend>{t('vote')}</legend><div className="option-list">{options.map((option) => <label key={option.answerId} className={`text-option ${selectedId === option.answerId ? 'is-selected' : ''}`}><input type="radio" name="text-vote" value={option.answerId} checked={selectedId === option.answerId} onChange={() => setSelectedId(option.answerId)} />{option.text}</label>)}</div><button type="button" onClick={() => void submit()} disabled={!selectedId || submission === 'submitting' || status !== 'connected'}>{submission === 'submitting' ? t('submitting') : t('submitVote')}</button>{submission === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('voteFailed')} />}</fieldset>}
   </GameShell>;
 }
+
+function PhotoAnswer({ session, game, privateState, locale, status, t, onSnapshot }: { session: PlayerSession; game: GameSnapshot; privateState?: PlayerPrivateGameState; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void }) {
+  const question = gameQuestion(game); const questionId = question?.instanceId ?? question?.id;
+  const authoritativeSubmitted = privateState?.hasSubmittedPhotoAnswer === true;
+  const [file, setFile] = useState<Blob>(); const [preview, setPreview] = useState<string>(); const [failure, setFailure] = useState<TranslationKey>(); const [state, setState] = useState<'idle' | 'processing' | 'uploading' | 'submitted' | 'failed'>(authoritativeSubmitted ? 'submitted' : 'idle'); const inFlight = useRef(false);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  async function select(event: ChangeEvent<HTMLInputElement>): Promise<void> { const selected = event.target.files?.[0]; event.target.value = ''; if (!selected) return; setFailure(undefined); setState('processing'); try { const prepared = await preparePhotoAnswer(selected); if (preview) URL.revokeObjectURL(preview); setFile(prepared); setPreview(URL.createObjectURL(prepared)); setState('idle'); } catch (error) { setFailure(photoErrorMessage(error)); setState('failed'); } }
+  async function submit(): Promise<void> { if (!file || !questionId || inFlight.current) return; inFlight.current = true; setFailure(undefined); setState('uploading'); try { const result = await uploadPhotoAnswer(session, questionId, file, submissionIdentity(session.roomCode, session.playerId, questionId, 'photo-answer')); onSnapshot(result.roomSnapshot); setState('submitted'); } catch { setFailure('photoUploadFailed'); setState('failed'); } finally { inFlight.current = false; } }
+  return <GameShell game={game} status={status} t={t}>
+    <h2>{localizedText(question?.text, locale)}</h2>
+    {state === 'submitted' || authoritativeSubmitted ? <WaitingState label={t('photoSubmitted')} t={t} /> : <>
+      <label className="file-button" htmlFor="photo-answer">{t('takePhoto')}</label>
+      <input id="photo-answer" className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={select} />
+      {state === 'processing' && <p role="status">{t('processingPhoto')}</p>}
+      {preview && <>
+        <img className="media-preview" src={preview} alt={t('photoPreview')} />
+        <button type="button" className="secondary-action" onClick={() => { setFile(undefined); URL.revokeObjectURL(preview); setPreview(undefined); }}>{t('changePhoto')}</button>
+        <button type="button" onClick={() => void submit()} disabled={state === 'uploading' || status !== 'connected'}>{state === 'uploading' ? t('uploadingPhoto') : t('submitPhoto')}</button>
+      </>}
+      {failure && <Retry onRetry={() => void submit()} t={t} message={t(failure)} />}
+    </>}
+  </GameShell>;
+}
+
+function DrawingAnswer({ session, game, privateState, locale, status, t, onSnapshot }: { session: PlayerSession; game: GameSnapshot; privateState?: PlayerPrivateGameState; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void }) {
+  const question = gameQuestion(game); const questionId = question?.instanceId ?? question?.id; const authoritativeSubmitted = privateState?.hasSubmittedDrawingAnswer === true; const eligible = privateState?.isEligibleForDrawingAnswer !== false;
+  const [canvas, setCanvas] = useState<HTMLCanvasElement>(); const [hasInk, setHasInk] = useState(false); const [state, setState] = useState<SubmissionState>(authoritativeSubmitted ? 'submitted' : 'idle'); const inFlight = useRef(false);
+  async function submit(): Promise<void> { if (!canvas || !questionId || !hasInk || inFlight.current) return; inFlight.current = true; setState('submitting'); try { const png = await drawingPng(canvas, hasInk); const result = await uploadDrawingAnswer(session, questionId, png, submissionIdentity(session.roomCode, session.playerId, questionId, 'drawing-answer')); onSnapshot(result.roomSnapshot); setState('submitted'); } catch { setState('failed'); } finally { inFlight.current = false; } }
+  return <GameShell game={game} status={status} t={t}><h2>{localizedText(question?.text, locale)}</h2>{state === 'submitted' || authoritativeSubmitted || !eligible ? <WaitingState label={state === 'submitted' || authoritativeSubmitted ? t('drawingSubmitted') : t('waitingForOthers')} t={t} /> : <><DrawingCanvas disabled={state === 'submitting'} onCanvas={setCanvas} onInkChange={setHasInk} labels={{ canvas: t('drawingCanvas'), undo: t('undoDrawing'), clear: t('clearDrawing'), clearConfirm: t('clearDrawingConfirm'), cancel: t('cancel') }} /><button type="button" onClick={() => void submit()} disabled={!hasInk || state === 'submitting' || status !== 'connected'}>{state === 'submitting' ? t('submitting') : t('submitDrawing')}</button>{state === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('drawingSubmitFailed')} />}</>}</GameShell>;
+}
+
+function MediaVoting({ kind, session, game, privateState, locale, status, t, onSnapshot }: { kind: 'photo' | 'drawing'; session: PlayerSession; game: GameSnapshot; privateState?: PlayerPrivateGameState; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void }) {
+  const question = gameQuestion(game); const questionId = question?.instanceId ?? question?.id; const submitted = kind === 'photo' ? privateState?.hasSubmittedPhotoAnswerVote === true : privateState?.hasSubmittedDrawingAnswerVote === true;
+  const options = kind === 'photo' ? (game.photoAnswerResults?.anonymousOptions ?? []).map((option) => ({ id: option.photoAnswerId, url: option.thumbnailPhotoUrl || option.displayPhotoUrl, label: `${t('vote')} ${option.displayOrder + 1}` })) : (game.drawingAnswerResults?.anonymousOptions ?? []).map((option, index) => ({ id: option.drawingAnswerId, url: option.thumbnailDrawingUrl ?? option.displayDrawingUrl, label: `${t('vote')} ${(option.displayOrder ?? index) + 1}` }));
+  const [selected, setSelected] = useState<string>(); const [state, setState] = useState<SubmissionState>(submitted ? 'submitted' : 'idle'); const inFlight = useRef(false);
+  async function submit(): Promise<void> { if (!selected || !questionId || inFlight.current) return; inFlight.current = true; setState('submitting'); try { if (kind === 'photo') await gameHubConnection.submitPhotoAnswerVote(session, selected, questionId, submissionIdentity(session.roomCode, session.playerId, questionId, 'photo-vote')); else await gameHubConnection.submitDrawingAnswerVote(session, selected, questionId, submissionIdentity(session.roomCode, session.playerId, questionId, 'drawing-vote')); onSnapshot(await gameHubConnection.getRoomSnapshot(session.roomCode)); setState('submitted'); } catch { setState('failed'); } finally { inFlight.current = false; } }
+  return <GameShell game={game} status={status} t={t}><h2>{localizedText(question?.text, locale)}</h2>{state === 'submitted' || submitted ? <WaitingState label={t('voteSubmitted')} t={t} /> : <fieldset><legend>{t('vote')}</legend><div className="media-options">{options.map((option) => <button type="button" className={`media-option ${selected === option.id ? 'is-selected' : ''}`} key={option.id} aria-pressed={selected === option.id} aria-label={option.label} onClick={() => setSelected(option.id)}><RemoteMedia src={option.url} alt={option.label} unavailable={t('mediaUnavailable')} loading={t('mediaLoading')} /></button>)}</div><button type="button" onClick={() => void submit()} disabled={!selected || state === 'submitting' || status !== 'connected'}>{state === 'submitting' ? t('submitting') : t('submitVote')}</button>{state === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('voteFailed')} />}</fieldset>}</GameShell>;
+}
+
+function RemoteMedia({ src, alt, unavailable, loading }: { src?: string | null; alt: string; unavailable: string; loading: string }) { const [failedSource, setFailedSource] = useState<string>(); const [loadedSource, setLoadedSource] = useState<string>(); if (!src || failedSource === src) return <span className="media-unavailable" role="img" aria-label={unavailable}>⚠</span>; return <span className="remote-media">{loadedSource !== src && <span className="media-loading" role="status">{loading}</span>}<img className="media-option-image" src={src} alt={alt} onLoad={() => setLoadedSource(src)} onError={() => setFailedSource(src)} /></span>; }
+
+function photoErrorMessage(error: unknown): TranslationKey { if (!(error instanceof GameMediaError)) return 'photoProcessing'; if (error.kind === 'unsupported') return 'photoInvalid'; if (error.kind === 'too-large') return 'photoTooLarge'; return 'photoProcessing'; }
 
 function PlayerOption({ player, selected, stateVersion, onSelect }: { player: PublicPlayer; selected: boolean; stateVersion: number; onSelect: () => void }) {
   const image = player.profilePhotoUrl ? `${player.profilePhotoUrl}${player.profilePhotoUrl.includes('?') ? '&' : '?'}v=${stateVersion}` : undefined;

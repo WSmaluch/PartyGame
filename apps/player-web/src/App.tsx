@@ -56,6 +56,12 @@ export default function App() {
       hasSubmittedTextAnswer: current.hasSubmittedTextAnswer || candidate.hasSubmittedTextAnswer,
       ownTextAnswerId: candidate.ownTextAnswerId ?? current.ownTextAnswerId,
       hasSubmittedTextAnswerVote: current.hasSubmittedTextAnswerVote || candidate.hasSubmittedTextAnswerVote,
+      hasSubmittedPhotoAnswer: current.hasSubmittedPhotoAnswer || candidate.hasSubmittedPhotoAnswer,
+      ownPhotoAnswerId: candidate.ownPhotoAnswerId ?? current.ownPhotoAnswerId,
+      hasSubmittedPhotoAnswerVote: current.hasSubmittedPhotoAnswerVote || candidate.hasSubmittedPhotoAnswerVote,
+      hasSubmittedDrawingAnswer: current.hasSubmittedDrawingAnswer || candidate.hasSubmittedDrawingAnswer,
+      ownDrawingAnswerId: candidate.ownDrawingAnswerId ?? current.ownDrawingAnswerId,
+      hasSubmittedDrawingAnswerVote: current.hasSubmittedDrawingAnswerVote || candidate.hasSubmittedDrawingAnswerVote,
     } : candidate);
   }), []);
   // Session restoration is an external synchronization action; it must run once

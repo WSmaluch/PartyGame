@@ -29,8 +29,12 @@ describe('GameHubConnection', () => {
     await hub.submitPlayerSelection(session, 'other', 'question', 'selection-id');
     await hub.submitTextAnswer(session, 'answer', 'question', 'answer-id');
     await hub.submitTextAnswerVote(session, 'answer-id', 'question', 'vote-id');
+    await hub.submitPhotoAnswerVote(session, 'photo-id', 'question', 'photo-vote-id');
+    await hub.submitDrawingAnswerVote(session, 'drawing-id', 'question', 'drawing-vote-id');
     expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitPlayerSelectionWithSubmission', 'AB12', 'player', 'token', 'other', 'question', 'selection-id');
     expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitTextAnswerWithSubmission', 'AB12', 'player', 'token', 'answer', 'question', 'answer-id');
     expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitTextAnswerVoteWithSubmission', 'AB12', 'player', 'token', 'answer-id', 'question', 'vote-id');
+    expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitPhotoAnswerVoteWithSubmission', 'AB12', 'player', 'token', 'question', 'photo-id', 'photo-vote-id');
+    expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitDrawingAnswerVoteWithSubmission', 'AB12', 'player', 'token', 'question', 'drawing-id', 'drawing-vote-id');
   });
 });

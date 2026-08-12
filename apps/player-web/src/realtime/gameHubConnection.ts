@@ -79,6 +79,16 @@ export class GameHubConnection {
     await this.invokeSubmission('SubmitTextAnswerVoteWithSubmission', session, selectedAnswerId, questionInstanceId, clientSubmissionId);
   }
 
+  async submitPhotoAnswerVote(session: PlayerSession, selectedAnswerId: string, questionInstanceId: string, clientSubmissionId: string): Promise<void> {
+    const connection = this.ensureConnection(); if (connection.state !== HubConnectionState.Connected) throw new Error('not-connected');
+    await connection.invoke<void>('SubmitPhotoAnswerVoteWithSubmission', session.roomCode, session.playerId, session.reconnectToken, questionInstanceId, selectedAnswerId, clientSubmissionId);
+  }
+
+  async submitDrawingAnswerVote(session: PlayerSession, selectedAnswerId: string, questionInstanceId: string, clientSubmissionId: string): Promise<void> {
+    const connection = this.ensureConnection(); if (connection.state !== HubConnectionState.Connected) throw new Error('not-connected');
+    await connection.invoke<void>('SubmitDrawingAnswerVoteWithSubmission', session.roomCode, session.playerId, session.reconnectToken, questionInstanceId, selectedAnswerId, clientSubmissionId);
+  }
+
   private async invokeSubmission(method: string, session: PlayerSession, value: string, questionInstanceId: string, clientSubmissionId: string): Promise<void> {
     const connection = this.ensureConnection();
     if (connection.state !== HubConnectionState.Connected) throw new Error('not-connected');

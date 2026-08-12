@@ -1,5 +1,5 @@
 import { apiUrl } from './apiConfig';
-import type { PlayerSession, ResumePlayerResponse, RoomAccessResponse, RoomSnapshot } from './types';
+import type { MediaUploadResponse, PlayerSession, ResumePlayerResponse, RoomAccessResponse, RoomSnapshot } from './types';
 
 export class PlayerApiError extends Error {
   readonly kind: 'not-found' | 'started' | 'validation' | 'network' | 'server' | 'invalid-session';
@@ -26,6 +26,20 @@ export async function uploadProfilePhoto(session: PlayerSession, file: Blob): Pr
     { method: 'POST', headers: { 'X-Player-Token': session.reconnectToken }, body: form },
     false,
   );
+}
+
+export async function uploadPhotoAnswer(session: PlayerSession, questionInstanceId: string, file: Blob, clientSubmissionId: string): Promise<MediaUploadResponse> {
+  return uploadMedia(session, questionInstanceId, file, clientSubmissionId, 'photo-answers', 'photo', 'photo.jpg');
+}
+
+export async function uploadDrawingAnswer(session: PlayerSession, questionInstanceId: string, file: Blob, clientSubmissionId: string): Promise<MediaUploadResponse> {
+  return uploadMedia(session, questionInstanceId, file, clientSubmissionId, 'drawing-answers', 'drawing', 'drawing.png');
+}
+
+async function uploadMedia(session: PlayerSession, questionInstanceId: string, file: Blob, clientSubmissionId: string, endpoint: string, field: string, filename: string): Promise<MediaUploadResponse> {
+  const form = new FormData();
+  form.append('playerId', session.playerId); form.append('reconnectToken', session.reconnectToken); form.append('clientSubmissionId', clientSubmissionId); form.append(field, file, filename);
+  return requestJson<MediaUploadResponse>(`/api/rooms/${encodeURIComponent(session.roomCode)}/questions/${encodeURIComponent(questionInstanceId)}/${endpoint}`, { method: 'POST', body: form }, false);
 }
 
 export async function joinRoom(roomCode: string, nickname: string): Promise<RoomAccessResponse> {
