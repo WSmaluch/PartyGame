@@ -3,6 +3,7 @@ import XCTest
 final class PartyGameUITests: XCTestCase {
     func testHostAndJoinFormsAreUsableWithoutServer() {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTestingHome"]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["PartyGame"].waitForExistence(timeout: 5))

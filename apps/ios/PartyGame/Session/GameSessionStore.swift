@@ -468,7 +468,7 @@ final class GameSessionStore {
             privateStateRefreshFailedQuestionId = nil
         }
         activeQuestionInstanceId = nextQuestion
-        if (questionChanged || enteredDrawingAnswerCollection), nextQuestion != nil {
+        if !isUITesting, (questionChanged || enteredDrawingAnswerCollection), nextQuestion != nil {
             // Drawing eligibility is created with the transition to this stage.
             // A private state fetched during the preceding intro has the same
             // question id but predates that eligibility list, so it cannot be
@@ -507,6 +507,11 @@ final class GameSessionStore {
 
     func configureUITestScenario(arguments: [String]) {
         #if DEBUG
+        if arguments.contains("-uiTestingHome") {
+            isUITesting = true
+            screen = .idle
+            return
+        }
         let photoArgument = arguments.first { $0.hasPrefix("-uiTestingPhoto") }
         let drawingArgument = arguments.first { $0.hasPrefix("-uiTestingDrawing") }
         let gameScreenArgument = arguments.first { $0.hasPrefix("-uiTestingGameScreen") }
@@ -702,7 +707,8 @@ final class GameSessionStore {
         privateGameState = PlayerPrivateGameState(playerId: playerId, questionInstanceId: questionId,
             hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false,
             hasSubmittedDrawingAnswer: argument == "-uiTestingDrawingWaiting" || argument == "-uiTestingDrawingVoteWaiting",
-            ownDrawingAnswerId: ownDrawingId, hasSubmittedDrawingAnswerVote: argument == "-uiTestingDrawingVoteWaiting")
+            ownDrawingAnswerId: ownDrawingId, hasSubmittedDrawingAnswerVote: argument == "-uiTestingDrawingVoteWaiting",
+            isEligibleForDrawingAnswer: stage == .collectingDrawingAnswers)
         if ["-uiTestingDrawingPreview", "-uiTestingDrawingUpload", "-uiTestingDrawingRetry"].contains(argument) {
             var canvas = DrawingCanvasState()
             canvas.complete([DrawingPoint(x: 0.15, y: 0.15), DrawingPoint(x: 0.85, y: 0.85)])

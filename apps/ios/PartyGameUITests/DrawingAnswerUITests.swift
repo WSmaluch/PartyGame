@@ -82,7 +82,7 @@ final class DrawingAnswerUITests: XCTestCase {
         let own = app.buttons["drawing-voting-option-50000000-0000-0000-0000-000000000001"]
         XCTAssertTrue(own.exists)
         own.tap()
-        XCTAssertTrue(app.buttons["drawing-voting-view"].isEnabled)
+        XCTAssertTrue(app.buttons["drawing.vote"].isEnabled)
     }
 
     func test10VoteWaitingRestoresPrivateState() {

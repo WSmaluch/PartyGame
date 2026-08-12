@@ -7,7 +7,7 @@ final class Phase2B_UITests: XCTestCase {
 
     func testPhase2BFullGameFlow() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-uitesting"]
+        app.launchArguments = ["-uiTestingHome"]
         app.launch()
 
         XCTAssertTrue(app.buttons["home.hostGame"].waitForExistence(timeout: 5))
