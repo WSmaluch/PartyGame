@@ -44,6 +44,10 @@ Każdy snapshot przechodzi przez ochronę `stateVersion`: klient ignoruje opóź
 
 Do fizycznego QA 1E utwórz przez Admin osobny, opublikowany pakiet `Web Player Full QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. Przejdź pełny scenariusz: Join → Lobby → Ready → cztery typy pytań i voting → Results po każdym pytaniu → Round Summary → Completed, następnie odśwież przeglądarkę w wynikach i na ekranie końcowym. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
 
+### Znane ograniczenia walidacji środowiska
+
+Końcowa akceptacja na urządzeniu fizycznym oraz pełny release validator wymagają pełnego Xcode z dostępnym symulatorem iOS. W środowisku z samymi Command Line Tools skrypt `scripts/build-release.sh` może poprawnie zbudować artefakty API i web (`/play/index.html`, `/play/config.json`, assets), ale zatrzymuje się na obowiązkowym `xcodebuild build-for-testing`; manifest, package verify i LAN smoke nie są wtedy deklarowane jako ukończone.
+
 Lokalny development:
 
 ```bash
