@@ -63,8 +63,10 @@ struct CollectingPlayerSelectionsView: View {
                                 )
                                 Text(player.nickname)
                             }
+                            .frame(width: 112)
                         }
                         .disabled(store.submittedQuestionInstanceIds.contains(question?.instanceId ?? UUID()) || store.isWorking)
+                        .accessibilityIdentifier("selection-player-\(player.id.uuidString)")
                     }
                 }
                 .padding()
@@ -98,11 +100,13 @@ struct ShowingQuestionResultsView: View {
                                     Text(sp.nickname)
                                 }
                                 Spacer()
-                                Text("+\(voter.pointsAwarded) pts")
+                                Text(String(format: String(localized: "score.points.awarded"), voter.pointsAwarded))
                                     .bold()
                             }
                             .padding()
                             .transition(.slide)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("selection-result-\(voter.playerId.uuidString)")
                         }
                     }
                 }
@@ -145,8 +149,9 @@ struct RoundSummaryView: View {
                             Text(p.nickname)
                         }
                         Spacer()
-                        Text("\(ranking.score) pts")
+                        Text(String(format: String(localized: "score.points"), ranking.score))
                     }
+                    .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                 }
             } else {
@@ -190,8 +195,9 @@ struct CompletedView: View {
                             Text(p.nickname)
                         }
                         Spacer()
-                        Text("\(ranking.score) pts")
+                        Text(String(format: String(localized: "score.points"), ranking.score))
                     }
+                    .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                 }
             }
@@ -343,20 +349,20 @@ struct ShowingTextAnswerResultsView: View {
                                     Text(option.text)
                                         .font(.headline)
                                     Spacer()
-                                    Text("\(option.voteCount) votes")
+                                    Text(String(format: String(localized: "textanswer.vote_count"), option.voteCount))
                                         .bold()
                                         .foregroundColor(option.isTopResult ? .green : .primary)
                                 }
                                 
                                 HStack {
-                                    Text("By: \(option.authorPlayerNickname)")
+                                    Text(String(format: String(localized: "textanswer.author"), option.authorPlayerNickname))
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                     Spacer()
                                 }
                                 
                                 if !option.voters.isEmpty {
-                                    Text("Voted by: \(option.voters.map { voter in store.snapshot?.players.first(where: { $0.id == voter.playerId })?.nickname ?? "Unknown" }.joined(separator: ", "))")
+                                    Text(String(format: String(localized: "textanswer.voted_by"), option.voters.map { voter in store.snapshot?.players.first(where: { $0.id == voter.playerId })?.nickname ?? String(localized: "common.unknown") }.joined(separator: ", ")))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -364,7 +370,7 @@ struct ShowingTextAnswerResultsView: View {
                                 // points awarded if we have it
                                 // Wait, the prompt says "pointsAwarded". But pointsAwarded is inside voters for TextAnswer? No, TextAnswer results has voters which is `[ResultVoter]`.
                                 if option.voters.contains(where: { $0.pointsAwarded > 0 }) {
-                                    Text("Points awarded!") // We can refine this
+                                    Text("textanswer.points_awarded")
                                         .font(.caption2)
                                 }
                             }

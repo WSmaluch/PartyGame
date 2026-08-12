@@ -41,11 +41,17 @@ final class GameSessionStoreTests: XCTestCase {
         api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: snapshot, privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
         realtime.attachPlayerResult = snapshot
 
-        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+        await store.createRoom(
+            nickname: "Ola",
+            settings: RoomSettings(),
+            selectedPackageKeys: nil,
+            enabledQuestionTypes: ["PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer"]
+        )
 
         XCTAssertEqual(store.session?.roomCode, "TEST")
         XCTAssertEqual(store.screen, .profilePhoto)
         XCTAssertTrue(api.createRoomCalled)
+        XCTAssertEqual(api.createRoomRequest?.enabledQuestionTypes, ["PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer"])
         XCTAssertTrue(realtime.connectCalled)
         XCTAssertTrue(realtime.attachPlayerCalled)
         XCTAssertNotNil(storage.savedSession)
@@ -399,9 +405,11 @@ final class GameSessionStoreTests: XCTestCase {
 
 private final class MockRoomAPIClient: RoomAPIClientProtocol, @unchecked Sendable {
     var createRoomCalled = false
+    var createRoomRequest: CreateRoomRequest?
     var createRoomResult: CreateRoomResponse?
     func createRoom(baseURL: URL, request: CreateRoomRequest) async throws -> CreateRoomResponse {
         createRoomCalled = true
+        createRoomRequest = request
         return createRoomResult!
     }
 

@@ -35,29 +35,20 @@ public static class RoomContractMapper
     {
         mediaUrls ??= new PhotoMediaUrlProvider();
         var isCompleted = session.Stage == GameStage.Completed;
-        List<PlayerScoreSnapshot> scores;
-        if (isCompleted)
+        var orderedPlayers = session.Room.Players
+            .OrderByDescending(p => p.Score)
+            .ThenBy(p => p.Id)
+            .ToList();
+        var scores = new List<PlayerScoreSnapshot>(orderedPlayers.Count);
+        for (int i = 0; i < orderedPlayers.Count; i++)
         {
-            var ordered = session.Room.Players
-                .OrderByDescending(p => p.Score)
-                .ThenBy(p => p.Id)
-                .ToList();
-
-            scores = new List<PlayerScoreSnapshot>(ordered.Count);
-            for (int i = 0; i < ordered.Count; i++)
+            var player = orderedPlayers[i];
+            var rank = i + 1;
+            if (i > 0 && player.Score == scores[i - 1].Score)
             {
-                var p = ordered[i];
-                int rank = i + 1;
-                if (i > 0 && p.Score == scores[i - 1].Score)
-                {
-                    rank = scores[i - 1].Rank!.Value;
-                }
-                scores.Add(new PlayerScoreSnapshot(p.Id, p.Score, rank));
+                rank = scores[i - 1].Rank!.Value;
             }
-        }
-        else
-        {
-            scores = session.Room.Players.Select(p => new PlayerScoreSnapshot(p.Id, p.Score)).ToList();
+            scores.Add(new PlayerScoreSnapshot(player.Id, player.Score, rank));
         }
 
         GameCategorySnapshot? category = null;

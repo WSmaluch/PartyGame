@@ -3,9 +3,10 @@ import SwiftUI
 struct GameRouterView: View {
     let store: GameSessionStore
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
             if let game = store.snapshot?.game {
-                switch game.stage {
+                Group {
+                    switch game.stage {
                 case .categoryIntro:
                     CategoryIntroView(category: game.categories?.first)
                 case .questionIntro:
@@ -70,20 +71,23 @@ struct GameRouterView: View {
                 case .showingDrawingAnswerResults:
                     DrawingResultsView(store: store, game: game)
                 case .unknown(let val):
-                    ProgressView().accessibilityLabel("Oczekiwanie na aktualny etap \(val)")
+                    ProgressView().accessibilityLabel(String(format: String(localized: "game.awaiting_stage"), val))
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 
-                Spacer()
+                Spacer(minLength: 12)
                 
                 if game.stage != .completed {
                     CountdownTimerView(stageEndsAtUtc: game.stageEndsAtUtc, serverOffset: store.serverOffset)
                         .padding()
                 }
             } else {
-                Text("Waiting for game data...")
+                Text("game.loading")
             }
         }
-        .padding(28).navigationBarBackButtonHidden()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(20).navigationBarBackButtonHidden()
         .overlay(alignment: .topLeading) {
             ZStack {
                 Color.clear.frame(width: 1, height: 1)

@@ -165,7 +165,12 @@ final class GameSessionStore {
         return try await api.getContentPackages(baseURL: baseURL)
     }
 
-    func createRoom(nickname: String, settings: RoomSettings, selectedPackageKeys: [String]?) async {
+    func createRoom(
+        nickname: String,
+        settings: RoomSettings,
+        selectedPackageKeys: [String]?,
+        enabledQuestionTypes: [String]? = nil
+    ) async {
         guard validateNickname(nickname), settings.isValid, let baseURL = ServerConfiguration.validatedURL(from: configuration.baseURL) else {
             errorMessage = String(localized: "error.invalid_form")
             return
@@ -176,7 +181,8 @@ final class GameSessionStore {
                 request: CreateRoomRequest(
                     nickname: nickname.trimmingCharacters(in: .whitespacesAndNewlines),
                     settings: settings,
-                    selectedPackageKeys: selectedPackageKeys
+                    selectedPackageKeys: selectedPackageKeys,
+                    enabledQuestionTypes: enabledQuestionTypes
                 )
             )
         }
@@ -503,7 +509,12 @@ final class GameSessionStore {
         #if DEBUG
         let photoArgument = arguments.first { $0.hasPrefix("-uiTestingPhoto") }
         let drawingArgument = arguments.first { $0.hasPrefix("-uiTestingDrawing") }
-        guard arguments.contains("-uiTestingLobby") || arguments.contains("-uiTestingStarted") || photoArgument != nil || drawingArgument != nil else { return }
+        let gameScreenArgument = arguments.first { $0.hasPrefix("-uiTestingGameScreen") }
+        guard arguments.contains("-uiTestingLobby") || arguments.contains("-uiTestingStarted") || photoArgument != nil || drawingArgument != nil || gameScreenArgument != nil else { return }
+        if let gameScreenArgument {
+            configureGameScreenUITestScenario(gameScreenArgument)
+            return
+        }
         if let drawingArgument {
             configureDrawingUITestScenario(drawingArgument)
             return
@@ -585,6 +596,54 @@ final class GameSessionStore {
         screen = phase == .started ? .started : .lobby
         #endif
     }
+
+    #if DEBUG
+    private func configureGameScreenUITestScenario(_ argument: String) {
+        isUITesting = true
+        let ola = UUID(uuidString: "0DC81D35-C68D-47C6-AEBB-5E86407A1BB0")!
+        let jan = UUID(uuidString: "38C92C29-2CF5-49E0-BC6B-AEBF9F37BCCA")!
+        let ewa = UUID(uuidString: "71A8C49F-1A2B-418F-A5CD-7D47C9BC9280")!
+        let questionId = UUID(uuidString: "30000000-0000-0000-0000-000000000001")!
+        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: true, serverBaseURL: configuration.baseURL)
+        reconnectToken = "ui-test-token"
+        let players = [
+            RoomPlayer(id: ola, nickname: "Ola", isHost: true, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0),
+            RoomPlayer(id: jan, nickname: "Jan", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 500),
+            RoomPlayer(id: ewa, nickname: "Ewa", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)
+        ]
+        let rankings = [
+            RankingEntry(playerId: jan, nickname: "Jan", profilePhotoUrl: nil, score: 500, position: 1),
+            RankingEntry(playerId: ola, nickname: "Ola", profilePhotoUrl: nil, score: 0, position: 2),
+            RankingEntry(playerId: ewa, nickname: "Ewa", profilePhotoUrl: nil, score: 0, position: 2)
+        ]
+        let results = PlayerSelectionResults(questionInstanceId: questionId, answeredPlayers: 3, requiredPlayers: 3,
+            missingPlayers: 0, highestVoteCount: 2, options: [
+                PlayerSelectionResultOption(selectedPlayerId: jan, selectedPlayerNickname: "Jan", selectedPlayerPhotoUrl: nil,
+                    voteCount: 2, isTopResult: true, voters: [
+                        ResultVoter(playerId: ola, nickname: "Ola", profilePhotoUrl: nil, pointsAwarded: 500),
+                        ResultVoter(playerId: ewa, nickname: "Ewa", profilePhotoUrl: nil, pointsAwarded: 0)
+                    ])
+            ])
+        let stage: GameStage = switch argument {
+        case "-uiTestingGameScreenResults": .showingQuestionResults
+        case "-uiTestingGameScreenRoundSummary": .roundSummary
+        case "-uiTestingGameScreenCompleted": .completed
+        default: .collectingPlayerSelections
+        }
+        let game = GameSnapshot(stage: stage, currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1,
+            questionsInCurrentRound: 4, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil,
+            pausedRemainingMilliseconds: nil, scores: [], categories: [GameCategorySnapshot(id: UUID(), name: "Zabawa", backgroundHexColor: "#241146")],
+            currentQuestion: GameQuestionSnapshot(instanceId: questionId, categoryId: UUID(),
+                questionText: LocalizedText(defaultText: "Wybierz osobę, która rozbawiła Cię najbardziej.", translations: nil), requiredAnswerType: "PlayerSelection"),
+            playerSelectionResults: stage == .showingQuestionResults ? results : nil,
+            roundSummary: stage == .roundSummary || stage == .completed ? RoundSummarySnapshot(roundNumber: 1, rankings: rankings) : nil,
+            textAnswerResults: nil, ranking: rankings)
+        apply(RoomSnapshot(roomCode: "ABCD", phase: .started, stateVersion: 7,
+            displayConnected: true, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(),
+            players: players, createdAtUtc: "2026-08-12T12:00:00Z", startedAtUtc: "2026-08-12T12:01:00Z", game: game))
+        screen = .started
+    }
+    #endif
 
     #if DEBUG
     private func configureDrawingUITestScenario(_ argument: String) {

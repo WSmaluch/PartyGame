@@ -7,6 +7,14 @@ namespace PartyGame.Tests.Api.Contracts;
 
 public class RoomContractMapperTests
 {
+    public static IEnumerable<object[]> RoundSummaryRankCases()
+    {
+        yield return [0, 500, 0, 2, 1, 2];
+        yield return [100, 100, 50, 1, 1, 3];
+        yield return [100, 100, 100, 1, 1, 1];
+        yield return [300, 200, 100, 1, 2, 3];
+    }
+
     private (GameSession session, GameRoom room, Guid ania, Guid wojtek, Guid kasia) SetupTestEnvironment()
     {
         var aniaId = Guid.NewGuid();
@@ -152,5 +160,42 @@ public class RoomContractMapperTests
         Assert.Equal(env.ania, snapshot.Ranking[0].PlayerId); // 100
         Assert.Equal(env.wojtek, snapshot.Ranking[1].PlayerId); // 50
         Assert.Equal(env.kasia, snapshot.Ranking[2].PlayerId); // 0
+    }
+
+    [Theory]
+    [MemberData(nameof(RoundSummaryRankCases))]
+    public void ToSnapshot_RoundSummary_UsesCompetitionRanks(
+        int aniaScore, int wojtekScore, int kasiaScore,
+        int expectedAniaRank, int expectedWojtekRank, int expectedKasiaRank)
+    {
+        var env = SetupTestEnvironment();
+        env.session.Stage = GameStage.RoundSummary;
+        env.room.Players.Single(player => player.Id == env.ania).Score = aniaScore;
+        env.room.Players.Single(player => player.Id == env.wojtek).Score = wojtekScore;
+        env.room.Players.Single(player => player.Id == env.kasia).Score = kasiaScore;
+
+        var snapshot = env.session.ToSnapshot();
+
+        var ranks = snapshot.RoundSummary!.Ranking.ToDictionary(entry => entry.PlayerId, entry => entry.Rank);
+        Assert.Equal(expectedAniaRank, ranks[env.ania]);
+        Assert.Equal(expectedWojtekRank, ranks[env.wojtek]);
+        Assert.Equal(expectedKasiaRank, ranks[env.kasia]);
+    }
+
+    [Fact]
+    public void ToSnapshot_Completed_PreservesCompetitionRanks()
+    {
+        var env = SetupTestEnvironment();
+        env.session.Stage = GameStage.Completed;
+        env.room.Players.Single(player => player.Id == env.ania).Score = 0;
+        env.room.Players.Single(player => player.Id == env.wojtek).Score = 500;
+        env.room.Players.Single(player => player.Id == env.kasia).Score = 0;
+
+        var snapshot = env.session.ToSnapshot();
+
+        var ranks = snapshot.Ranking!.ToDictionary(entry => entry.PlayerId, entry => entry.Rank);
+        Assert.Equal(2, ranks[env.ania]);
+        Assert.Equal(1, ranks[env.wojtek]);
+        Assert.Equal(2, ranks[env.kasia]);
     }
 }

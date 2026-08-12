@@ -6,6 +6,7 @@ struct HostGameDestination: View {
     @State private var settings = RoomSettings()
     @State private var availablePackages: [ContentPackage] = []
     @State private var selectedPackageKeys: Set<String> = []
+    @State private var selectedQuestionTypes: Set<String> = ["PlayerSelection"]
     @State private var isLoadingPackages = true
 
     var body: some View {
@@ -58,9 +59,35 @@ struct HostGameDestination: View {
                     Stepper(value: $settings.finalDrawingPasses, in: 1 ... 9) { row("settings.final_passes", settings.finalDrawingPasses) }
                 }
             }
+            Section("host.question_types") {
+                ForEach(Self.questionTypes, id: \.key) { questionType in
+                    Toggle(isOn: Binding(
+                        get: { selectedQuestionTypes.contains(questionType.key) },
+                        set: { isSelected in
+                            if isSelected {
+                                selectedQuestionTypes.insert(questionType.key)
+                            } else {
+                                selectedQuestionTypes.remove(questionType.key)
+                            }
+                        }
+                    )) {
+                        Text(questionType.localizationKey)
+                    }
+                    .accessibilityIdentifier("host.question-type-\(questionType.key)")
+                }
+            }
             if let error = store.errorMessage { Text(error).foregroundStyle(.red) }
             Section {
-                Button("host.create") { Task { await store.createRoom(nickname: nickname, settings: settings, selectedPackageKeys: selectedPackageKeys.isEmpty ? nil : Array(selectedPackageKeys)) } }
+                Button("host.create") {
+                    Task {
+                        await store.createRoom(
+                            nickname: nickname,
+                            settings: settings,
+                            selectedPackageKeys: selectedPackageKeys.isEmpty ? nil : Array(selectedPackageKeys).sorted(),
+                            enabledQuestionTypes: selectedQuestionTypes.sorted()
+                        )
+                    }
+                }
                     .disabled(!valid || store.isWorking)
                     .accessibilityIdentifier("host.create")
                 if store.isWorking { ProgressView() }
@@ -78,8 +105,19 @@ struct HostGameDestination: View {
         }
     }
 
-    private var valid: Bool { (2 ... 20).contains(nickname.trimmingCharacters(in: .whitespaces).count) && settings.isValid }
+    private var valid: Bool {
+        (2 ... 20).contains(nickname.trimmingCharacters(in: .whitespaces).count)
+            && settings.isValid
+            && !selectedQuestionTypes.isEmpty
+    }
     private func row(_ key: LocalizedStringKey, _ value: Int) -> some View {
         HStack { Text(key); Spacer(); Text("\(value)").monospacedDigit() }
     }
+
+    private static let questionTypes: [(key: String, localizationKey: LocalizedStringKey)] = [
+        ("PlayerSelection", "question_type.player_selection"),
+        ("TextAnswer", "question_type.text_answer"),
+        ("PhotoAnswer", "question_type.photo_answer"),
+        ("DrawingAnswer", "question_type.drawing_answer")
+    ]
 }

@@ -282,6 +282,17 @@ struct RankingEntry: Codable, Equatable, Sendable {
         case playerId, nickname, profilePhotoUrl, score, previousScore, position, previousPosition, rank
     }
 
+    init(playerId: UUID, nickname: String?, profilePhotoUrl: String?, score: Int, previousScore: Int? = nil,
+         position: Int, previousPosition: Int? = nil) {
+        self.playerId = playerId
+        self.nickname = nickname
+        self.profilePhotoUrl = profilePhotoUrl
+        self.score = score
+        self.previousScore = previousScore ?? score
+        self.position = position
+        self.previousPosition = previousPosition ?? position
+    }
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         playerId = try values.decode(UUID.self, forKey: .playerId)
@@ -309,6 +320,12 @@ struct RoundSummarySnapshot: Codable, Equatable, Sendable {
     let rankings: [RankingEntry]
 
     private enum CodingKeys: String, CodingKey { case roundNumber, ranking, rankings }
+
+    init(roundNumber: Int, rankings: [RankingEntry]) {
+        self.roundNumber = roundNumber
+        self.rankings = rankings
+    }
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         roundNumber = try values.decodeIfPresent(Int.self, forKey: .roundNumber) ?? 0
@@ -671,6 +688,19 @@ struct CreateRoomRequest: Codable, Equatable, Sendable {
     let nickname: String
     let settings: RoomSettings
     let selectedPackageKeys: [String]?
+    let enabledQuestionTypes: [String]?
+
+    init(
+        nickname: String,
+        settings: RoomSettings,
+        selectedPackageKeys: [String]?,
+        enabledQuestionTypes: [String]? = nil
+    ) {
+        self.nickname = nickname
+        self.settings = settings
+        self.selectedPackageKeys = selectedPackageKeys
+        self.enabledQuestionTypes = enabledQuestionTypes
+    }
 }
 
 struct JoinRoomRequest: Codable, Equatable, Sendable {

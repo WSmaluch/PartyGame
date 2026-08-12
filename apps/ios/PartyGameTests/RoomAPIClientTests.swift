@@ -24,10 +24,20 @@ final class RoomAPIClientTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
             let body = try Self.extractBody(from: request)
-            XCTAssertEqual(try JSONDecoder().decode(CreateRoomRequest.self, from: body).nickname, "Ola")
+            let decoded = try JSONDecoder().decode(CreateRoomRequest.self, from: body)
+            XCTAssertEqual(decoded.nickname, "Ola")
+            XCTAssertEqual(decoded.enabledQuestionTypes, ["PlayerSelection", "PhotoAnswer"])
             return Self.response(request: request, status: 201, json: Self.accessResponseJSON)
         }
-        let response = try await client.createRoom(baseURL: URL(string: "http://localhost:5050")!, request: CreateRoomRequest(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil))
+        let response = try await client.createRoom(
+            baseURL: URL(string: "http://localhost:5050")!,
+            request: CreateRoomRequest(
+                nickname: "Ola",
+                settings: RoomSettings(),
+                selectedPackageKeys: nil,
+                enabledQuestionTypes: ["PlayerSelection", "PhotoAnswer"]
+            )
+        )
         XCTAssertEqual(response.roomCode, "ABCD")
         XCTAssertFalse(response.reconnectToken.isEmpty)
     }

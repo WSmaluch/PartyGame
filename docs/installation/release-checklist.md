@@ -9,3 +9,11 @@ Automated RC acceptance covers package integrity, clean installation, upgrade, r
 - Confirm operator token is never visible in Admin UI, logs or exported evidence.
 
 If physical devices were unavailable, record **Manual physical-device acceptance: pending**. This blocks final `v1.0.0`, not automated RC publication.
+
+## Deterministic four-type game for physical-device QA
+
+Use a normal published content package rather than changing the game planner or editing SQLite. In Admin, create a package named `RC physical QA`, add one active category and exactly four active questions (minimum three players): one `PlayerSelection`, one `TextAnswer`, one `PhotoAnswer`, and one `DrawingAnswer`. Publish the package.
+
+On the LAN server, start the installed release with `scripts/start-lan.sh --deploy-root <install-root> --runtime-root <runtime-root> --host <private-lan-ip> --port <port>`. Open Admin at `http://<private-lan-ip>:<port>/admin/` and create/publish the package there. On the iPhone, set the same server address, choose **Host game**, select only `RC physical QA`, select all four entries in **Question types**, set one round and four questions per round, then create the room. Join two additional players, attach Display, and mark all players ready.
+
+The production `GamePlanner` may shuffle the four questions, but because the selected package contains exactly one question of each enabled type and the game requires four questions, every run contains exactly one Player Selection, Text Answer, Photo Answer, and Drawing Answer. This guarantees the Photo and Drawing checks without a test endpoint, a random seed, or manual database changes. Record the observed order, complete each question, then verify Round Summary and the final ranking.
