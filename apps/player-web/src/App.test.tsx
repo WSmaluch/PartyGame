@@ -48,4 +48,9 @@ describe('Web Player lobby', () => {
   it('routes a GameStarted snapshot to the authoritative gameplay view', async () => {
     savePlayerSession(session); vi.mocked(resumePlayer).mockResolvedValue({ player: snapshot.players[0], snapshot, privateState }); render(<App />); await screen.findByText('Ania'); realtime.startedListener?.({ ...snapshot, phase: 'Started', game: { stage: 'CollectingTextAnswers', currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1, questionsInCurrentRound: 1, question: { id: 'question', instanceId: 'instance', text: { pl: 'Pytanie testowe' } } } }); realtime.privateListener?.({ ...privateState, questionInstanceId: 'instance' }); expect(await screen.findByText('Pytanie testowe')).toBeInTheDocument();
   });
+  it('restores Completed after refresh and ignores a stale snapshot that would leave the final screen', async () => {
+    const completed = { ...snapshot, phase: 'Completed', stateVersion: 12, game: { stage: 'Completed', currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1, questionsInCurrentRound: 1, ranking: [{ playerId: session.playerId, score: 1500, rank: 1 }, { playerId: '2', score: 0, rank: 2 }, { playerId: '3', score: 0, rank: 2 }] } };
+    savePlayerSession(session); vi.mocked(resumePlayer).mockResolvedValue({ player: snapshot.players[0], snapshot: completed, privateState }); render(<App />); expect(await screen.findByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
+    realtime.snapshotListener?.({ ...snapshot, phase: 'Started', stateVersion: 11, game: { stage: 'CollectingTextAnswers', currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1, questionsInCurrentRound: 1, question: { id: 'question', instanceId: 'instance', text: { pl: 'Stare pytanie' } } } }); expect(screen.queryByText('Stare pytanie')).not.toBeInTheDocument(); expect(screen.getByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
+  });
 });

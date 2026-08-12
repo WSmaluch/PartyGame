@@ -26,9 +26,13 @@ export default function App() {
 
   useEffect(() => gameHubConnection.subscribe(setConnectionStatus), []);
   const applySnapshot = useCallback((snapshot: RoomSnapshot): void => {
-    setScreen((current) => current.kind === 'join' ? current : snapshot.phase === 'Started'
-      ? { kind: 'game', session: current.session, snapshot }
-      : { kind: 'lobby', session: current.session, snapshot });
+    setScreen((current) => {
+      if (current.kind === 'join') return current;
+      if (current.snapshot && snapshot.stateVersion < current.snapshot.stateVersion) return current;
+      return snapshot.phase === 'Started' || snapshot.game
+        ? { kind: 'game', session: current.session, snapshot }
+        : { kind: 'lobby', session: current.session, snapshot };
+    });
   }, []);
   const attach = useCallback(async (session: PlayerSession): Promise<void> => {
     try { applySnapshot(await gameHubConnection.attach(session)); } catch { /* SignalR state announces a recoverable network failure. */ }

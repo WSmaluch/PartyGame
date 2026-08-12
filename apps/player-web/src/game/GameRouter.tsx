@@ -7,6 +7,7 @@ import type { Locale, TranslationKey } from '../translations';
 import { uploadDrawingAnswer, uploadPhotoAnswer } from '../api/playerApi';
 import { drawingPng, GameMediaError, preparePhotoAnswer } from '../media/gameMedia';
 import { DrawingCanvas } from './DrawingCanvas';
+import { CompletedStage, ResultsStage, RoundSummaryStage } from './GameResults';
 
 type Translate = (key: TranslationKey) => string;
 type SubmissionState = 'idle' | 'submitting' | 'submitted' | 'failed';
@@ -31,6 +32,12 @@ export function GameRouter({ session, snapshot, privateState, locale, status, t,
   if (game.stage === 'CollectingDrawingAnswers') return <DrawingAnswer key={questionId} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
   if (game.stage === 'CollectingPhotoAnswerVotes') return <MediaVoting key={questionId} kind="photo" session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
   if (game.stage === 'CollectingDrawingAnswerVotes') return <MediaVoting key={questionId} kind="drawing" session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage === 'ShowingQuestionResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="selection" game={game} locale={locale} t={t} /></GameShell>;
+  if (game.stage === 'ShowingTextAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="text" game={game} locale={locale} t={t} /></GameShell>;
+  if (game.stage === 'ShowingPhotoAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="photo" game={game} locale={locale} t={t} /></GameShell>;
+  if (game.stage === 'ShowingDrawingAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="drawing" game={game} locale={locale} t={t} /></GameShell>;
+  if (game.stage === 'RoundSummary') return <GameShell game={game} status={status} t={t}><RoundSummaryStage game={game} room={snapshot} t={t} /></GameShell>;
+  if (game.stage === 'Completed') return <GameShell game={game} status={status} t={t}><CompletedStage game={game} room={snapshot} t={t} /></GameShell>;
   if (game.stage.includes('Photo') || game.stage.includes('Drawing')) return <GameShell game={game} status={status} t={t}><h1>{t('stageWaiting')}</h1></GameShell>;
   return <GameShell game={game} status={status} t={t}><h1>{t('waitingForOthers')}</h1><p>{t('stageWaiting')}</p></GameShell>;
 }
@@ -45,7 +52,7 @@ function GameShell({ game, status, t, children }: { game?: GameSnapshot; status:
 }
 
 function GameHeader({ game, t }: { game: GameSnapshot; t: Translate }) {
-  return <><p className="eyebrow">{t('question')} {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p><h1>{gameQuestion(game) ? undefined : t('gameLoading')}</h1></>;
+  return game.currentQuestionNumber > 0 ? <p className="eyebrow">{t('question')} {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p> : null;
 }
 
 function PlayerSelection({ session, snapshot, game, locale, status, t, onSnapshot }: { session: PlayerSession; snapshot: RoomSnapshot; game: GameSnapshot; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void }) {

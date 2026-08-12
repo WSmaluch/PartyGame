@@ -1,4 +1,4 @@
-# PartyGame Web Player (1D)
+# PartyGame Web Player (1E)
 
 Web Player to przeglądarkowy klient tego samego PartyGame API i SignalR Hub, co aplikacja iOS. Po wdrożeniu wejście to `http://HOST:PORT/play/`; konfiguracja runtime jest dostępna pod `/play/config.json`.
 
@@ -30,11 +30,19 @@ Photo upload używa istniejącego multipart `POST /api/rooms/{roomCode}/question
 
 Canvas używa Pointer Events, z normalizacją współrzędnych względem aktualnego CSS `getBoundingClientRect`, `touch-action: none` i bitmapą 1024×1024 niezależną od rozmiaru CSS; działa dla myszy, dotyku i obsługiwanych pointerów rysika bez utraty jakości na ekranach o wysokim DPR. Ma Undo i potwierdzane Clear, a pusty rysunek jest lokalnie zablokowany. Nie przechowuje bitmapy ani stroke'ów w persistent browser storage; reconnect bez reloadu zachowuje lokalny stan płótna, odświeżenie przed sukcesem może go utracić.
 
-Voting renderuje wyłącznie anonimowe opcje przekazane przez backend (`photoAnswerResults` lub `drawingAnswerResults`), bez autora i bez tokenów w URL. Zdjęcia/rysunki zachowują proporcje przez `object-fit: contain`; podczas ładowania jest stan kontrolowany, a błąd, 404 lub brak URL jest lokalnym placeholderem, który nie wywraca etapu. Text voting pozostaje bez zmian. Results, Round Summary oraz ranking pozostają zakresem kolejnego etapu.
+Voting renderuje wyłącznie anonimowe opcje przekazane przez backend (`photoAnswerResults` lub `drawingAnswerResults`), bez autora i bez tokenów w URL. Zdjęcia/rysunki zachowują proporcje przez `object-fit: contain`; podczas ładowania jest stan kontrolowany, a błąd, 404 lub brak URL jest lokalnym placeholderem, który nie wywraca etapu. Text voting pozostaje bez zmian.
+
+## Wyniki, podsumowanie rundy i zakończenie
+
+Router obsługuje końcowe snapshoty `ShowingQuestionResults`, `ShowingTextAnswerResults`, `ShowingPhotoAnswerResults`, `ShowingDrawingAnswerResults`, `RoundSummary` i `Completed`. Wyniki są renderowane bezpośrednio z istniejących kontraktów backendu: liczby głosów, znacznika zwycięzcy, autorów ujawnianych przez etap wyników oraz dostępnych danych medium. Uszkodzony, niedostępny lub pusty URL medium pozostawia kontrolowany placeholder zamiast wywracać widok.
+
+Tabela wyników korzysta wyłącznie z backendowych `ranking`/`rankings` oraz pola `rank`; aplikacja webowa nie oblicza pozycji ani nie przełamuje remisów. Gdy pozycja nie jest dostępna, pokazuje `—`, nigdy domyślne `#1`. To zachowuje ranking konkurencyjny (np. `#1, #2, #2` albo `#1, #1, #3`) zarówno w `RoundSummary`, jak i `Completed`. W `RoundSummary` pokazywany jest też backendowy numer rundy i informacja, czy istnieje kolejna runda; `Completed` pokazuje końcowy ranking.
+
+Każdy snapshot przechodzi przez ochronę `stateVersion`: klient ignoruje opóźniony stan o niższej wersji, więc reconnect ani kolejność callbacków nie cofają użytkownika z wyników lub ekranu końcowego. Po refreshu zapisany gracz wykonuje `resume` i `AttachPlayer`; snapshot zawierający `game` prowadzi z powrotem do gameplay, także gdy serwer oznaczy jego fazę jako `Completed`.
 
 ### Feature QA package
 
-Do fizycznego QA 1D utwórz przez Admin osobny, opublikowany pakiet `Web Player 1D QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
+Do fizycznego QA 1E utwórz przez Admin osobny, opublikowany pakiet `Web Player Full QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. Przejdź pełny scenariusz: Join → Lobby → Ready → cztery typy pytań i voting → Results po każdym pytaniu → Round Summary → Completed, następnie odśwież przeglądarkę w wynikach i na ekranie końcowym. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
 
 Lokalny development:
 
