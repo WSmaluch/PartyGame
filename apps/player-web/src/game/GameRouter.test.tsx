@@ -129,4 +129,10 @@ describe('GameRouter', () => {
     rerender(<GameRouter session={session} snapshot={{ ...baseSnapshot, stateVersion: 8, game: { ...game('RoundSummary'), roundSummary: summary } }} privateState={privateState} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />); expect(screen.getByText('Podsumowanie rundy 1')).toBeInTheDocument();
     rerender(<GameRouter session={session} snapshot={{ ...baseSnapshot, stateVersion: 9, game: { ...game('Completed'), ranking: summary.ranking } }} privateState={privateState} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />); expect(screen.getByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
   });
+
+  it.each(['CategoryIntro', 'QuestionIntro', 'RevealingTextAnswers', 'RevealingPhotoAnswers', 'RevealingDrawingAnswers', 'PausedForDisplay', 'GameSummary'])('renders a controlled player-facing view for %s', (stage) => {
+    renderGame({ ...baseSnapshot, game: game(stage) });
+    expect(screen.queryByText('Unsupported')).not.toBeInTheDocument();
+    expect(screen.getByRole('main')).toBeInTheDocument();
+  });
 });

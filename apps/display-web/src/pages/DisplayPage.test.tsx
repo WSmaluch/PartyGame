@@ -16,6 +16,7 @@ vi.mock('../api/roomApi', async (importOriginal) => {
   const original = await importOriginal<typeof import('../api/roomApi')>();
   return { ...original, getRoomSnapshot: vi.fn() };
 });
+vi.mock('qrcode', () => ({ toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,qr') }));
 
 let snapshotListener: (snapshot: RoomSnapshot) => void;
 let startedListener: (snapshot: RoomSnapshot) => void;
@@ -95,6 +96,15 @@ describe('DisplayPage', () => {
     await screen.findByText('Ola');
     act(() => startedListener({ ...lobby, phase: 'Started', stateVersion: 5 }));
     expect(screen.getByRole('heading', { name: 'Gra rozpoczęta!' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Dołącz do gry przez kod QR')).not.toBeInTheDocument();
+  });
+
+  it('pokazuje w lobby bezpieczny QR URL dla Web Playera', async () => {
+    renderApp();
+    await userEvent.type(screen.getByLabelText('Kod pokoju'), 'ABCD');
+    await userEvent.click(screen.getByRole('button', { name: 'Połącz ekran' }));
+    expect(await screen.findByRole('img', { name: 'Kod QR do pokoju ABCD' })).toHaveAttribute('src', 'data:image/png;base64,qr');
+    expect(screen.getByRole('link', { name: 'Otwórz na tym urządzeniu' })).toHaveAttribute('href', 'http://test-display.local/play/?room=ABCD');
   });
 
   it('czyści zapis po DisplayReplaced i pokazuje jasny komunikat', async () => {

@@ -5,6 +5,7 @@ import { getHealth, HealthApiError, lastCorrelationId } from '../api/healthApi';
 import { getRoomSnapshot, profilePhotoUrl } from '../api/roomApi';
 import type { HealthResponse, RoomPlayer, RoomSnapshot } from '../api/types';
 import { StatusPill } from '../components/StatusPill';
+import { PlayerJoinQrCode } from '../components/PlayerJoinQrCode';
 import { GameScreens } from '../components/gameStages/GameScreens';
 import { gameHubConnection } from '../realtime/gameHubConnection';
 import type { GameHubStatus, HubPingResponse } from '../realtime/types';
@@ -183,6 +184,7 @@ function Connecting({ retry }: { retry: () => void }) {
 function Lobby({ snapshot, changeRoom }: { snapshot: RoomSnapshot; changeRoom: () => void }) {
   return <div className="lobby">
     <div className="room-heading"><span>Kod pokoju</span><strong>{snapshot.roomCode}</strong></div>
+    <PlayerJoinQrCode roomCode={snapshot.roomCode} />
     <p className="lobby-count">Gracze: {snapshot.players.length}/{snapshot.maximumPlayers}</p>
     <div className="player-grid">
       {snapshot.players.map((player) => <PlayerCard key={player.id} player={player} version={snapshot.stateVersion} />)}

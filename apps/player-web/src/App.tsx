@@ -73,6 +73,15 @@ export default function App() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (initialSession) void restore(initialSession); }, [initialSession, restore]);
   useEffect(() => {
+    const resumeVisibleSession = () => {
+      if (document.visibilityState !== 'visible') return;
+      const persisted = loadPlayerSession();
+      if (persisted) void restore(persisted);
+    };
+    document.addEventListener('visibilitychange', resumeVisibleSession);
+    return () => document.removeEventListener('visibilitychange', resumeVisibleSession);
+  }, [restore]);
+  useEffect(() => {
     if (screen.kind === 'join' && error === 'sessionExpired') roomInputRef.current?.focus();
   }, [error, screen.kind]);
 
@@ -92,7 +101,7 @@ export default function App() {
 
   if (screen.kind === 'game') return <GameRouter session={screen.session} snapshot={screen.snapshot} privateState={privateState} locale={locale} status={connectionStatus} t={t} onSnapshot={applySnapshot} />;
   if (screen.kind === 'lobby') return <Lobby session={screen.session} snapshot={screen.snapshot} status={connectionStatus} error={error} t={t} onSnapshot={applySnapshot} onError={setError} onReconnect={() => void restore(screen.session)} />;
-  return <main className="page-shell"><section className="card" aria-labelledby="page-title"><p className="eyebrow">{t('title')}</p><h1 id="page-title">{t('join')}</h1><form onSubmit={submit} noValidate><label htmlFor="roomCode">{t('roomCode')}</label><input ref={roomInputRef} id="roomCode" name="roomCode" value={roomCode} onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))} maxLength={4} autoCapitalize="characters" autoCorrect="off" spellCheck="false" inputMode="text" autoComplete="off" /><label htmlFor="nickname">{t('nickname')}</label><input id="nickname" name="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={20} autoCapitalize="words" autoComplete="nickname" />{error && <p className="form-error" role="alert">{t(error)}</p>}<button type="submit" disabled={isJoining}>{isJoining ? t('joining') : t('join')}</button></form></section></main>;
+  return <main className="page-shell"><section className="card" aria-labelledby="page-title"><p className="eyebrow">{t('title')}</p><h1 id="page-title">{t('join')}</h1><form onSubmit={submit} noValidate><label htmlFor="roomCode">{t('roomCode')}</label><input ref={roomInputRef} id="roomCode" name="roomCode" value={roomCode} onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))} maxLength={4} autoFocus={!initialSession} autoCapitalize="characters" autoCorrect="off" spellCheck="false" inputMode="text" autoComplete="off" /><label htmlFor="nickname">{t('nickname')}</label><input id="nickname" name="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={20} autoCapitalize="words" autoComplete="nickname" />{error && <p className="form-error" role="alert">{t(error)}</p>}<button type="submit" disabled={isJoining}>{isJoining ? t('joining') : t('join')}</button></form></section></main>;
 }
 
 function Lobby({ session, snapshot, status, error, t, onSnapshot, onError, onReconnect }: { session: PlayerSession; snapshot?: RoomSnapshot; status: ConnectionStatus; error?: TranslationKey; t: (key: TranslationKey) => string; onSnapshot: (snapshot: RoomSnapshot) => void; onError: (key: TranslationKey | undefined) => void; onReconnect: () => void }) {

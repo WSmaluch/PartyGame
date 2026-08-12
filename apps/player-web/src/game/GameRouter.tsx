@@ -37,7 +37,9 @@ export function GameRouter({ session, snapshot, privateState, locale, status, t,
   if (game.stage === 'ShowingPhotoAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="photo" game={game} locale={locale} t={t} /></GameShell>;
   if (game.stage === 'ShowingDrawingAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="drawing" game={game} locale={locale} t={t} /></GameShell>;
   if (game.stage === 'RoundSummary') return <GameShell game={game} status={status} t={t}><RoundSummaryStage game={game} room={snapshot} t={t} /></GameShell>;
+  if (game.stage === 'GameSummary') return <GameShell game={game} status={status} t={t}><CompletedStage game={game} room={snapshot} t={t} /></GameShell>;
   if (game.stage === 'Completed') return <GameShell game={game} status={status} t={t}><CompletedStage game={game} room={snapshot} t={t} /></GameShell>;
+  if (game.stage === 'CategoryIntro' || game.stage === 'QuestionIntro' || game.stage === 'RevealingTextAnswers' || game.stage === 'RevealingPhotoAnswers' || game.stage === 'RevealingDrawingAnswers' || game.stage === 'PausedForDisplay') return <GameShell game={game} status={status} t={t}><h1>{t('waitingForOthers')}</h1><p>{t('stageWaiting')}</p></GameShell>;
   if (game.stage.includes('Photo') || game.stage.includes('Drawing')) return <GameShell game={game} status={status} t={t}><h1>{t('stageWaiting')}</h1></GameShell>;
   return <GameShell game={game} status={status} t={t}><h1>{t('waitingForOthers')}</h1><p>{t('stageWaiting')}</p></GameShell>;
 }

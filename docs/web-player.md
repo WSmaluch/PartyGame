@@ -1,8 +1,12 @@
-# PartyGame Web Player (1E)
+# PartyGame Web Player (1F)
 
 Web Player to przeglądarkowy klient tego samego PartyGame API i SignalR Hub, co aplikacja iOS. Po wdrożeniu wejście to `http://HOST:PORT/play/`; konfiguracja runtime jest dostępna pod `/play/config.json`.
 
-Użytkownik wpisuje czteroznakowy kod pokoju oraz nick (2–20 znaków). Formularz korzysta z istniejącego `POST /api/rooms/{roomCode}/players`, a następnie łączy się z `/hubs/game` i wywołuje `AttachPlayer`. Parametr `?room=AB12` uzupełnia kod pokoju.
+Użytkownik wpisuje czteroznakowy kod pokoju oraz nick (2–20 znaków). Formularz korzysta z istniejącego `POST /api/rooms/{roomCode}/players`, a następnie łączy się z `/hubs/game` i wywołuje `AttachPlayer`. Parametr `?room=AB12` uzupełnia kod pokoju; kod jest trimowany i zamieniany na wielkie litery, tak samo jak zwykłe pole formularza.
+
+## QR Join z Display
+
+W Lobby Display pokazuje kod pokoju i QR „Zeskanuj, aby dołączyć”. Kod jest generowany lokalnie przez lekką bibliotekę `qrcode` z runtime `publicAppUrl` Display, dlatego wskazuje właściwy host wdrożenia i URL `http(s)://HOST/play/?room=CODE`, a nie `localhost` ani stały adres LAN. Parametr pokoju jest URL-encoded; QR ani link zapasowy nie zawierają player id, reconnect tokena, danych administratora ani innych sekretów. QR jest widoczny tylko w Lobby — po rozpoczęciu gry Display pokazuje ekran gry, bez zachęcania do niedozwolonego late join.
 
 ## Lobby, profil i reconnect
 
@@ -11,6 +15,8 @@ Po join Web Player pokazuje Lobby z kodem pokoju, statusem połączenia, listą 
 Zdjęcie profilowe jest wysyłane istniejącym `POST /api/rooms/{roomCode}/players/{playerId}/profile-photo` z `X-Player-Token`. Przeglądarka przyjmuje obraz z galerii lub aparatu (`capture="user"`), normalizuje go po stronie klienta do JPEG maksymalnie 1200 px i nie więcej niż 5 MiB. Wybrany obraz jest tylko krótkotrwałym preview; nie trafia do browser storage.
 
 Storage zawiera wyłącznie `roomCode`, `playerId`, `reconnectToken` i `nickname`. Po odświeżeniu klient najpierw używa istniejącego endpointu `resume`, potem `AttachPlayer`; nie tworzy drugiego gracza. Nieważna lub wygasła sesja jest usuwana, a użytkownik wraca kontrolowanie do Join. SignalR używa automatycznego reconnectu i po odzyskaniu transportu ponownie wykonuje `AttachPlayer`. Druga karta z tą samą sesją nie tworzy gracza: backend zastępuje aktywne connection id starszej karty.
+
+Gdy karta wraca z tła, Web Player ponownie wykonuje bezpieczny `resume` zapisanej sesji, aby odzyskać aktualny authoritative snapshot po uśpieniu mobilnego transportu. Brak sieci jest komunikowany jako kontrolowany stan połączenia; aplikacja nie pokazuje surowych wyjątków ani nie zapisuje mediów w trwałym storage.
 
 ## Gameplay: PlayerSelection, tekst i głosowanie
 
@@ -36,13 +42,19 @@ Voting renderuje wyłącznie anonimowe opcje przekazane przez backend (`photoAns
 
 Router obsługuje końcowe snapshoty `ShowingQuestionResults`, `ShowingTextAnswerResults`, `ShowingPhotoAnswerResults`, `ShowingDrawingAnswerResults`, `RoundSummary` i `Completed`. Wyniki są renderowane bezpośrednio z istniejących kontraktów backendu: liczby głosów, znacznika zwycięzcy, autorów ujawnianych przez etap wyników oraz dostępnych danych medium. Uszkodzony, niedostępny lub pusty URL medium pozostawia kontrolowany placeholder zamiast wywracać widok.
 
+Wszystkie normalne etapy backendowego `GameStage` mają widok player-facing: formularze i voting dla etapów collecting, wyniki dla results, ranking dla podsumowań oraz kontrolowane oczekiwanie dla intro, reveal i pauzy Display. Klient nigdy nie przechodzi między etapami lokalnie.
+
 Tabela wyników korzysta wyłącznie z backendowych `ranking`/`rankings` oraz pola `rank`; aplikacja webowa nie oblicza pozycji ani nie przełamuje remisów. Gdy pozycja nie jest dostępna, pokazuje `—`, nigdy domyślne `#1`. To zachowuje ranking konkurencyjny (np. `#1, #2, #2` albo `#1, #1, #3`) zarówno w `RoundSummary`, jak i `Completed`. W `RoundSummary` pokazywany jest też backendowy numer rundy i informacja, czy istnieje kolejna runda; `Completed` pokazuje końcowy ranking.
 
 Każdy snapshot przechodzi przez ochronę `stateVersion`: klient ignoruje opóźniony stan o niższej wersji, więc reconnect ani kolejność callbacków nie cofają użytkownika z wyników lub ekranu końcowego. Po refreshu zapisany gracz wykonuje `resume` i `AttachPlayer`; snapshot zawierający `game` prowadzi z powrotem do gameplay, także gdy serwer oznaczy jego fazę jako `Completed`.
 
 ### Feature QA package
 
-Do fizycznego QA 1E utwórz przez Admin osobny, opublikowany pakiet `Web Player Full QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. Przejdź pełny scenariusz: Join → Lobby → Ready → cztery typy pytań i voting → Results po każdym pytaniu → Round Summary → Completed, następnie odśwież przeglądarkę w wynikach i na ekranie końcowym. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
+Do fizycznego QA utwórz przez Admin osobny, opublikowany pakiet `Web Player Full QA`: jedna aktywna kategoria i dokładnie cztery aktywne pytania — po jednym `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Przy trzech graczach wybierz tylko ten pakiet, wszystkie cztery typy, jedną rundę i cztery pytania. Przejdź pełny scenariusz: QR → Join → Lobby → Ready → cztery typy pytań i voting → Results po każdym pytaniu → Round Summary → Completed, następnie odśwież przeglądarkę w wynikach i na ekranie końcowym. To korzysta z normalnego flow Admin/Published package, nie wymaga ręcznej edycji SQLite i nie zmienia semantyki `RC physical QA`.
+
+## Przeglądarki i layout
+
+Wspierane są aktualne Chrome, Edge, Firefox i Safari z Pointer Events, Canvas oraz `URL.createObjectURL`. Atrybut `capture` sugeruje aparat w Chrome/Safari na telefonie, ale przeglądarka może zamiast niego zaoferować galerię. Interfejs jest mobile-first, korzysta z `100dvh`, scrollowalnych list i `safe-area-inset-*`; canvas blokuje scroll tylko na własnym obszarze. Nie dodano service workera, aby runtime config wdrożenia nie był przypadkowo przechowywany w cache.
 
 ### Znane ograniczenia walidacji środowiska
 

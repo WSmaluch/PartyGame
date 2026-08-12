@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
@@ -26,6 +26,11 @@ describe('Web Player lobby', () => {
   it('prefills the room code and validates a missing nickname', async () => {
     render(<App />); expect(screen.getByLabelText('Kod pokoju')).toHaveValue('AB12'); await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' })); expect(screen.getByRole('alert')).toHaveTextContent('Wpisz nick');
   });
+  it('normalizes deep-link and manual room codes with the backend-compatible trim and uppercase rules', async () => {
+    render(<App />); expect(screen.getByLabelText('Kod pokoju')).toHaveValue('AB12');
+    await userEvent.clear(screen.getByLabelText('Kod pokoju')); await userEvent.type(screen.getByLabelText('Kod pokoju'), 'a1bi-cd');
+    expect(screen.getByLabelText('Kod pokoju')).toHaveValue('A1BI');
+  });
   it('joins, stores the player session, and renders all lobby players', async () => {
     vi.mocked(joinRoom).mockResolvedValue(joined); render(<App />); await userEvent.type(screen.getByLabelText('Twój nick'), 'Wojtek'); await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' }));
     expect(await screen.findByText('Ania')).toBeInTheDocument(); expect(screen.getByText('Kamil')).toBeInTheDocument(); expect(screen.getAllByRole('img')).toHaveLength(3); expect(screen.getAllByText('Oczekuje')).toHaveLength(2); expect(joinRoom).toHaveBeenCalledWith('AB12', 'Wojtek'); expect(loadPlayerSession()).toEqual(session);
@@ -52,5 +57,10 @@ describe('Web Player lobby', () => {
     const completed = { ...snapshot, phase: 'Completed', stateVersion: 12, game: { stage: 'Completed', currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1, questionsInCurrentRound: 1, ranking: [{ playerId: session.playerId, score: 1500, rank: 1 }, { playerId: '2', score: 0, rank: 2 }, { playerId: '3', score: 0, rank: 2 }] } };
     savePlayerSession(session); vi.mocked(resumePlayer).mockResolvedValue({ player: snapshot.players[0], snapshot: completed, privateState }); render(<App />); expect(await screen.findByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
     realtime.snapshotListener?.({ ...snapshot, phase: 'Started', stateVersion: 11, game: { stage: 'CollectingTextAnswers', currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1, questionsInCurrentRound: 1, question: { id: 'question', instanceId: 'instance', text: { pl: 'Stare pytanie' } } } }); expect(screen.queryByText('Stare pytanie')).not.toBeInTheDocument(); expect(screen.getByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
+  });
+  it('resumes the persisted player when the mobile tab becomes visible again', async () => {
+    savePlayerSession(session); vi.mocked(resumePlayer).mockResolvedValue({ player: snapshot.players[0], snapshot, privateState }); render(<App />); await screen.findByText('Ania');
+    vi.mocked(resumePlayer).mockClear(); Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() => expect(resumePlayer).toHaveBeenCalledWith(session));
   });
 });
