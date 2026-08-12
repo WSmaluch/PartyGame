@@ -14,7 +14,8 @@ public sealed record RuntimeReadinessResult(
     string MediaStorage,
     string DataOperation,
     string Display,
-    string Admin);
+    string Admin,
+    string Player);
 
 public static class RuntimeReadiness
 {
@@ -63,15 +64,17 @@ public static class RuntimeReadiness
 
         var displayReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.DisplayRoot);
         var adminReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.AdminRoot);
+        var playerReady = IsStaticRootReady(deploymentOptions.Value.Enabled, deploymentOptions.Value.PlayerRoot);
 
         return new RuntimeReadinessResult(
-            databaseReady && schemaReady && mediaReady && !dataOperationActive && displayReady && adminReady ? "ready" : "not-ready",
+            databaseReady && schemaReady && mediaReady && !dataOperationActive && displayReady && adminReady && playerReady ? "ready" : "not-ready",
             databaseReady ? "ready" : "unavailable",
             schemaReady ? "compatible" : "migration-required-or-incompatible",
             mediaReady ? "ready" : "unavailable",
             dataOperationActive ? "active" : "idle",
             displayReady ? "ready" : "unavailable",
-            adminReady ? "ready" : "unavailable");
+            adminReady ? "ready" : "unavailable",
+            playerReady ? "ready" : "unavailable");
     }
 
     private static bool IsStaticRootReady(bool deploymentEnabled, string root)

@@ -36,17 +36,18 @@ dotnet publish server/PartyGame.Api/PartyGame.Api.csproj --no-restore --configur
   -p:SourceRevisionId="$SHORT_HASH" \
   -p:PartyGameBuildTimestampUtc="$TIMESTAMP"
 
-for app in display-web admin-web; do
+for app in display-web admin-web player-web; do
   npm --prefix "apps/$app" ci
   PARTYGAME_BUILD_VERSION="$VERSION" npm --prefix "apps/$app" run lint
   PARTYGAME_BUILD_VERSION="$VERSION" npm --prefix "apps/$app" run test
-  if [[ "$app" == "display-web" ]]; then WEB_BASE_PATH="/display/"; else WEB_BASE_PATH="/admin/"; fi
+  if [[ "$app" == "display-web" ]]; then WEB_BASE_PATH="/display/"; elif [[ "$app" == "admin-web" ]]; then WEB_BASE_PATH="/admin/"; else WEB_BASE_PATH="/play/"; fi
   PARTYGAME_BUILD_VERSION="$VERSION" PARTYGAME_WEB_BASE_PATH="$WEB_BASE_PATH" npm --prefix "apps/$app" run build
   cp -R "apps/$app/dist" "$RELEASE_DIR/${app%-web}"
 done
 
 node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/display/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_DISPLAY_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
 node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/admin/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_ADMIN_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/player/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_PLAYER_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export PATH="$DEVELOPER_DIR/usr/bin:$PATH"

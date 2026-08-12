@@ -1,0 +1,7 @@
+{
+  "apiBaseUrl": "/",
+  "signalRHubUrl": "/hubs/game",
+  "publicBaseUrl": "/play/",
+  "applicationVersion": "development",
+  "signalRBaseUrl": "/"
+}

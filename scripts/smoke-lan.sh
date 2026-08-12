@@ -44,17 +44,24 @@ assert_missing_static_file() {
 
 assert_html /display/
 assert_html /admin/
+assert_html /play/
 assert_json_config /display/config.json
 assert_json_config /admin/config.json
+assert_json_config /play/config.json
 assert_javascript_asset display
 assert_javascript_asset admin
+assert_javascript_asset player
 assert_missing_static_file /display/missing.js
 assert_missing_static_file /admin/missing.json
+assert_missing_static_file /play/missing.js
 curl --fail --silent --show-error --request POST "$base/hubs/game/negotiate?negotiateVersion=1" >/dev/null
 if curl --fail --silent "$base/display/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
   echo "PartyGame LAN: Display config contains a loopback address." >&2; exit 1
 fi
 if curl --fail --silent "$base/admin/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
   echo "PartyGame LAN: Admin config contains a loopback address." >&2; exit 1
+fi
+if curl --fail --silent "$base/play/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
+  echo "PartyGame LAN: Web Player config contains a loopback address." >&2; exit 1
 fi
 echo "PartyGame LAN smoke PASS: $base"

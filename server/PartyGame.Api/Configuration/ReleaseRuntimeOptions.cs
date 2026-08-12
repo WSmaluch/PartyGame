@@ -45,8 +45,10 @@ public static class ReleaseRuntimeConfiguration
         Add("PARTYGAME_DEPLOYMENT_ENABLED", "Deployment:Enabled");
         Add("PARTYGAME_DISPLAY_ROOT", "Deployment:DisplayRoot");
         Add("PARTYGAME_ADMIN_ROOT", "Deployment:AdminRoot");
+        Add("PARTYGAME_PLAYER_ROOT", "Deployment:PlayerRoot");
         Add("PARTYGAME_DISPLAY_PATH_BASE", "Deployment:DisplayPathBase");
         Add("PARTYGAME_ADMIN_PATH_BASE", "Deployment:AdminPathBase");
+        Add("PARTYGAME_PLAYER_PATH_BASE", "Deployment:PlayerPathBase");
 
         var urls = Environment.GetEnvironmentVariable("PARTYGAME_URLS");
         if (!string.IsNullOrWhiteSpace(urls)) values["urls"] = urls;

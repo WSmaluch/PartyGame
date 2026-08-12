@@ -40,12 +40,14 @@ PARTYGAME_PUBLIC_BASE_URL="http://127.0.0.1:$PORT" \
 PARTYGAME_ALLOWED_ORIGINS="http://127.0.0.1:5173,http://127.0.0.1:5174" \
 PARTYGAME_DISPLAY_PUBLIC_URL="http://127.0.0.1:5173/display" \
 PARTYGAME_ADMIN_PUBLIC_URL="http://127.0.0.1:5174/admin" \
+PARTYGAME_PLAYER_PUBLIC_URL="http://127.0.0.1:5175/play" \
 PARTYGAME_APPLY_MIGRATIONS=true \
 PARTYGAME_ALLOW_INSECURE_LAN_HTTP=true \
 PARTYGAME_OPERATOR_TOKEN="release-smoke-operator-token-that-is-not-a-secret" \
 PARTYGAME_DEPLOYMENT_ENABLED=true \
 PARTYGAME_DISPLAY_ROOT="$RELEASE_DIR/display" \
 PARTYGAME_ADMIN_ROOT="$RELEASE_DIR/admin" \
+PARTYGAME_PLAYER_ROOT="$RELEASE_DIR/player" \
 dotnet "$API_DLL" >"$LOG_FILE" 2>&1 &
 PID=$!
 
@@ -73,8 +75,10 @@ assert_json_config() {
 }
 assert_html /display/
 assert_html /admin/
+assert_html /play/
 assert_json_config /display/config.json
 assert_json_config /admin/config.json
+assert_json_config /play/config.json
 
 EXPECTED_VERSION="$(node "$REPO_DIR/scripts/release-assets.mjs" version "$MANIFEST")"
 ACTUAL_VERSION="$(curl --silent --fail "http://127.0.0.1:$PORT/api/system/version" | node -e 'let body=""; process.stdin.on("data", part => body += part); process.stdin.on("end", () => process.stdout.write(JSON.parse(body).version));')"
