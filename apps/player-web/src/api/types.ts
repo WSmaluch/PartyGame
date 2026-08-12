@@ -4,6 +4,9 @@ export type PublicPlayer = {
   isHost: boolean;
   isReady: boolean;
   isConnected: boolean;
+  hasProfilePhoto: boolean;
+  profilePhotoUrl?: string | null;
+  score: number;
 };
 
 export type RoomSnapshot = {
@@ -17,6 +20,11 @@ export type RoomAccessResponse = {
   roomCode: string;
   playerId: string;
   reconnectToken: string;
+  snapshot: RoomSnapshot;
+};
+
+export type ResumePlayerResponse = {
+  player: PublicPlayer;
   snapshot: RoomSnapshot;
 };
 
