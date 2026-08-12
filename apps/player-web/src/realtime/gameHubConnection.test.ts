@@ -19,7 +19,18 @@ describe('GameHubConnection', () => {
   it('reattaches the same player after SignalR reconnects', async () => {
     const hub = new GameHubConnection(); const states: string[] = []; hub.subscribe((state) => states.push(state));
     const session = { roomCode: 'AB12', playerId: 'player', reconnectToken: 'token', nickname: 'Wojtek' };
-    await hub.attach(session); signalr.handlers.reconnecting?.(); signalr.handlers.reconnected?.(); await vi.waitFor(() => expect(signalr.connection.invoke).toHaveBeenCalledTimes(2));
-    expect(signalr.connection.invoke).toHaveBeenLastCalledWith('AttachPlayer', 'AB12', 'player', 'token'); expect(states).toContain('reconnecting'); expect(states.at(-1)).toBe('connected');
+    await hub.attach(session); signalr.handlers.reconnecting?.(); signalr.handlers.reconnected?.(); await vi.waitFor(() => expect(signalr.connection.invoke.mock.calls.filter((call: unknown[]) => call[0] === 'AttachPlayer')).toHaveLength(2));
+    expect(signalr.connection.invoke.mock.calls.filter((call: unknown[]) => call[0] === 'AttachPlayer').at(-1)).toEqual(['AttachPlayer', 'AB12', 'player', 'token']); expect(states).toContain('reconnecting'); expect(states.at(-1)).toBe('connected');
+  });
+
+  it('uses the server submission methods and does not put identity in a URL', async () => {
+    const hub = new GameHubConnection(); const session = { roomCode: 'AB12', playerId: 'player', reconnectToken: 'token', nickname: 'Wojtek' };
+    await hub.attach(session);
+    await hub.submitPlayerSelection(session, 'other', 'question', 'selection-id');
+    await hub.submitTextAnswer(session, 'answer', 'question', 'answer-id');
+    await hub.submitTextAnswerVote(session, 'answer-id', 'question', 'vote-id');
+    expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitPlayerSelectionWithSubmission', 'AB12', 'player', 'token', 'other', 'question', 'selection-id');
+    expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitTextAnswerWithSubmission', 'AB12', 'player', 'token', 'answer', 'question', 'answer-id');
+    expect(signalr.connection.invoke).toHaveBeenCalledWith('SubmitTextAnswerVoteWithSubmission', 'AB12', 'player', 'token', 'answer-id', 'question', 'vote-id');
   });
 });

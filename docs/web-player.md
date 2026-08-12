@@ -1,4 +1,4 @@
-# PartyGame Web Player (1B)
+# PartyGame Web Player (1C)
 
 Web Player to przeglądarkowy klient tego samego PartyGame API i SignalR Hub, co aplikacja iOS. Po wdrożeniu wejście to `http://HOST:PORT/play/`; konfiguracja runtime jest dostępna pod `/play/config.json`.
 
@@ -12,7 +12,15 @@ Zdjęcie profilowe jest wysyłane istniejącym `POST /api/rooms/{roomCode}/playe
 
 Storage zawiera wyłącznie `roomCode`, `playerId`, `reconnectToken` i `nickname`. Po odświeżeniu klient najpierw używa istniejącego endpointu `resume`, potem `AttachPlayer`; nie tworzy drugiego gracza. Nieważna lub wygasła sesja jest usuwana, a użytkownik wraca kontrolowanie do Join. SignalR używa automatycznego reconnectu i po odzyskaniu transportu ponownie wykonuje `AttachPlayer`. Druga karta z tą samą sesją nie tworzy gracza: backend zastępuje aktywne connection id starszej karty.
 
-Gdy backend wyśle `RoomStarted`, aplikacja pokazuje bezpieczny ekran przejściowy. Pełna obsługa pytań, odpowiedzi, głosowania, wyników i rankingu nadal nie jest zaimplementowana w przeglądarce.
+## Gameplay: PlayerSelection, tekst i głosowanie
+
+`RoomStarted` oraz każde `RoomSnapshotUpdated` przechodzą przez jeden router oparty wyłącznie na `snapshot.game.stage`. W 1C obsługiwane są `CollectingPlayerSelections`, `CollectingTextAnswers` i `CollectingTextAnswerVotes`; przejście między etapami nigdy nie jest wyliczane lokalnie.
+
+Wybór gracza używa listy zgodnej z klientem iOS (wszyscy pozostali gracze), odpowiedź tekstowa stosuje backendowy limit 150 znaków po trim, a głosowanie korzysta wyłącznie z anonimowych `textResults.votingOptions`. Prywatny event `PlayerPrivateGameStateUpdated` potwierdza odpowiedź tekstową i głos; po refreshu `resume` przywraca ten stan przed pokazaniem formularza.
+
+Każda akcja używa istniejących metod hubu `SubmitPlayerSelectionWithSubmission`, `SubmitTextAnswerWithSubmission` i `SubmitTextAnswerVoteWithSubmission`. Identyfikator `clientSubmissionId` jest stabilny dla tej samej instancji pytania, akcji i karty (`sessionStorage`), więc retry po błędzie sieci nie tworzy drugiej odpowiedzi ani głosu. Timer jest wyłącznie prezentacją deadline serwera; zerowy countdown nie zmienia etapu lokalnie. Sygnalizacja `Ping` koryguje zegar klienta, gdy jest dostępna.
+
+Etapy Photo i Drawing są na razie jawnie nieobsługiwane: klient pokazuje kontrolowany komunikat i nie wysyła fikcyjnych akcji. Results, Round Summary oraz ranking pozostają zakresem kolejnego etapu.
 
 Lokalny development:
 
