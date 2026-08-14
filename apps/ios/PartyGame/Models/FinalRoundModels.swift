@@ -32,4 +32,13 @@ struct FinalRoundSnapshot: Codable, Equatable, Sendable {
     let submittedVotes: Int
     let requiredVotes: Int
     let artifacts: [FinalRoundArtifact]
+    let editAssignments: [FinalRoundEditAssignment]?
+}
+
+struct FinalRoundEditAssignment: Codable, Equatable, Identifiable, Sendable {
+    let artifactId: UUID
+    let editorPlayerId: UUID
+    let sourceDisplayMediaUrl: String
+    let sourceThumbnailMediaUrl: String
+    var id: UUID { artifactId }
 }

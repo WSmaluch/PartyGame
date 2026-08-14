@@ -75,8 +75,15 @@ struct GameRouterView: View {
                 case .collectingFinalSelfies:
                     if store.privateGameState?.hasSubmittedPhotoAnswer == true { PhotoAnswerWaitingView(store: store, game: game) }
                     else { PhotoAnswerCaptureView(store: store, game: game) }
-                case .collectingFinalEdits, .showingFinalPresentation, .collectingFinalVotes, .showingFinalResults:
-                    FinalRoundStatusView(game: game)
+                case .collectingFinalEdits:
+                    FinalRoundEditView(store: store, game: game)
+                case .showingFinalPresentation:
+                    FinalRoundPresentationView(store: store, game: game)
+                case .collectingFinalVotes:
+                    if store.privateGameState?.finalRound?.hasSubmittedVote == true { FinalRoundWaitingView(game: game, message: "finalRound.voteSaved") }
+                    else { FinalRoundVotingView(store: store, game: game) }
+                case .showingFinalResults:
+                    FinalRoundResultsView(store: store, game: game)
                 case .unknown(let val):
                     ProgressView().accessibilityLabel(String(format: String(localized: "game.awaiting_stage"), val))
                     }
@@ -126,25 +133,5 @@ private struct GameSummaryView: View {
             Text("game.awaiting_stage")
         }
         .accessibilityIdentifier("game-summary-view")
-    }
-}
-
-private struct FinalRoundStatusView: View {
-    let game: GameSnapshot
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Runda finałowa").font(.title.bold())
-            if game.stage == .collectingFinalSelfies {
-                Text("Przygotuj swoje zdjęcie finałowe")
-                Text("\(game.finalRound?.submittedSelfies ?? 0)/\(game.finalRound?.requiredSelfies ?? 0)")
-            } else if game.stage == .collectingFinalEdits {
-                Text("Edycja \(game.finalRound?.currentPass ?? 0)/\(game.finalRound?.totalPasses ?? 0)")
-                Text("\(game.finalRound?.submittedEdits ?? 0)/\(game.finalRound?.requiredEdits ?? 0)")
-            } else {
-                ScrollView { ForEach(game.finalRound?.artifacts ?? []) { artifact in
-                    VStack { Text("\(artifact.subjectNickname) as \(artifact.targetRole.local)").bold(); if game.stage == .showingFinalResults { Text("\(artifact.voteCount) głosów") } }
-                } }
-            }
-        }.accessibilityIdentifier("final-round-view")
     }
 }

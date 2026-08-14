@@ -81,6 +81,18 @@ final class RoomModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.game?.stage, .gameSummary)
     }
 
+    func testDecodesFinalRoundAssignmentAndPrivateReconnectState() throws {
+        let json = #"{"roomCode":"ABCD","phase":"Started","stateVersion":54,"displayConnected":true,"minimumPlayers":3,"maximumPlayers":8,"canStart":false,"settings":{"roundCount":1,"questionsPerRound":4,"playerSelectionSeconds":20,"textAnswerSeconds":40,"votingSeconds":20,"photoSeconds":45,"drawingSeconds":90,"resultPresentationSeconds":8,"finalRoundEnabled":true,"finalDrawingPasses":2},"players":[],"createdAtUtc":"2026-07-20T12:00:00Z","game":{"stage":"CollectingFinalEdits","scores":[],"finalRound":{"currentPass":1,"totalPasses":2,"submittedSelfies":3,"requiredSelfies":3,"submittedEdits":0,"requiredEdits":3,"submittedVotes":0,"requiredVotes":0,"artifacts":[],"editAssignments":[{"artifactId":"00000000-0000-0000-0000-000000000011","editorPlayerId":"00000000-0000-0000-0000-000000000012","sourceDisplayMediaUrl":"/api/media/a/display","sourceThumbnailMediaUrl":"/api/media/a/thumbnail"}]}}}"#
+        let privateJSON = #"{"playerId":"00000000-0000-0000-0000-000000000012","questionInstanceId":"00000000-0000-0000-0000-000000000099","hasSubmittedTextAnswer":false,"hasSubmittedTextAnswerVote":false,"hasSubmittedPhotoAnswer":false,"hasSubmittedPhotoAnswerVote":false,"hasSubmittedDrawingAnswer":false,"hasSubmittedDrawingAnswerVote":false,"isEligibleForDrawingAnswer":false,"finalRound":{"hasSubmittedSelfie":true,"assignedArtifactId":"00000000-0000-0000-0000-000000000011","sourceDisplayMediaUrl":"/api/media/a/display","sourceThumbnailMediaUrl":"/api/media/a/thumbnail","hasSubmittedEdit":false,"hasSubmittedVote":false}}"#
+
+        let snapshot = try JSONDecoder().decode(RoomSnapshot.self, from: Data(json.utf8))
+        let privateState = try JSONDecoder().decode(PlayerPrivateGameState.self, from: Data(privateJSON.utf8))
+
+        XCTAssertEqual(snapshot.game?.stage, .collectingFinalEdits)
+        XCTAssertEqual(snapshot.game?.finalRound?.editAssignments?.first?.artifactId.uuidString, "00000000-0000-0000-0000-000000000011")
+        XCTAssertEqual(privateState.finalRound?.assignedArtifactId?.uuidString, "00000000-0000-0000-0000-000000000011")
+    }
+
     @MainActor
     func testRoomCodeNormalizationRemovesAmbiguousCharacters() {
         XCTAssertEqual(GameSessionStore.normalizedRoomCode("a1bi-cd"), "ABCD")

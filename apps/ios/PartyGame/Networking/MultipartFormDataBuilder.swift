@@ -61,6 +61,10 @@ enum MultipartFormDataBuilder {
         body.appendUTF8("\r\n--\(boundary)--\r\n")
         return MultipartFormData(contentType: "multipart/form-data; boundary=\(boundary)", body: body)
     }
+
+    static func finalRoundEdit(playerId: UUID, reconnectToken: String, clientSubmissionId: UUID, pngData: Data, boundary: String = "PartyGame-\(UUID().uuidString)") -> MultipartFormData {
+        drawingAnswer(playerId: playerId, reconnectToken: reconnectToken, clientSubmissionId: clientSubmissionId, pngData: pngData, boundary: boundary)
+    }
 }
 
 private extension Data {

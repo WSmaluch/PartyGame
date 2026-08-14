@@ -530,6 +530,7 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
     let ownDrawingAnswerId: UUID?
     let hasSubmittedDrawingAnswerVote: Bool
     let isEligibleForDrawingAnswer: Bool
+    let finalRound: FinalRoundPrivateState?
 
     init(
         playerId: UUID,
@@ -544,7 +545,8 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
         hasSubmittedDrawingAnswer: Bool = false,
         ownDrawingAnswerId: UUID? = nil,
         hasSubmittedDrawingAnswerVote: Bool = false,
-        isEligibleForDrawingAnswer: Bool = false
+        isEligibleForDrawingAnswer: Bool = false,
+        finalRound: FinalRoundPrivateState? = nil
     ) {
         self.playerId = playerId
         self.questionInstanceId = questionInstanceId
@@ -559,12 +561,13 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
         self.ownDrawingAnswerId = ownDrawingAnswerId
         self.hasSubmittedDrawingAnswerVote = hasSubmittedDrawingAnswerVote
         self.isEligibleForDrawingAnswer = isEligibleForDrawingAnswer
+        self.finalRound = finalRound
     }
 
     private enum CodingKeys: String, CodingKey {
         case playerId, questionInstanceId, hasSubmittedTextAnswer, ownTextAnswerId, hasSubmittedTextAnswerVote, isEligibleForTextAnswerVote
         case hasSubmittedPhotoAnswer, ownPhotoAnswerId, hasSubmittedPhotoAnswerVote
-        case hasSubmittedDrawingAnswer, ownDrawingAnswerId, hasSubmittedDrawingAnswerVote, isEligibleForDrawingAnswer
+        case hasSubmittedDrawingAnswer, ownDrawingAnswerId, hasSubmittedDrawingAnswerVote, isEligibleForDrawingAnswer, finalRound
     }
 
     init(from decoder: Decoder) throws {
@@ -582,6 +585,7 @@ struct PlayerPrivateGameState: Codable, Equatable, Sendable {
         ownDrawingAnswerId = try values.decodeIfPresent(UUID.self, forKey: .ownDrawingAnswerId)
         hasSubmittedDrawingAnswerVote = try values.decodeIfPresent(Bool.self, forKey: .hasSubmittedDrawingAnswerVote) ?? false
         isEligibleForDrawingAnswer = try values.decodeIfPresent(Bool.self, forKey: .isEligibleForDrawingAnswer) ?? false
+        finalRound = try values.decodeIfPresent(FinalRoundPrivateState.self, forKey: .finalRound)
     }
 }
 

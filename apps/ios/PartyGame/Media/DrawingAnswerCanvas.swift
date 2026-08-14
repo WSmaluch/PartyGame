@@ -57,13 +57,16 @@ enum DrawingRendererError: LocalizedError { case empty, cancelled, encoding }
 struct DrawingRenderer: Sendable {
     static let logicalSize = CGSize(width: 1024, height: 1024)
 
-    func render(_ state: DrawingCanvasState) async throws -> Data {
+    func render(_ state: DrawingCanvasState, background: UIImage? = nil) async throws -> Data {
         guard !state.isEmpty else { throw DrawingRendererError.empty }
         return try await Task.detached(priority: .userInitiated) {
             guard !Task.isCancelled else { throw DrawingRendererError.cancelled }
             let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
             let image = UIGraphicsImageRenderer(size: Self.logicalSize, format: format).image { context in
                 UIColor.white.setFill(); context.fill(CGRect(origin: .zero, size: Self.logicalSize))
+                if let background {
+                    background.draw(in: CGRect(origin: .zero, size: Self.logicalSize))
+                }
                 for stroke in state.completedStrokes {
                     let points = stroke.points
                     guard let first = points.first else { continue }
@@ -79,6 +82,37 @@ struct DrawingRenderer: Sendable {
             guard !Task.isCancelled, let png = image.pngData() else { throw DrawingRendererError.encoding }
             return png
         }.value
+    }
+}
+
+struct FinalRoundEditDraft: Codable, Equatable, Sendable {
+    let roomCode: String
+    let playerId: UUID
+    let artifactId: UUID
+    let sourceDisplayMediaUrl: String
+    var canvas: DrawingCanvasState
+    var clientSubmissionId: UUID?
+    var pngURL: URL?
+    var previewPNG: Data?
+}
+
+enum FinalRoundEditDraftStorage {
+    private static var directory: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PartyGameFinalEditDrafts", isDirectory: true) }
+    private static func stem(_ draft: FinalRoundEditDraft) -> String { "\(draft.roomCode)-\(draft.playerId.uuidString)-\(draft.artifactId.uuidString)" }
+    static func load(roomCode: String, playerId: UUID, artifactId: UUID) -> FinalRoundEditDraft? {
+        try? JSONDecoder().decode(FinalRoundEditDraft.self, from: Data(contentsOf: directory.appendingPathComponent("\(roomCode)-\(playerId.uuidString)-\(artifactId.uuidString).json")))
+    }
+    static func save(_ draft: FinalRoundEditDraft) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(draft).write(to: directory.appendingPathComponent("\(stem(draft)).json"), options: .atomic)
+    }
+    static func savePNG(_ data: Data, for draft: FinalRoundEditDraft) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(stem(draft)).png"); try data.write(to: url, options: .atomic); return url
+    }
+    static func remove(_ draft: FinalRoundEditDraft) {
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(stem(draft)).json"))
+        try? FileManager.default.removeItem(at: draft.pngURL ?? directory.appendingPathComponent("\(stem(draft)).png"))
     }
 }
 

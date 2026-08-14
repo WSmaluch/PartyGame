@@ -43,6 +43,8 @@ final class GameSessionStore {
     private(set) var drawingDraft: DrawingAnswerDraft?
     private(set) var drawingUploadPhase: PhotoAnswerUploadPhase = .idle
     private(set) var selectedDrawingAnswerVoteId: UUID?
+    private(set) var finalEditDraft: FinalRoundEditDraft?
+    private(set) var selectedFinalRoundVoteId: UUID?
     private(set) var isPhotoCameraUnavailableFixture = false
     var errorMessage: String?
 
@@ -95,6 +97,53 @@ final class GameSessionStore {
     }
 
     func closeDrawingCanvas() { }
+
+    func openFinalEditCanvas() {
+        guard let session, let final = privateGameState?.finalRound,
+              let artifactId = final.assignedArtifactId, let source = final.sourceDisplayMediaUrl,
+              snapshot?.game?.stage == .collectingFinalEdits else { return }
+        finalEditDraft = FinalRoundEditDraftStorage.load(roomCode: session.roomCode, playerId: session.playerId, artifactId: artifactId)
+            ?? FinalRoundEditDraft(roomCode: session.roomCode, playerId: session.playerId, artifactId: artifactId, sourceDisplayMediaUrl: source, canvas: DrawingCanvasState(), clientSubmissionId: nil, pngURL: nil, previewPNG: nil)
+    }
+
+    func updateFinalEditCanvas(_ canvas: DrawingCanvasState) {
+        guard var draft = finalEditDraft else { return }
+        draft.canvas = canvas; draft.pngURL = nil; draft.previewPNG = nil; draft.clientSubmissionId = nil
+        finalEditDraft = draft; try? FinalRoundEditDraftStorage.save(draft)
+    }
+
+    func previewFinalEdit() async {
+        guard var draft = finalEditDraft, !draft.canvas.isEmpty, let sourceURL = mediaURL(draft.sourceDisplayMediaUrl) else { return }
+        drawingUploadPhase = .preparing; errorMessage = nil
+        do {
+            let (sourceData, _) = try await URLSession.shared.data(from: sourceURL)
+            guard let source = UIImage(data: sourceData) else { throw RoomAPIError.invalidData }
+            let png = try await DrawingRenderer().render(draft.canvas, background: source)
+            guard finalEditDraft?.artifactId == draft.artifactId else { return }
+            draft.pngURL = try FinalRoundEditDraftStorage.savePNG(png, for: draft); draft.previewPNG = png
+            finalEditDraft = draft; try FinalRoundEditDraftStorage.save(draft); drawingUploadPhase = .ready
+        } catch { drawingUploadPhase = .failed(error.localizedDescription); errorMessage = error.localizedDescription }
+    }
+
+    func uploadFinalEdit() {
+        guard drawingUploadTask == nil, let draft = finalEditDraft, draft.pngURL != nil,
+              snapshot?.game?.stage == .collectingFinalEdits, !photoActionsExpired else { return }
+        drawingUploadTask = Task { [weak self] in
+            await self?.performFinalEditUpload(draft)
+            self?.drawingUploadTask = nil
+        }
+    }
+
+    func selectFinalRoundVote(_ id: UUID) { guard !photoActionsExpired else { return }; selectedFinalRoundVoteId = id }
+
+    func submitSelectedFinalRoundVote() async {
+        guard !isWorking, snapshot?.game?.stage == .collectingFinalVotes, !photoActionsExpired,
+              privateGameState?.finalRound?.hasSubmittedVote != true, let session, let reconnectToken, let baseURL,
+              let artifactId = selectedFinalRoundVoteId else { return }
+        isWorking = true; errorMessage = nil; defer { isWorking = false }
+        do { apply(try await api.submitFinalVote(baseURL: baseURL, session: session, reconnectToken: reconnectToken, artifactId: artifactId, clientSubmissionId: submissionId(artifactId, "final-vote"))) }
+        catch { errorMessage = error.localizedDescription }
+    }
 
     func previewDrawing() async {
         guard var draft = drawingDraft else { return }
@@ -447,6 +496,8 @@ final class GameSessionStore {
         guard accumulator.accept(candidate) else { return }
         let enteredDrawingAnswerCollection = candidate.game?.stage == .collectingDrawingAnswers &&
             snapshot?.game?.stage != .collectingDrawingAnswers
+        let enteredFinalRound = candidate.game.map { [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) } == true &&
+            snapshot?.game?.stage != candidate.game?.stage
         snapshot = candidate
         let nextQuestion = candidate.game?.resolvedQuestionInstanceId
         let questionChanged = nextQuestion != activeQuestionInstanceId
@@ -464,6 +515,8 @@ final class GameSessionStore {
             drawingDraft = nil
             drawingUploadPhase = .idle
             selectedDrawingAnswerVoteId = nil
+            finalEditDraft = nil
+            selectedFinalRoundVoteId = nil
             privateGameState = nil
             privateStateRefreshFailedQuestionId = nil
         }
@@ -485,6 +538,10 @@ final class GameSessionStore {
                 guard !Task.isCancelled else { return }
                 await self?.refreshPrivateStateForActiveQuestion(nextQuestion)
             }
+        }
+        if !isUITesting, enteredFinalRound {
+            privateStateRefreshTask?.cancel()
+            privateStateRefreshTask = Task { [weak self] in await self?.refreshFinalRoundPrivateState() }
         }
         
         // Reset submitted questions if the round/question changes
@@ -886,6 +943,35 @@ final class GameSessionStore {
         }
     }
 
+    private func performFinalEditUpload(_ originalDraft: FinalRoundEditDraft) async {
+        guard let session, let reconnectToken, let baseURL, let pngURL = originalDraft.pngURL,
+              snapshot?.game?.stage == .collectingFinalEdits, !photoActionsExpired,
+              privateGameState?.finalRound?.assignedArtifactId == originalDraft.artifactId,
+              privateGameState?.finalRound?.hasSubmittedEdit != true else { return }
+        var draft = originalDraft
+        if draft.clientSubmissionId == nil { draft.clientSubmissionId = UUID(); finalEditDraft = draft; try? FinalRoundEditDraftStorage.save(draft) }
+        guard let clientSubmissionId = draft.clientSubmissionId else { return }
+        do {
+            let data = try await Task.detached { try Data(contentsOf: pngURL) }.value
+            drawingUploadPhase = .uploading(0)
+            let response = try await api.uploadFinalEdit(baseURL: baseURL, session: session, reconnectToken: reconnectToken, artifactId: draft.artifactId, clientSubmissionId: clientSubmissionId, pngData: data) { [weak self] value in
+                Task { @MainActor in self?.drawingUploadPhase = value >= 1 ? .serverProcessing : .uploading(value) }
+            }
+            apply(response.roomSnapshot); applyPrivateGameState(response.playerPrivateGameState)
+            drawingUploadPhase = .saved; FinalRoundEditDraftStorage.remove(draft)
+        } catch is CancellationError { drawingUploadPhase = .ready }
+        catch { drawingUploadPhase = .failed(error.localizedDescription); errorMessage = error.localizedDescription }
+    }
+
+    private func refreshFinalRoundPrivateState() async {
+        guard let session, let reconnectToken, let baseURL else { return }
+        do {
+            let resumed = try await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken)
+            guard snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true else { return }
+            applyPrivateGameState(resumed.privateState)
+        } catch { return }
+    }
+
     private func refreshPrivateStateAfterStaleResponse() async {
         await refreshPrivateStateForActiveQuestion(snapshot?.game?.resolvedQuestionInstanceId)
     }
@@ -956,7 +1042,8 @@ final class GameSessionStore {
     func applyPrivateGameState(_ candidate: PlayerPrivateGameState) {
         guard candidate.playerId == session?.playerId else { return }
         let currentQuestion = snapshot?.game?.resolvedQuestionInstanceId
-        guard candidate.questionInstanceId == currentQuestion else { return }
+        let finalStage = snapshot?.game.map { [.collectingFinalSelfies, .collectingFinalEdits, .showingFinalPresentation, .collectingFinalVotes, .showingFinalResults].contains($0.stage) } == true
+        guard candidate.questionInstanceId == currentQuestion || (finalStage && candidate.finalRound != nil) else { return }
         if let current = privateGameState, current.questionInstanceId == candidate.questionInstanceId {
             privateGameState = PlayerPrivateGameState(
                 playerId: candidate.playerId, questionInstanceId: candidate.questionInstanceId,
@@ -970,7 +1057,8 @@ final class GameSessionStore {
                 hasSubmittedDrawingAnswer: current.hasSubmittedDrawingAnswer || candidate.hasSubmittedDrawingAnswer,
                 ownDrawingAnswerId: candidate.ownDrawingAnswerId ?? current.ownDrawingAnswerId,
                 hasSubmittedDrawingAnswerVote: current.hasSubmittedDrawingAnswerVote || candidate.hasSubmittedDrawingAnswerVote,
-                isEligibleForDrawingAnswer: candidate.isEligibleForDrawingAnswer
+                isEligibleForDrawingAnswer: candidate.isEligibleForDrawingAnswer,
+                finalRound: candidate.finalRound ?? current.finalRound
             )
         } else { privateGameState = candidate }
     }
