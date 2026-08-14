@@ -22,6 +22,9 @@ public interface IRoomService
     Task<RoomMutationResult> SubmitPhotoAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
     Task<DrawingAnswerUploadResult> SubmitDrawingAnswerAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default);
     Task<RoomMutationResult> SubmitDrawingAnswerVoteAsync(string roomCode, Guid playerId, string? token, Guid questionInstanceId, Guid selectedAnswerId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
+    Task<FinalRoundUploadResult> SubmitFinalSelfieAsync(string roomCode, Guid playerId, string? token, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default);
+    Task<FinalRoundUploadResult> SubmitFinalEditAsync(string roomCode, Guid playerId, string? token, Guid artifactId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default);
+    Task<RoomMutationResult> SubmitFinalVoteAsync(string roomCode, Guid playerId, string? token, Guid artifactId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default);
     Task<PartyGame.Domain.Rooms.PlayerPrivateGameState> GetPlayerPrivateGameStateAsync(string roomCode, Guid playerId, CancellationToken cancellationToken = default);
 }
 
@@ -30,3 +33,4 @@ public sealed record PlayerAuthorizationResult(GameRoom Room, Player Player);
 public sealed record RoomMutationResult(GameRoom Room, bool PublicStateChanged, bool StartedNow);
 public sealed record PhotoAnswerUploadResult(GameRoom Room, Guid PhotoAnswerId, bool Created);
 public sealed record DrawingAnswerUploadResult(GameRoom Room, Guid DrawingAnswerId, bool Created);
+public sealed record FinalRoundUploadResult(GameRoom Room, Guid ArtifactId, bool Created);

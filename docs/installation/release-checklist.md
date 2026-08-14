@@ -18,6 +18,8 @@ On the LAN server, start the installed release with `scripts/start-lan.sh --depl
 
 The production `GamePlanner` may shuffle the four questions, but because the selected package contains exactly one question of each enabled type and the game requires four questions, every run contains exactly one Player Selection, Text Answer, Photo Answer, and Drawing Answer. This guarantees the media checks without a test endpoint, a random seed, or manual database changes. Record the observed order and verify all of the following: the rendered Text prompt contains a real player nickname and no token, both eligible answers reach voting, Photo and Drawing render on Display, a Wi-Fi/relaunch reconnect restores the authoritative stage, and every phone reaches Completed with the final ranking.
 
-### Final Round blocker
+### Final Round acceptance
 
-Current RC5 sources expose `FinalRoundEnabled` and `FinalDrawingPasses`, but contain no authoritative final-round mechanics, lifecycle stage, iOS/Display design, or historical specification. Do not certify a Final Round run or tag RC5 until that product definition is supplied and this package is extended deterministically for it.
+With **Enable final round** selected, normal round `N` must be followed by the extra Final Round (`N+1`) before Completed. Each player receives a localized built-in selfie prompt and a makeover role. The starter catalog is intentionally centralized in `GameStateMachine` until authorable final prompts are added: scary face / rock star / mysterious hero / dramatic face and bandit / space pirate / disco royalty / superhero.
+
+Verify that every player submits one selfie; on each edit pass, every available artifact is assigned to exactly one *other* player and no player receives their own artifact. The editor must draw on the supplied image and submit the accumulated result. At presentation, Display must show the completed image captioned `<PlayerName> as <TargetRole>`; then complete final voting and confirm that only the final results lead into Game Summary and Completed. Repeat a reconnect during selfie collection, an edit pass, and voting.

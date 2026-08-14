@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PartyGame.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using PartyGame.Infrastructure.Persistence;
 namespace PartyGame.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PartyGameDbContext))]
-    partial class PartyGameDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260814100922_FinalRoundLifecycle")]
+    partial class FinalRoundLifecycle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");

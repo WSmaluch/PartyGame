@@ -65,6 +65,7 @@ public static class RoomContractMapper
         List<Guid>? submittedDrawingAnswerPlayerIds = null;
         int? submittedDrawingAnswers = null;
         int? requiredDrawingAnswers = null;
+        FinalRoundSnapshot? finalRound = null;
 
         var currentRound = session.Rounds.FirstOrDefault(r => r.RoundNumber == session.CurrentRoundNumber);
         if (currentRound != null && currentRound.Category != null)
@@ -258,6 +259,48 @@ public static class RoomContractMapper
             }
         }
 
+        if (session.Stage is GameStage.CollectingFinalSelfies or GameStage.CollectingFinalEdits or GameStage.ShowingFinalPresentation or GameStage.CollectingFinalVotes or GameStage.ShowingFinalResults or GameStage.GameSummary or GameStage.Completed)
+        {
+            var state = FinalRoundState.Read(session.FinalRoundStateJson);
+            if (state is not null)
+            {
+                var exposeMedia = session.Stage is GameStage.ShowingFinalPresentation or GameStage.CollectingFinalVotes or GameStage.ShowingFinalResults or GameStage.GameSummary or GameStage.Completed;
+                var counts = state.Votes.GroupBy(vote => vote.ArtifactId).ToDictionary(group => group.Key, group => group.Count());
+                var maxVotes = counts.Count == 0 ? 0 : counts.Values.Max();
+                var artifacts = state.Artifacts.Select(artifact =>
+                {
+                    var player = session.Room.Players.Single(player => player.Id == artifact.SubjectPlayerId);
+                    var mediaId = artifact.FinalMediaAssetId ?? artifact.OriginalMediaAssetId;
+                    return new FinalRoundArtifactSnapshot(artifact.Id, player.Id, player.Nickname,
+                        new LocalizedText(artifact.SelfiePromptPl, artifact.SelfiePromptEn),
+                        new LocalizedText(artifact.TargetRolePl, artifact.TargetRoleEn),
+                        exposeMedia && mediaId is Guid id ? mediaUrls.Display(id) : null,
+                        exposeMedia && mediaId is Guid thumbnailId ? mediaUrls.Thumbnail(thumbnailId) : null,
+                        counts.GetValueOrDefault(artifact.Id), maxVotes > 0 && counts.GetValueOrDefault(artifact.Id) == maxVotes);
+                }).ToList();
+                List<FinalRoundEditAssignmentSnapshot>? assignments = null;
+                if (session.Stage == GameStage.CollectingFinalEdits)
+                {
+                    var participantIds = state.Artifacts.OrderBy(artifact => artifact.SubjectPlayerId).Select(artifact => artifact.SubjectPlayerId).ToList();
+                    assignments = state.Artifacts.Where(artifact => artifact.OriginalMediaAssetId is not null).Select(artifact =>
+                    {
+                        var subjectIndex = participantIds.IndexOf(artifact.SubjectPlayerId);
+                        var editorId = participantIds[(subjectIndex + state.CurrentPass) % participantIds.Count];
+                        var sourceId = state.Edits.Where(edit => edit.ArtifactId == artifact.Id && edit.PassNumber < state.CurrentPass && edit.MediaAssetId is not null)
+                            .OrderByDescending(edit => edit.PassNumber).Select(edit => edit.MediaAssetId!.Value).FirstOrDefault();
+                        if (sourceId == Guid.Empty) sourceId = artifact.OriginalMediaAssetId!.Value;
+                        return new FinalRoundEditAssignmentSnapshot(artifact.Id, editorId, mediaUrls.Display(sourceId), mediaUrls.Thumbnail(sourceId));
+                    }).ToList();
+                }
+                finalRound = new FinalRoundSnapshot(state.CurrentPass, state.TotalPasses,
+                    state.Artifacts.Count(artifact => artifact.OriginalMediaAssetId is not null), state.Artifacts.Count,
+                    state.Edits.Count(edit => edit.PassNumber == state.CurrentPass && edit.MediaAssetId is not null),
+                    session.Stage == GameStage.CollectingFinalEdits ? state.Artifacts.Count(artifact => artifact.OriginalMediaAssetId is not null) : 0,
+                    state.Votes.Count, session.Stage == GameStage.CollectingFinalVotes ? state.Artifacts.Count : 0,
+                    artifacts, assignments);
+            }
+        }
+
         if (session.Stage == GameStage.ShowingQuestionResults || session.Stage == GameStage.RoundSummary || session.Stage == GameStage.Completed)
         {
             var ordered = session.Room.Players.OrderByDescending(p => p.Score).ThenBy(p => p.Id).ToList();
@@ -297,7 +340,8 @@ public static class RoomContractMapper
             requiredPlayers,
             submittedDrawingAnswerPlayerIds,
             submittedDrawingAnswers,
-            requiredDrawingAnswers
+            requiredDrawingAnswers,
+            finalRound
         );
     }
 

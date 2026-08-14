@@ -71,6 +71,11 @@ export type GameStage =
   | 'RevealingDrawingAnswers'
   | 'CollectingDrawingAnswerVotes'
   | 'ShowingDrawingAnswerResults'
+  | 'CollectingFinalSelfies'
+  | 'CollectingFinalEdits'
+  | 'ShowingFinalPresentation'
+  | 'CollectingFinalVotes'
+  | 'ShowingFinalResults'
   | (string & {});
 
 export interface GameCategorySnapshot {
@@ -82,6 +87,29 @@ export interface GameCategorySnapshot {
 export interface GameQuestionSnapshot {
   id: string;
   text: LocalizedText;
+}
+
+export interface FinalRoundArtifact {
+  artifactId: string;
+  subjectPlayerId: string;
+  subjectNickname: string;
+  selfiePrompt: LocalizedText;
+  targetRole: LocalizedText;
+  displayMediaUrl?: string | null;
+  thumbnailMediaUrl?: string | null;
+  voteCount: number;
+  isTopResult: boolean;
+}
+export interface FinalRoundSnapshot {
+  currentPass: number;
+  totalPasses: number;
+  submittedSelfies: number;
+  requiredSelfies: number;
+  submittedEdits: number;
+  requiredEdits: number;
+  submittedVotes: number;
+  requiredVotes: number;
+  artifacts: FinalRoundArtifact[];
 }
 
 export interface ResultVoter {
@@ -263,6 +291,7 @@ export interface GameSnapshot {
   textResults?: TextAnswerResults | null;
   photoAnswerResults?: PhotoAnswerResults | null;
   drawingAnswerResults?: DrawingAnswerResultsSnapshot | null;
+  finalRound?: FinalRoundSnapshot | null;
   roundSummary?: RoundSummarySnapshot | null;
   ranking?: RankingEntry[] | null;
 }

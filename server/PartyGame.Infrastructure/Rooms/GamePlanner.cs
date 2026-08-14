@@ -68,7 +68,10 @@ public sealed class GamePlanner(PartyGameDbContext dbContext, IRandomProvider ra
             RoomId = room.Id,
             Stage = GameStage.CategoryIntro,
             CurrentRoundNumber = 1,
-            TotalRounds = room.Settings.RoundCount,
+            // The Final Round is exposed as the extra N+1 round, but no normal
+            // GameRound row is created for it. TransitionFromRoundSummary uses
+            // the persisted normal-round collection to choose the next branch.
+            TotalRounds = room.Settings.RoundCount + (room.Settings.FinalRoundEnabled ? 1 : 0),
             CurrentQuestionNumber = 1,
             QuestionsInCurrentRound = room.Settings.QuestionsPerRound,
             StartedAtUtc = now,

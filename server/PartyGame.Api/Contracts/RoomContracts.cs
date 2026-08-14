@@ -75,7 +75,8 @@ public sealed record GameSnapshot(
     int? RequiredPlayers = null,
     List<Guid>? SubmittedDrawingAnswerPlayerIds = null,
     int? SubmittedDrawingAnswers = null,
-    int? RequiredDrawingAnswers = null
+    int? RequiredDrawingAnswers = null,
+    FinalRoundSnapshot? FinalRound = null
 );
 
 public sealed record GameCategorySnapshot(Guid Id, LocalizedText Name, LocalizedText Description);
@@ -108,6 +109,9 @@ public sealed record DrawingAnswerResultsSnapshot(Guid QuestionInstanceId, int S
 public sealed record AnonymousDrawingAnswer(Guid DrawingAnswerId, string DisplayDrawingUrl, string ThumbnailDrawingUrl, int Width, int Height, int? RevealOrder = null, int? DisplayOrder = null);
 public sealed record DrawingAnswerResultOption(Guid DrawingAnswerId, string DisplayDrawingUrl, string ThumbnailDrawingUrl, int Width, int Height, Guid AuthorPlayerId, string AuthorNickname, string? AuthorPhotoUrl, int VoteCount, bool IsTopResult, List<DrawingAnswerResultVoter> Voters);
 public sealed record DrawingAnswerResultVoter(Guid PlayerId, string Nickname, string? ProfilePhotoUrl, int PointsAwarded);
+public sealed record FinalRoundSnapshot(int CurrentPass, int TotalPasses, int SubmittedSelfies, int RequiredSelfies, int SubmittedEdits, int RequiredEdits, int SubmittedVotes, int RequiredVotes, List<FinalRoundArtifactSnapshot> Artifacts, List<FinalRoundEditAssignmentSnapshot>? EditAssignments = null);
+public sealed record FinalRoundArtifactSnapshot(Guid ArtifactId, Guid SubjectPlayerId, string SubjectNickname, LocalizedText SelfiePrompt, LocalizedText TargetRole, string? DisplayMediaUrl, string? ThumbnailMediaUrl, int VoteCount, bool IsTopResult);
+public sealed record FinalRoundEditAssignmentSnapshot(Guid ArtifactId, Guid EditorPlayerId, string SourceDisplayMediaUrl, string SourceThumbnailMediaUrl);
 
 
 

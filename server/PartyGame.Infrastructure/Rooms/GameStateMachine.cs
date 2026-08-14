@@ -23,6 +23,8 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
     {
         var session = await dbContext.GameSessions
             .Include(s => s.Room)
+                .ThenInclude(r => r.Settings)
+            .Include(s => s.Room)
                 .ThenInclude(r => r.Players)
             .Include(s => s.Rounds)
                 .ThenInclude(r => r.Questions)
@@ -128,6 +130,29 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
                 TransitionToCompleted(session, now);
                 changed = true;
                 break;
+            case GameStage.CollectingFinalSelfies:
+                TransitionFromFinalSelfies(session, now);
+                changed = true;
+                break;
+            case GameStage.CollectingFinalEdits:
+                TransitionFromFinalEdits(session, now);
+                changed = true;
+                break;
+            case GameStage.ShowingFinalPresentation:
+                TransitionToFinalVotes(session, now);
+                changed = true;
+                break;
+            case GameStage.CollectingFinalVotes:
+                ApplyFinalScores(session, now);
+                TransitionToFinalResults(session, now);
+                changed = true;
+                break;
+            case GameStage.ShowingFinalResults:
+                session.Stage = GameStage.GameSummary;
+                session.StageStartedAtUtc = now;
+                session.StageEndsAtUtc = now.Add(GameSummaryDuration);
+                changed = true;
+                break;
         }
 
         return changed;
@@ -176,6 +201,9 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
         }
         else if (session.Stage == GameStage.CollectingDrawingAnswers) { TransitionFromCollectingDrawingAnswers(session, now); return true; }
         else if (session.Stage == GameStage.CollectingDrawingAnswerVotes) { await scoreCalculator.CalculateAndApplyDrawingAnswerScoresAsync(session, now, cancellationToken); TransitionToShowingDrawingAnswerResults(session, now); return true; }
+        else if (session.Stage == GameStage.CollectingFinalSelfies) { TransitionFromFinalSelfies(session, now); return true; }
+        else if (session.Stage == GameStage.CollectingFinalEdits) { TransitionFromFinalEdits(session, now); return true; }
+        else if (session.Stage == GameStage.CollectingFinalVotes) { ApplyFinalScores(session, now); TransitionToFinalResults(session, now); return true; }
 
         return false;
     }
@@ -452,7 +480,7 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
 
     private bool TransitionFromRoundSummary(GameSession session, DateTimeOffset now)
     {
-        if (session.CurrentRoundNumber < session.TotalRounds)
+        if (session.CurrentRoundNumber < session.Rounds.Count)
         {
             // Next Round
             session.CurrentRoundNumber++;
@@ -467,9 +495,12 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
             session.StageStartedAtUtc = now;
             session.StageEndsAtUtc = now.Add(CategoryIntroDuration);
         }
+        else if (session.Room.Settings.FinalRoundEnabled)
+        {
+            TransitionToFinalSelfies(session, now);
+        }
         else
         {
-            // Game Summary
             session.Stage = GameStage.GameSummary;
             session.StageStartedAtUtc = now;
             session.StageEndsAtUtc = now.Add(GameSummaryDuration);
@@ -485,6 +516,114 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
         session.StageEndsAtUtc = null;
         session.CompletedAtUtc = now;
         session.Room.Phase = RoomPhase.Completed;
+    }
+
+    private static readonly (string Pl, string En)[] FinalSelfiePrompts =
+    [
+        ("Pokaż groźną minę", "Make a scary face"),
+        ("Zrób minę jak gwiazda rocka", "Make a rock-star face"),
+        ("Udawaj tajemniczego bohatera", "Pose as a mysterious hero"),
+        ("Zrób najbardziej dramatyczną minę", "Make your most dramatic face")
+    ];
+    private static readonly (string Pl, string En)[] FinalRoles =
+    [
+        ("bandyta", "bandit"), ("kosmiczny pirat", "space pirate"),
+        ("król disco", "disco royalty"), ("superbohater", "superhero")
+    ];
+
+    private void TransitionToFinalSelfies(GameSession session, DateTimeOffset now)
+    {
+        var players = session.Room.Players.OrderBy(player => player.Id).ToList();
+        var state = new FinalRoundState { TotalPasses = Math.Max(0, players.Count - 1) };
+        for (var index = 0; index < players.Count; index++)
+        {
+            var prompt = FinalSelfiePrompts[index % FinalSelfiePrompts.Length];
+            var role = FinalRoles[index % FinalRoles.Length];
+            state.Artifacts.Add(new FinalRoundArtifact
+            {
+                SubjectPlayerId = players[index].Id,
+                SelfiePromptPl = prompt.Pl, SelfiePromptEn = prompt.En,
+                TargetRolePl = role.Pl, TargetRoleEn = role.En
+            });
+        }
+        session.FinalRoundStateJson = state.Write();
+        session.CurrentRoundNumber = session.Rounds.Count + 1;
+        session.CurrentQuestionNumber = 0;
+        session.QuestionsInCurrentRound = 0;
+        session.Stage = GameStage.CollectingFinalSelfies;
+        session.StageStartedAtUtc = now;
+        session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.PhotoSeconds);
+    }
+
+    private void TransitionFromFinalSelfies(GameSession session, DateTimeOffset now)
+    {
+        var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
+        if (state.TotalPasses == 0 || state.Artifacts.All(artifact => artifact.OriginalMediaAssetId is null))
+        {
+            TransitionToFinalPresentation(session, state, now);
+            return;
+        }
+        state.CurrentPass = 1;
+        session.FinalRoundStateJson = state.Write();
+        session.Stage = GameStage.CollectingFinalEdits;
+        session.StageStartedAtUtc = now;
+        session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.DrawingSeconds);
+    }
+
+    private void TransitionFromFinalEdits(GameSession session, DateTimeOffset now)
+    {
+        var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
+        if (state.CurrentPass < state.TotalPasses)
+        {
+            state.CurrentPass++;
+            session.FinalRoundStateJson = state.Write();
+            session.StageStartedAtUtc = now;
+            session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.DrawingSeconds);
+            return;
+        }
+        TransitionToFinalPresentation(session, state, now);
+    }
+
+    private void TransitionToFinalPresentation(GameSession session, FinalRoundState state, DateTimeOffset now)
+    {
+        session.FinalRoundStateJson = state.Write();
+        session.Stage = GameStage.ShowingFinalPresentation;
+        session.StageStartedAtUtc = now;
+        session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.ResultPresentationSeconds);
+    }
+
+    private void TransitionToFinalVotes(GameSession session, DateTimeOffset now)
+    {
+        var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
+        if (state.Artifacts.Count(artifact => (artifact.FinalMediaAssetId ?? artifact.OriginalMediaAssetId) is not null) <= 1)
+        {
+            TransitionToFinalResults(session, now);
+            return;
+        }
+        session.Stage = GameStage.CollectingFinalVotes;
+        session.StageStartedAtUtc = now;
+        session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.VotingSeconds);
+    }
+
+    private void TransitionToFinalResults(GameSession session, DateTimeOffset now)
+    {
+        session.Stage = GameStage.ShowingFinalResults;
+        session.StageStartedAtUtc = now;
+        session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.ResultPresentationSeconds);
+    }
+
+    private void ApplyFinalScores(GameSession session, DateTimeOffset now)
+    {
+        var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
+        if (state.ScoresApplied) return;
+        var counts = state.Votes.GroupBy(vote => vote.ArtifactId).ToDictionary(group => group.Key, group => group.Count());
+        foreach (var vote in state.Votes)
+        {
+            var player = session.Room.Players.FirstOrDefault(candidate => candidate.Id == vote.VoterPlayerId);
+            if (player is not null) player.Score += counts.GetValueOrDefault(vote.ArtifactId) * 100;
+        }
+        state.ScoresApplied = true;
+        session.FinalRoundStateJson = state.Write();
     }
 
     private GameQuestionInstance GetCurrentQuestionInstance(GameSession session)

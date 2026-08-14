@@ -94,6 +94,11 @@ enum GameStage: Codable, Equatable, Sendable {
     case revealingDrawingAnswers
     case collectingDrawingAnswerVotes
     case showingDrawingAnswerResults
+    case collectingFinalSelfies
+    case collectingFinalEdits
+    case showingFinalPresentation
+    case collectingFinalVotes
+    case showingFinalResults
     case unknown(String)
 
     init(from decoder: Decoder) throws {
@@ -120,6 +125,11 @@ enum GameStage: Codable, Equatable, Sendable {
         case "RevealingDrawingAnswers": self = .revealingDrawingAnswers
         case "CollectingDrawingAnswerVotes": self = .collectingDrawingAnswerVotes
         case "ShowingDrawingAnswerResults": self = .showingDrawingAnswerResults
+        case "CollectingFinalSelfies": self = .collectingFinalSelfies
+        case "CollectingFinalEdits": self = .collectingFinalEdits
+        case "ShowingFinalPresentation": self = .showingFinalPresentation
+        case "CollectingFinalVotes": self = .collectingFinalVotes
+        case "ShowingFinalResults": self = .showingFinalResults
         default: self = .unknown(value)
         }
     }
@@ -147,6 +157,11 @@ enum GameStage: Codable, Equatable, Sendable {
         case .revealingDrawingAnswers: try container.encode("RevealingDrawingAnswers")
         case .collectingDrawingAnswerVotes: try container.encode("CollectingDrawingAnswerVotes")
         case .showingDrawingAnswerResults: try container.encode("ShowingDrawingAnswerResults")
+        case .collectingFinalSelfies: try container.encode("CollectingFinalSelfies")
+        case .collectingFinalEdits: try container.encode("CollectingFinalEdits")
+        case .showingFinalPresentation: try container.encode("ShowingFinalPresentation")
+        case .collectingFinalVotes: try container.encode("CollectingFinalVotes")
+        case .showingFinalResults: try container.encode("ShowingFinalResults")
         case .unknown(let val): try container.encode(val)
         }
     }
@@ -589,6 +604,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
     let textAnswerResults: TextAnswerResults?
     let photoAnswerResults: PhotoAnswerResults?
     let drawingAnswerResults: DrawingAnswerResultsSnapshot?
+    let finalRound: FinalRoundSnapshot?
 
     init(
         stage: GameStage, currentRoundNumber: Int, totalRounds: Int, currentQuestionNumber: Int,
@@ -597,7 +613,8 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         currentQuestion: GameQuestionSnapshot?, playerSelectionResults: PlayerSelectionResults?,
         roundSummary: RoundSummarySnapshot?, textAnswerResults: TextAnswerResults?, photoAnswerResults: PhotoAnswerResults? = nil,
         ranking: [RankingEntry]? = nil,
-        drawingAnswerResults: DrawingAnswerResultsSnapshot? = nil
+        drawingAnswerResults: DrawingAnswerResultsSnapshot? = nil,
+        finalRound: FinalRoundSnapshot? = nil
     ) {
         self.stage = stage; self.currentRoundNumber = currentRoundNumber; self.totalRounds = totalRounds
         self.currentQuestionNumber = currentQuestionNumber; self.questionsInCurrentRound = questionsInCurrentRound
@@ -606,12 +623,13 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         self.currentQuestion = currentQuestion; self.playerSelectionResults = playerSelectionResults
         self.roundSummary = roundSummary; self.ranking = ranking; self.textAnswerResults = textAnswerResults; self.photoAnswerResults = photoAnswerResults
         self.drawingAnswerResults = drawingAnswerResults
+        self.finalRound = finalRound
     }
 
     private enum CodingKeys: String, CodingKey {
         case stage, currentRoundNumber, totalRounds, currentQuestionNumber, questionsInCurrentRound, stageEndsAtUtc
         case pausedAtUtc, pausedStage, pausedRemainingMilliseconds, scores, categories, category, currentQuestion, question
-        case playerSelectionResults, results, roundSummary, ranking, textAnswerResults, textResults, photoAnswerResults, drawingAnswerResults
+        case playerSelectionResults, results, roundSummary, ranking, textAnswerResults, textResults, photoAnswerResults, drawingAnswerResults, finalRound
     }
 
     init(from decoder: Decoder) throws {
@@ -638,6 +656,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
             ?? values.decodeIfPresent(TextAnswerResults.self, forKey: .textResults)
         photoAnswerResults = try values.decodeIfPresent(PhotoAnswerResults.self, forKey: .photoAnswerResults)
         drawingAnswerResults = try values.decodeIfPresent(DrawingAnswerResultsSnapshot.self, forKey: .drawingAnswerResults)
+        finalRound = try values.decodeIfPresent(FinalRoundSnapshot.self, forKey: .finalRound)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -660,6 +679,7 @@ struct GameSnapshot: Codable, Equatable, Sendable {
         try values.encodeIfPresent(textAnswerResults, forKey: .textAnswerResults)
         try values.encodeIfPresent(photoAnswerResults, forKey: .photoAnswerResults)
         try values.encodeIfPresent(drawingAnswerResults, forKey: .drawingAnswerResults)
+        try values.encodeIfPresent(finalRound, forKey: .finalRound)
     }
 }
 

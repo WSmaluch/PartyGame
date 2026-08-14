@@ -23,6 +23,10 @@ public sealed class GameSession
     public double? PausedRemainingMilliseconds { get; set; }
 
     public DateTimeOffset? CompletedAtUtc { get; set; }
+    // Final-round state is deliberately a single durable aggregate. It keeps the
+    // circulation plan stable over reconnects while media bytes remain in the
+    // existing MediaAssets store.
+    public string? FinalRoundStateJson { get; set; }
 
     public GameRoom Room { get; set; } = null!;
     public List<GameRound> Rounds { get; set; } = [];

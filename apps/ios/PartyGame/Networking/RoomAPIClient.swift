@@ -16,6 +16,7 @@ protocol RoomAPIClientProtocol: Sendable {
         baseURL: URL, session: LocalPlayerSession, reconnectToken: String, questionInstanceId: UUID,
         clientSubmissionId: UUID, pngData: Data, progress: @escaping @Sendable (Double) -> Void
     ) async throws -> DrawingAnswerUploadResponse
+    func uploadFinalSelfie(baseURL: URL, session: LocalPlayerSession, reconnectToken: String, clientSubmissionId: UUID, jpegData: Data, progress: @escaping @Sendable (Double) -> Void) async throws -> PhotoAnswerUploadResponse
 }
 
 extension RoomAPIClientProtocol {
@@ -27,6 +28,7 @@ extension RoomAPIClientProtocol {
         baseURL: URL, session: LocalPlayerSession, reconnectToken: String, questionInstanceId: UUID,
         clientSubmissionId: UUID, pngData: Data, progress: @escaping @Sendable (Double) -> Void
     ) async throws -> DrawingAnswerUploadResponse { throw RoomAPIError.invalidRequest }
+    func uploadFinalSelfie(baseURL: URL, session: LocalPlayerSession, reconnectToken: String, clientSubmissionId: UUID, jpegData: Data, progress: @escaping @Sendable (Double) -> Void) async throws -> PhotoAnswerUploadResponse { throw RoomAPIError.invalidRequest }
 }
 
 struct PhotoAnswerUploadResponse: Codable, Equatable, Sendable {
@@ -37,6 +39,12 @@ struct PhotoAnswerUploadResponse: Codable, Equatable, Sendable {
 
 struct DrawingAnswerUploadResponse: Codable, Equatable, Sendable {
     let drawingAnswerId: UUID
+    let playerPrivateGameState: PlayerPrivateGameState
+    let roomSnapshot: RoomSnapshot
+}
+
+private struct FinalRoundUploadResponse: Codable, Equatable, Sendable {
+    let artifactId: UUID
     let playerPrivateGameState: PlayerPrivateGameState
     let roomSnapshot: RoomSnapshot
 }
@@ -165,6 +173,24 @@ struct RoomAPIClient: RoomAPIClientProtocol, Sendable {
             }
             guard let decoded = try? decoder.decode(DrawingAnswerUploadResponse.self, from: data) else { throw RoomAPIError.invalidData }
             return decoded
+        } catch is CancellationError { throw RoomAPIError.cancelled }
+        catch let error as URLError where error.code == .timedOut { throw RoomAPIError.timeout }
+        catch let error as URLError where error.code == .cancelled { throw RoomAPIError.cancelled }
+        catch let error as RoomAPIError { throw error }
+        catch { throw RoomAPIError.networkUnavailable }
+    }
+
+    func uploadFinalSelfie(baseURL: URL, session playerSession: LocalPlayerSession, reconnectToken: String, clientSubmissionId: UUID, jpegData: Data, progress: @escaping @Sendable (Double) -> Void) async throws -> PhotoAnswerUploadResponse {
+        let multipart = MultipartFormDataBuilder.photoAnswer(playerId: playerSession.playerId, reconnectToken: reconnectToken, clientSubmissionId: clientSubmissionId, jpegData: jpegData)
+        guard let url = URL(string: "/api/rooms/\(playerSession.roomCode)/final-round/selfies", relativeTo: baseURL)?.absoluteURL else { throw RoomAPIError.invalidRequest }
+        var request = URLRequest(url: url); request.httpMethod = "POST"; request.timeoutInterval = 45; request.setValue("application/json", forHTTPHeaderField: "Accept"); request.setValue(multipart.contentType, forHTTPHeaderField: "Content-Type")
+        let delegate = UploadProgressDelegate(progress: progress)
+        do {
+            let (data, response) = try await session.upload(for: request, from: multipart.body, delegate: delegate)
+            guard let http = response as? HTTPURLResponse else { throw RoomAPIError.invalidResponse }
+            guard (200 ... 299).contains(http.statusCode) else { throw RoomAPIError.http(status: http.statusCode, problem: try? decoder.decode(ProblemDetails.self, from: data)) }
+            guard let decoded = try? decoder.decode(FinalRoundUploadResponse.self, from: data) else { throw RoomAPIError.invalidData }
+            return PhotoAnswerUploadResponse(photoAnswerId: decoded.artifactId, playerPrivateGameState: decoded.playerPrivateGameState, roomSnapshot: decoded.roomSnapshot)
         } catch is CancellationError { throw RoomAPIError.cancelled }
         catch let error as URLError where error.code == .timedOut { throw RoomAPIError.timeout }
         catch let error as URLError where error.code == .cancelled { throw RoomAPIError.cancelled }

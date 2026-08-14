@@ -7,7 +7,7 @@ import {
   type RoomSnapshot,
 } from '../../api/types';
 import { t } from '../../translations';
-import { profilePhotoUrl } from '../../api/roomApi';
+import { profilePhotoUrl, publicMediaUrl } from '../../api/roomApi';
 import {
   CollectingTextAnswers,
   RevealingTextAnswers,
@@ -85,6 +85,13 @@ export function GameScreens({ snapshot }: { snapshot: RoomSnapshot }) {
         return <CollectingDrawingAnswerVotesView game={game} />;
       case 'ShowingDrawingAnswerResults':
         return <ShowingDrawingAnswerResultsView game={game} />;
+      case 'CollectingFinalSelfies':
+      case 'CollectingFinalEdits':
+        return <FinalRoundProgress game={game} />;
+      case 'ShowingFinalPresentation':
+      case 'CollectingFinalVotes':
+      case 'ShowingFinalResults':
+        return <FinalRoundPresentation game={game} />;
       default:
         // Handle unknown or unhandled game stages safely
         return <UnknownStage />;
@@ -92,6 +99,16 @@ export function GameScreens({ snapshot }: { snapshot: RoomSnapshot }) {
   };
 
   return <div className="game-screen-container">{renderStage()}</div>;
+}
+
+function FinalRoundProgress({ game }: { game: GameSnapshot }) {
+  const final = game.finalRound;
+  const editing = game.stage === 'CollectingFinalEdits';
+  return <div className="central-message" aria-live="polite"><h2>Runda finałowa</h2><p>{editing ? `Edycja ${final?.currentPass ?? 0}/${final?.totalPasses ?? 0}` : 'Zdjęcia finałowe'}</p><strong>{editing ? `${final?.submittedEdits ?? 0}/${final?.requiredEdits ?? 0}` : `${final?.submittedSelfies ?? 0}/${final?.requiredSelfies ?? 0}`}</strong></div>;
+}
+
+function FinalRoundPresentation({ game }: { game: GameSnapshot }) {
+  return <section className="photo-results" aria-label="Final round presentation"><h2>Runda finałowa</h2><div className="photo-grid">{(game.finalRound?.artifacts ?? []).map((artifact) => <article key={artifact.artifactId} className="photo-card">{artifact.displayMediaUrl ? <img src={publicMediaUrl(artifact.displayMediaUrl)} alt={`${artifact.subjectNickname} as ${localizedText(artifact.targetRole)}`} /> : <div className="photo-placeholder">Przygotowywanie zdjęcia…</div>}<h3>{artifact.subjectNickname} as {localizedText(artifact.targetRole)}</h3>{game.stage === 'ShowingFinalResults' && <p>{artifact.voteCount} głosów{artifact.isTopResult ? ' 🏆' : ''}</p>}</article>)}</div></section>;
 }
 
 function CategoryIntro({ game }: { game: GameSnapshot }) {

@@ -15,5 +15,8 @@ public sealed record PlayerPrivateGameState(
     bool HasSubmittedDrawingAnswer = false,
     Guid? OwnDrawingAnswerId = null,
     bool HasSubmittedDrawingAnswerVote = false,
-    bool IsEligibleForDrawingAnswer = false
+    bool IsEligibleForDrawingAnswer = false,
+    FinalRoundPrivateState? FinalRound = null
 );
+
+public sealed record FinalRoundPrivateState(bool HasSubmittedSelfie, Guid? AssignedArtifactId, string? SourceDisplayMediaUrl, string? SourceThumbnailMediaUrl, bool HasSubmittedEdit, bool HasSubmittedVote);

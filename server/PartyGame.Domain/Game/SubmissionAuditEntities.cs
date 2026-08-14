@@ -8,7 +8,10 @@ public enum SubmissionActionType
     PhotoAnswer,
     PhotoAnswerVote,
     DrawingAnswer,
-    DrawingAnswerVote
+    DrawingAnswerVote,
+    FinalSelfie,
+    FinalEdit,
+    FinalVote
 }
 
 public enum SubmissionAuditResult

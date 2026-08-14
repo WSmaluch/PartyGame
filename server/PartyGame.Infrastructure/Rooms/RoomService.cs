@@ -736,6 +736,116 @@ public sealed class RoomService(
         return true;
     }, cancellationToken);
 
+    public Task<FinalRoundUploadResult> SubmitFinalSelfieAsync(string roomCode, Guid playerId, string? token, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default) =>
+        SubmitFinalMediaAsync(roomCode, playerId, token, null, clientSubmissionId, content, byteLength, contentType, isSelfie: true, cancellationToken);
+
+    public Task<FinalRoundUploadResult> SubmitFinalEditAsync(string roomCode, Guid playerId, string? token, Guid artifactId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, CancellationToken cancellationToken = default) =>
+        SubmitFinalMediaAsync(roomCode, playerId, token, artifactId, clientSubmissionId, content, byteLength, contentType, isSelfie: false, cancellationToken);
+
+    private async Task<FinalRoundUploadResult> SubmitFinalMediaAsync(string roomCode, Guid playerId, string? token, Guid? requestedArtifactId, Guid clientSubmissionId, Stream content, long byteLength, string contentType, bool isSelfie, CancellationToken cancellationToken)
+    {
+        var code = NormalizeCode(roomCode);
+        var roomLock = lockProvider.For(code);
+        await roomLock.WaitAsync(cancellationToken);
+        StoredMediaResult? stored = null;
+        try
+        {
+            var room = await LoadAsync(code, cancellationToken);
+            var player = Authorize(room, playerId, token);
+            var session = room.Session ?? throw new DrawingAnswerException("final_round_not_active", "Final round is not active.");
+            var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new DrawingAnswerException("final_round_not_active", "Final round is not active.");
+            var expectedStage = isSelfie ? GameStage.CollectingFinalSelfies : GameStage.CollectingFinalEdits;
+            if (session.Stage != expectedStage || session.StageEndsAtUtc <= clock.UtcNow)
+                throw new DrawingAnswerException("final_round_not_active", "Final round submission is not active.");
+
+            var artifact = isSelfie
+                ? state.Artifacts.SingleOrDefault(candidate => candidate.SubjectPlayerId == player.Id)
+                : state.Artifacts.SingleOrDefault(candidate => candidate.Id == requestedArtifactId);
+            if (artifact is null) throw new DrawingAnswerException("final_round_artifact_not_found", "Final artifact was not found.");
+            if (isSelfie && artifact.OriginalMediaAssetId is not null)
+                throw new DrawingAnswerException("final_round_already_submitted", "The final selfie was already submitted.");
+
+            if (!isSelfie)
+            {
+                var participants = state.Artifacts.OrderBy(candidate => candidate.SubjectPlayerId).Select(candidate => candidate.SubjectPlayerId).ToList();
+                var subjectIndex = participants.IndexOf(artifact.SubjectPlayerId);
+                var expectedEditor = participants[(subjectIndex + state.CurrentPass) % participants.Count];
+                if (expectedEditor != player.Id || artifact.SubjectPlayerId == player.Id)
+                    throw new DrawingAnswerException("final_round_editor_not_eligible", "This final photo is not assigned to the player.");
+                if (state.Edits.Any(edit => edit.ArtifactId == artifact.Id && edit.PassNumber == state.CurrentPass && edit.EditorPlayerId == player.Id))
+                    throw new DrawingAnswerException("final_round_already_submitted", "This final edit was already submitted.");
+            }
+
+            var action = isSelfie ? SubmissionActionType.FinalSelfie : SubmissionActionType.FinalEdit;
+            var fingerprint = await FingerprintMediaAsync(content, contentType, cancellationToken);
+            if (TryRecordReplay(room, player, session.Id, action, clientSubmissionId, fingerprint))
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new FinalRoundUploadResult(room, artifact.Id, false);
+            }
+            if (RecordSubmission(room, player, session.Id, action, clientSubmissionId, fingerprint) != SubmissionDecision.Accepted)
+                return new FinalRoundUploadResult(room, artifact.Id, false);
+
+            var mediaId = Guid.NewGuid();
+            stored = isSelfie
+                ? await mediaStorage.SavePhotoAsync(new PhotoMediaWriteRequest(room.Id, session.Id, mediaId, content, byteLength, contentType), cancellationToken)
+                : await mediaStorage.SaveDrawingAsync(new DrawingMediaWriteRequest(room.Id, session.Id, mediaId, content, byteLength, contentType), cancellationToken);
+            var asset = new MediaAsset
+            {
+                Id = Guid.NewGuid(), MediaKind = isSelfie ? MediaKind.FinalSelfie : MediaKind.FinalEdit,
+                StorageProvider = "LocalFileSystem", RoomId = room.Id, PlayerId = player.Id,
+                DisplayStorageKey = stored.DisplayStorageKey, ThumbnailStorageKey = stored.ThumbnailStorageKey,
+                ContentType = stored.ContentType, Width = stored.Width, Height = stored.Height,
+                ByteLength = stored.ByteLength, Sha256 = stored.Sha256, CreatedAtUtc = clock.UtcNow
+            };
+            dbContext.MediaAssets.Add(asset);
+            if (isSelfie)
+            {
+                artifact.OriginalMediaAssetId = asset.Id;
+                artifact.FinalMediaAssetId = asset.Id;
+                artifact.SelfieClientSubmissionId = clientSubmissionId;
+            }
+            else
+            {
+                state.Edits.Add(new FinalRoundEdit { ArtifactId = artifact.Id, PassNumber = state.CurrentPass, EditorPlayerId = player.Id, MediaAssetId = asset.Id, ClientSubmissionId = clientSubmissionId });
+                artifact.FinalMediaAssetId = asset.Id;
+            }
+            session.FinalRoundStateJson = state.Write();
+            room.PublicStateChanged(clock.UtcNow);
+
+            var expected = isSelfie
+                ? state.Artifacts.Count
+                : state.Artifacts.Count(artifact => artifact.OriginalMediaAssetId is not null);
+            var completed = isSelfie
+                ? state.Artifacts.Count(artifact => artifact.OriginalMediaAssetId is not null)
+                : state.Edits.Count(edit => edit.PassNumber == state.CurrentPass && edit.MediaAssetId is not null);
+            if (completed >= expected) await stateMachine.ForceTransitionAsync(session, clock.UtcNow, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new FinalRoundUploadResult(room, artifact.Id, true);
+        }
+        catch
+        {
+            if (stored is not null) await DeleteStoredAsync(stored);
+            throw;
+        }
+        finally { roomLock.Release(); }
+    }
+
+    public Task<RoomMutationResult> SubmitFinalVoteAsync(string roomCode, Guid playerId, string? token, Guid artifactId, Guid? clientSubmissionId = null, CancellationToken cancellationToken = default) => MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, now) =>
+    {
+        var session = room.Session ?? throw new DrawingAnswerException("final_round_not_active", "Final round is not active.");
+        var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new DrawingAnswerException("final_round_not_active", "Final round is not active.");
+        if (session.Stage != GameStage.CollectingFinalVotes || session.StageEndsAtUtc <= now) throw new DrawingAnswerException("final_round_not_active", "Final voting is not active.");
+        if (!state.Artifacts.Any(artifact => artifact.Id == artifactId && (artifact.FinalMediaAssetId ?? artifact.OriginalMediaAssetId) is not null)) throw new DrawingAnswerException("final_round_artifact_not_found", "Final artifact was not found.");
+        if (state.Votes.Any(vote => vote.VoterPlayerId == player.Id)) throw new DrawingAnswerException("final_round_already_submitted", "The player has already voted.");
+        if (HasStableId(clientSubmissionId) && TryRecordReplay(room, player, session.Id, SubmissionActionType.FinalVote, clientSubmissionId!.Value, Fingerprint(artifactId))) return false;
+        if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, session.Id, SubmissionActionType.FinalVote, clientSubmissionId!.Value, Fingerprint(artifactId)) != SubmissionDecision.Accepted) return false;
+        state.Votes.Add(new FinalRoundVote { VoterPlayerId = player.Id, ArtifactId = artifactId, ClientSubmissionId = clientSubmissionId });
+        session.FinalRoundStateJson = state.Write();
+        if (state.Votes.Count >= state.Artifacts.Count) await stateMachine.ForceTransitionAsync(session, now, cancellationToken);
+        return true;
+    }, cancellationToken);
+
     private async Task DeleteStoredAsync(StoredMediaResult stored)
     {
         try
@@ -1013,6 +1123,31 @@ public sealed class RoomService(
             .FirstOrDefaultAsync(r => r.Code == code, cancellationToken);
 
         if (room == null || room.Session == null) return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, null, false, null, false);
+
+        if (room.Session.Stage is GameStage.CollectingFinalSelfies or GameStage.CollectingFinalEdits or GameStage.ShowingFinalPresentation or GameStage.CollectingFinalVotes or GameStage.ShowingFinalResults)
+        {
+            var final = FinalRoundState.Read(room.Session.FinalRoundStateJson);
+            if (final is not null)
+            {
+                var own = final.Artifacts.SingleOrDefault(artifact => artifact.SubjectPlayerId == playerId);
+                var assignment = room.Session.Stage == GameStage.CollectingFinalEdits
+                    ? final.Artifacts.FirstOrDefault(artifact =>
+                    {
+                        var ids = final.Artifacts.OrderBy(candidate => candidate.SubjectPlayerId).Select(candidate => candidate.SubjectPlayerId).ToList();
+                        var expected = ids[(ids.IndexOf(artifact.SubjectPlayerId) + final.CurrentPass) % ids.Count];
+                        return expected == playerId;
+                    })
+                    : null;
+                var source = assignment is null ? null : final.Edits.Where(edit => edit.ArtifactId == assignment.Id && edit.PassNumber < final.CurrentPass && edit.MediaAssetId is not null).OrderByDescending(edit => edit.PassNumber).Select(edit => edit.MediaAssetId).FirstOrDefault() ?? assignment.OriginalMediaAssetId;
+                return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, room.Session.Id, false, null, false,
+                    HasSubmittedPhotoAnswer: own?.OriginalMediaAssetId is not null,
+                    FinalRound: new PartyGame.Domain.Rooms.FinalRoundPrivateState(own?.OriginalMediaAssetId is not null, assignment?.Id,
+                        source is Guid sourceId ? $"/api/media/{sourceId}/display" : null,
+                        source is Guid thumbnailId ? $"/api/media/{thumbnailId}/thumbnail" : null,
+                        assignment is not null && final.Edits.Any(edit => edit.ArtifactId == assignment.Id && edit.PassNumber == final.CurrentPass && edit.EditorPlayerId == playerId),
+                        final.Votes.Any(vote => vote.VoterPlayerId == playerId)));
+            }
+        }
 
         var currentInstanceId = room.Session.CurrentQuestionInstanceId;
         if (currentInstanceId == null) return new PartyGame.Domain.Rooms.PlayerPrivateGameState(playerId, null, false, null, false);

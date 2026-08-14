@@ -184,6 +184,33 @@ public static class RoomEndpoints
             return Results.Ok(new DrawingAnswerUploadResponse(result.DrawingAnswerId, privateState, result.Room.ToSnapshot()));
         }).DisableAntiforgery().RequireRateLimiting("uploads");
 
+        rooms.MapPost("/{roomCode}/final-round/selfies", async (string roomCode, [FromForm] Guid playerId, [FromForm] string reconnectToken, [FromForm] Guid clientSubmissionId, IFormFile? photo, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
+        {
+            if (photo is null) throw new PhotoAnswerException("final_round_file_missing", "A final selfie is required.");
+            await using var content = photo.OpenReadStream();
+            var result = await roomService.SubmitFinalSelfieAsync(roomCode, playerId, reconnectToken, clientSubmissionId, content, photo.Length, photo.ContentType, cancellationToken);
+            await notifier.NotifyAsync(new RoomMutationResult(result.Room, result.Created, false), cancellationToken);
+            var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken);
+            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, privateState, result.Room.ToSnapshot()));
+        }).DisableAntiforgery().RequireRateLimiting("uploads");
+
+        rooms.MapPost("/{roomCode}/final-round/artifacts/{artifactId:guid}/edits", async (string roomCode, Guid artifactId, [FromForm] Guid playerId, [FromForm] string reconnectToken, [FromForm] Guid clientSubmissionId, IFormFile? drawing, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
+        {
+            if (drawing is null) throw new DrawingAnswerException("final_round_file_missing", "A final edit is required.");
+            await using var content = drawing.OpenReadStream();
+            var result = await roomService.SubmitFinalEditAsync(roomCode, playerId, reconnectToken, artifactId, clientSubmissionId, content, drawing.Length, drawing.ContentType, cancellationToken);
+            await notifier.NotifyAsync(new RoomMutationResult(result.Room, result.Created, false), cancellationToken);
+            var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken);
+            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, privateState, result.Room.ToSnapshot()));
+        }).DisableAntiforgery().RequireRateLimiting("uploads");
+
+        rooms.MapPost("/{roomCode}/final-round/votes", async (string roomCode, FinalRoundVoteRequest request, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
+        {
+            var result = await roomService.SubmitFinalVoteAsync(roomCode, request.PlayerId, request.ReconnectToken, request.ArtifactId, request.ClientSubmissionId, cancellationToken);
+            await notifier.NotifyAsync(result, cancellationToken);
+            return Results.Ok(result.Room.ToSnapshot());
+        });
+
         return endpoints;
     }
 
@@ -193,3 +220,5 @@ public static class RoomEndpoints
 
 public sealed record PhotoAnswerUploadResponse(Guid PhotoAnswerId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
 public sealed record DrawingAnswerUploadResponse(Guid DrawingAnswerId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
+public sealed record FinalRoundUploadResponse(Guid ArtifactId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
+public sealed record FinalRoundVoteRequest(Guid PlayerId, string ReconnectToken, Guid ArtifactId, Guid? ClientSubmissionId = null);

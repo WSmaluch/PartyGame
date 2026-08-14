@@ -304,7 +304,7 @@ final class GameSessionStore {
 
     func preparePhotoAnswer(_ image: UIImage) async {
         guard let session, let questionId = snapshot?.game?.resolvedQuestionInstanceId,
-              snapshot?.game?.stage == .collectingPhotoAnswers, !photoActionsExpired else { return }
+              (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies), !photoActionsExpired else { return }
         photoUploadPhase = .preparing
         errorMessage = nil
         do {
@@ -328,7 +328,7 @@ final class GameSessionStore {
     }
 
     func uploadPhotoAnswer() {
-        guard photoUploadTask == nil, snapshot?.game?.stage == .collectingPhotoAnswers,
+        guard photoUploadTask == nil, (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies),
               !photoActionsExpired, let draft = photoDraft else { return }
         photoUploadTask = Task { [weak self] in
             await self?.performPhotoAnswerUpload(draft)
@@ -807,22 +807,25 @@ final class GameSessionStore {
 
     private func performPhotoAnswerUpload(_ draft: PhotoAnswerDraft) async {
         guard let session, let reconnectToken, let baseURL,
-              snapshot?.game?.stage == .collectingPhotoAnswers,
+              (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies),
               !photoActionsExpired,
               snapshot?.game?.resolvedQuestionInstanceId == draft.questionInstanceId,
               privateGameState?.hasSubmittedPhotoAnswer != true else { return }
         do {
             let data = try await Task.detached { try Data(contentsOf: draft.fileURL) }.value
             photoUploadPhase = .uploading(0)
-            let response = try await api.uploadPhotoAnswer(
-                baseURL: baseURL, session: session, reconnectToken: reconnectToken,
-                questionInstanceId: draft.questionInstanceId, clientSubmissionId: draft.clientSubmissionId,
-                jpegData: data
-            ) { [weak self] value in
+            let finalRound = snapshot?.game?.stage == .collectingFinalSelfies
+            let progress: @Sendable (Double) -> Void = { [weak self] value in
                 Task { @MainActor in
                     guard let self, self.photoDraft?.clientSubmissionId == draft.clientSubmissionId else { return }
                     self.photoUploadPhase = value >= 1 ? .serverProcessing : .uploading(value)
                 }
+            }
+            let response: PhotoAnswerUploadResponse
+            if finalRound {
+                response = try await api.uploadFinalSelfie(baseURL: baseURL, session: session, reconnectToken: reconnectToken, clientSubmissionId: draft.clientSubmissionId, jpegData: data, progress: progress)
+            } else {
+                response = try await api.uploadPhotoAnswer(baseURL: baseURL, session: session, reconnectToken: reconnectToken, questionInstanceId: draft.questionInstanceId, clientSubmissionId: draft.clientSubmissionId, jpegData: data, progress: progress)
             }
             guard snapshot?.game?.resolvedQuestionInstanceId == draft.questionInstanceId else { return }
             apply(response.roomSnapshot)

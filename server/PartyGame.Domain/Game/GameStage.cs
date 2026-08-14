@@ -21,5 +21,10 @@ public enum GameStage
     CollectingDrawingAnswers = 16,
     RevealingDrawingAnswers = 17,
     CollectingDrawingAnswerVotes = 18,
-    ShowingDrawingAnswerResults = 19
+    ShowingDrawingAnswerResults = 19,
+    CollectingFinalSelfies = 20,
+    CollectingFinalEdits = 21,
+    ShowingFinalPresentation = 22,
+    CollectingFinalVotes = 23,
+    ShowingFinalResults = 24
 }
