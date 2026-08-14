@@ -37,8 +37,12 @@ public sealed class PhotoAnswerSingleSubmissionTests
         Assert.True(option.TryGetProperty("displayPhotoUrl", out var displayUrl));
         Assert.True(option.TryGetProperty("thumbnailPhotoUrl", out var thumbnailUrl));
         Assert.False(option.TryGetProperty("authorPlayerId", out _));
-        Assert.Equal(HttpStatusCode.OK, (await harness.Client.GetAsync(displayUrl.GetString())).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await harness.Client.GetAsync(thumbnailUrl.GetString())).StatusCode);
+        using var displayResponse = await harness.Client.GetAsync(displayUrl.GetString());
+        using var thumbnailResponse = await harness.Client.GetAsync(thumbnailUrl.GetString());
+        Assert.Equal(HttpStatusCode.OK, displayResponse.StatusCode);
+        Assert.Equal("image/jpeg", displayResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, thumbnailResponse.StatusCode);
+        Assert.Equal("image/jpeg", thumbnailResponse.Content.Headers.ContentType?.MediaType);
 
         Assert.Equal(GameStage.ShowingPhotoAnswerResults, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddSeconds(2)));
         var resultJson = await harness.Client.GetStringAsync($"/api/rooms/{room.RoomCode}");

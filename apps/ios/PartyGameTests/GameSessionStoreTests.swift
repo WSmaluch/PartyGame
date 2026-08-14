@@ -205,6 +205,21 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot?.game?.stage, .completed)
     }
 
+    func testCompletedSnapshotRoutesToGameplayForReconnectAndRelaunch() async {
+        let playerId = UUID()
+        let completed = completedSnapshot(playerId: playerId, version: 42)
+        let localSession = LocalPlayerSession(roomCode: "TEST", playerId: playerId, nickname: "Ola", isHost: true, serverBaseURL: "http://test")
+        storage.savedSession = (localSession, "token")
+        api.resumeResult = ResumePlayerResponse(player: completed.players[0], snapshot: completed,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = completed
+
+        await store.restoreSession()
+
+        XCTAssertEqual(store.screen, .started)
+        XCTAssertEqual(store.snapshot?.game?.stage, .completed)
+    }
+
     func testApplicationBecameActiveRetriesConnection() async {
         let playerId = UUID()
         let snapshot = RoomSnapshot(roomCode: "TEST", phase: .lobby, stateVersion: 1, displayConnected: false, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: false, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)], createdAtUtc: "", startedAtUtc: nil, game: nil)

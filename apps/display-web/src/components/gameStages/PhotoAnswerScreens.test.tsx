@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameSnapshot, RoomSnapshot } from '../../api/types';
+import { configureApiConfig } from '../../api/apiConfig';
 import { GameScreens } from './GameScreens';
 
 const game: GameSnapshot = {
@@ -28,6 +29,7 @@ const room: RoomSnapshot = {
 
 describe('PhotoAnswer Display', () => {
   beforeEach(() => {
+    configureApiConfig({ apiBaseUrl: '/partygame', publicAppUrl: '/partygame/display', buildVersion: 'test' });
     window.matchMedia = vi.fn().mockImplementation(query => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn() }));
   });
 
@@ -46,7 +48,7 @@ describe('PhotoAnswer Display', () => {
   it('reveal pokazuje anonimowo zdjęcia w trwałej kolejności', () => {
     render(<GameScreens snapshot={{ ...room, game: { ...game, stage: 'RevealingPhotoAnswers' } }} />);
     const photos = screen.getAllByRole('img');
-    expect(photos[0]).toHaveAttribute('src', expect.stringContaining('/api/media/m2/display'));
+    expect(photos[0]).toHaveAttribute('src', expect.stringContaining('/partygame/api/media/m2/display'));
     expect(screen.queryByText('Ola')).not.toBeInTheDocument();
   });
 

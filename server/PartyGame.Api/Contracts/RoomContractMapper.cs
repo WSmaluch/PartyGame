@@ -74,7 +74,10 @@ public static class RoomContractMapper
             var currentInstance = currentRound.Questions.FirstOrDefault(q => q.Id == session.CurrentQuestionInstanceId);
             if (currentInstance != null && currentInstance.Question != null)
             {
-                question = new GameQuestionSnapshot(currentInstance.Question.Id, new LocalizedText(currentInstance.Question.TextPl, currentInstance.Question.TextEn), currentInstance.Id);
+                question = new GameQuestionSnapshot(
+                    currentInstance.Question.Id,
+                    RenderQuestionText(currentInstance, session.Room.Players),
+                    currentInstance.Id);
 
                 if (session.Stage == GameStage.CollectingPlayerSelections)
                 {
@@ -296,6 +299,31 @@ public static class RoomContractMapper
             submittedDrawingAnswers,
             requiredDrawingAnswers
         );
+    }
+
+    private static LocalizedText RenderQuestionText(GameQuestionInstance instance, IReadOnlyCollection<Player> players)
+    {
+        var target = instance.SubjectPlayerId is Guid subjectPlayerId
+            ? players.FirstOrDefault(player => player.Id == subjectPlayerId)
+            : null;
+
+        return new LocalizedText(
+            RenderQuestionText(instance.Question.TextPl, target?.Nickname),
+            RenderQuestionText(instance.Question.TextEn, target?.Nickname));
+    }
+
+    private static string RenderQuestionText(string text, string? targetNickname)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return text;
+
+        // SubjectPlayerId is persisted by GamePlanner, so reconnects and later
+        // snapshots render the same person. A broken legacy instance must still
+        // never leak a user-facing template token.
+        var replacement = string.IsNullOrWhiteSpace(targetNickname) ? "wybrana osoba" : targetNickname;
+        return text
+            .Replace("{{player}}", replacement, StringComparison.OrdinalIgnoreCase)
+            .Replace("{player}", replacement, StringComparison.OrdinalIgnoreCase)
+            .Replace("{target}", replacement, StringComparison.OrdinalIgnoreCase);
     }
 
     public static PublicPlayer ToPublic(this Player player, string roomCode) => new(

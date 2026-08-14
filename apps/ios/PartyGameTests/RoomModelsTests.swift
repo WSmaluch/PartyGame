@@ -73,6 +73,14 @@ final class RoomModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.game?.ranking?.first?.nickname, "Ola")
     }
 
+    func testDecodesGameSummaryInsteadOfTreatingItAsAnUnknownStage() throws {
+        let json = #"{"roomCode":"ABCD","phase":"Started","stateVersion":53,"displayConnected":true,"minimumPlayers":3,"maximumPlayers":8,"canStart":false,"settings":{"roundCount":1,"questionsPerRound":4,"playerSelectionSeconds":20,"textAnswerSeconds":40,"votingSeconds":20,"photoSeconds":45,"drawingSeconds":90,"resultPresentationSeconds":8,"finalRoundEnabled":false,"finalDrawingPasses":3},"players":[],"createdAtUtc":"2026-07-20T12:00:00Z","game":{"stage":"GameSummary","scores":[]}}"#
+
+        let snapshot = try JSONDecoder().decode(RoomSnapshot.self, from: Data(json.utf8))
+
+        XCTAssertEqual(snapshot.game?.stage, .gameSummary)
+    }
+
     @MainActor
     func testRoomCodeNormalizationRemovesAmbiguousCharacters() {
         XCTAssertEqual(GameSessionStore.normalizedRoomCode("a1bi-cd"), "ABCD")

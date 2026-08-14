@@ -120,6 +120,25 @@ public class RoomContractMapperTests
     }
 
     [Fact]
+    public void ToSnapshot_RendersPersistedTextQuestionSubjectWithoutTemplateTokens()
+    {
+        var env = SetupTestEnvironment();
+        var instance = env.session.Rounds.Single().Questions.Single();
+        instance.Question.Type = QuestionType.TextAnswer;
+        instance.Question.TextPl = "Co {player} na pewno zapomni spakować?";
+        instance.Question.TextEn = "What will {player} definitely forget to pack?";
+        instance.SubjectPlayerId = env.wojtek;
+        env.session.Stage = GameStage.CollectingTextAnswers;
+
+        var snapshot = env.session.ToSnapshot();
+
+        Assert.Equal("Co Wojtek na pewno zapomni spakować?", snapshot.Question!.Text.Pl);
+        Assert.Equal("What will Wojtek definitely forget to pack?", snapshot.Question.Text.En);
+        Assert.DoesNotContain("{player}", snapshot.Question.Text.Pl, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("{target}", snapshot.Question.Text.Pl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ToSnapshot_ShowingQuestionResults_RevealsVotesAndPoints()
     {
         // Arrange

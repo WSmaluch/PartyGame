@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiConfig } from '../../api/apiConfig';
+import { publicMediaUrl } from '../../api/roomApi';
 import { gameCategory, gameQuestion, localizedText, type AnonymousPhotoAnswer, type GameSnapshot, type PhotoAnswerResultOption, type RoomSnapshot } from '../../api/types';
 import { useTimer } from './useTimer';
 
 function mediaUrl(path: string): string {
-  try { return new URL(path, apiConfig.baseUrl).toString(); } catch { return path; }
+  return publicMediaUrl(path) ?? path;
 }
 
 export function SafePhoto({ src, alt, width, height, preload = false }: {

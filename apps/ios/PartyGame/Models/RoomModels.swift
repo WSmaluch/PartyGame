@@ -79,6 +79,7 @@ enum GameStage: Codable, Equatable, Sendable {
     case collectingPlayerSelections
     case showingQuestionResults
     case roundSummary
+    case gameSummary
     case pausedForDisplay
     case completed
     case collectingTextAnswers
@@ -104,6 +105,7 @@ enum GameStage: Codable, Equatable, Sendable {
         case "CollectingPlayerSelections": self = .collectingPlayerSelections
         case "ShowingQuestionResults": self = .showingQuestionResults
         case "RoundSummary": self = .roundSummary
+        case "GameSummary": self = .gameSummary
         case "PausedForDisplay": self = .pausedForDisplay
         case "Completed": self = .completed
         case "CollectingTextAnswers": self = .collectingTextAnswers
@@ -130,6 +132,7 @@ enum GameStage: Codable, Equatable, Sendable {
         case .collectingPlayerSelections: try container.encode("CollectingPlayerSelections")
         case .showingQuestionResults: try container.encode("ShowingQuestionResults")
         case .roundSummary: try container.encode("RoundSummary")
+        case .gameSummary: try container.encode("GameSummary")
         case .pausedForDisplay: try container.encode("PausedForDisplay")
         case .completed: try container.encode("Completed")
         case .collectingTextAnswers: try container.encode("CollectingTextAnswers")

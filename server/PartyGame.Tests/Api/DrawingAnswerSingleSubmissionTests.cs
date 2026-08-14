@@ -14,6 +14,14 @@ public sealed class DrawingAnswerSingleSubmissionTests
         Assert.True((await harness.UploadDrawingAsync(room, room.Players[0], await PhotoAnswerTestHarness.DrawingAsync())).IsSuccessStatusCode);
         var revealJson = await harness.Client.GetStringAsync($"/api/rooms/{room.RoomCode}");
         Assert.Contains("displayDrawingUrl", revealJson); Assert.DoesNotContain("authorNickname", revealJson);
+        using (var reveal = JsonDocument.Parse(revealJson))
+        {
+            var mediaUrl = reveal.RootElement.GetProperty("game").GetProperty("drawingAnswerResults")
+                .GetProperty("anonymousOptions")[0].GetProperty("displayDrawingUrl").GetString();
+            using var mediaResponse = await harness.Client.GetAsync(mediaUrl);
+            Assert.Equal(System.Net.HttpStatusCode.OK, mediaResponse.StatusCode);
+            Assert.Equal("image/png", mediaResponse.Content.Headers.ContentType?.MediaType);
+        }
         Assert.Equal(GameStage.ShowingDrawingAnswerResults, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
         var resultsJson = await harness.Client.GetStringAsync($"/api/rooms/{room.RoomCode}"); using var document = JsonDocument.Parse(resultsJson);
         var results = document.RootElement.GetProperty("game").GetProperty("drawingAnswerResults");

@@ -484,6 +484,7 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
         session.StageStartedAtUtc = now;
         session.StageEndsAtUtc = null;
         session.CompletedAtUtc = now;
+        session.Room.Phase = RoomPhase.Completed;
     }
 
     private GameQuestionInstance GetCurrentQuestionInstance(GameSession session)

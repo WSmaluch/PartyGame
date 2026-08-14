@@ -216,7 +216,7 @@ final class GameSessionStore {
                 jpegData: jpegData
             )
             apply(updated)
-            screen = updated.phase == .started ? .started : .lobby
+            screen = updated.phase == .lobby ? .lobby : .started
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -494,7 +494,7 @@ final class GameSessionStore {
             }
         }
         
-        if candidate.phase == .started { screen = .started }
+        if candidate.phase != .lobby { screen = .started }
         else if screen == .reconnecting { screen = ownPlayer?.hasProfilePhoto == true ? .lobby : .profilePhoto }
     }
 
@@ -598,7 +598,7 @@ final class GameSessionStore {
                 }
             }
         }
-        screen = phase == .started ? .started : .lobby
+        screen = phase == .lobby ? .lobby : .started
         #endif
     }
 
@@ -765,7 +765,7 @@ final class GameSessionStore {
     }
 
     private func routeUsingSnapshot(_ snapshot: RoomSnapshot) {
-        if snapshot.phase == .started { screen = .started }
+        if snapshot.phase != .lobby { screen = .started }
         else { screen = ownPlayer?.hasProfilePhoto == true ? .lobby : .profilePhoto }
     }
 

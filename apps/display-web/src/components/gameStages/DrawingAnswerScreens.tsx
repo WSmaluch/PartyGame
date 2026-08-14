@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { apiConfig } from '../../api/apiConfig';
+import { publicMediaUrl } from '../../api/roomApi';
 import { gameCategory, gameQuestion, localizedText, type AnonymousDrawingOption, type DrawingAnswerResultOption, type GameSnapshot, type RoomSnapshot } from '../../api/types';
 import { useTimer } from './useTimer';
 
-function url(path?: string | null) { return path ? new URL(path, apiConfig.baseUrl).toString() : undefined; }
+function url(path?: string | null) { return publicMediaUrl(path); }
 function Header({ game }: { game: GameSnapshot }) { const seconds = useTimer(game.stageEndsAtUtc); return <header className="photo-stage-header"><p>Runda {game.currentRoundNumber} · Pytanie {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p><p>{localizedText(gameCategory(game)?.name)}</p><h1>{localizedText(gameQuestion(game)?.text)}</h1><strong>{seconds}s</strong></header>; }
 function DrawingImage({ src, alt }: { src?: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);

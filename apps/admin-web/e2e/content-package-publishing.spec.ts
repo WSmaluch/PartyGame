@@ -1,12 +1,27 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
+
+async function signInAsLocalOperator(page: Page) {
+  const tokenInput = page.getByLabel('Token operatora');
+  if (!await tokenInput.isVisible()) return;
+  await tokenInput.fill('local-e2e-operator-token');
+  await page.getByRole('button', { name: 'Otwórz panel' }).click();
+  await expect(tokenInput).toHaveCount(0);
+}
+
+async function openAsLocalOperator(page: Page, path: string) {
+  await page.goto(path);
+  await signInAsLocalOperator(page);
+}
 
 test('real package lifecycle: UI publishing, version binding, archive and conflict', async ({ page, request, browser }) => {
   const api = process.env.ADMIN_E2E_API_URL!;
+  await openAsLocalOperator(page, '/admin/content');
   const created = await request.post(`${api}/api/admin/content-packages`, { data: { namePl: 'E2E publikacja', nameEn: 'E2E publishing' } });
   expect(created.ok()).toBeTruthy();
   const v1Draft = await created.json();
 
-  await page.goto(`/admin/content/packages/${v1Draft.id}`);
+  await openAsLocalOperator(page, `/admin/content/packages/${v1Draft.id}`);
   await page.getByLabel('Nazwa PL').fill('E2E metadane przez UI');
   await page.getByRole('button', { name: 'Zapisz' }).click();
   await expect(page.getByRole('heading', { name: 'E2E metadane przez UI' })).toBeVisible();
@@ -22,6 +37,7 @@ test('real package lifecycle: UI publishing, version binding, archive and confli
   expect(questionResponse.ok()).toBeTruthy();
 
   await page.reload();
+  await signInAsLocalOperator(page);
   await page.getByRole('button', { name: 'Publikuj' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Publikuj' }).click();
   await expect(page.getByText(/tylko do odczytu/)).toBeVisible();
@@ -41,10 +57,10 @@ test('real package lifecycle: UI publishing, version binding, archive and confli
   const v2Detail = await (await request.get(`${api}/api/admin/content-packages/${v2Id}`)).json();
   expect(v2Detail.categoryCount).toBe(1);
   expect(v2Detail.questionCount).toBe(1);
-  await page.goto(`/admin/content/packages/${v1.id}`);
+  await openAsLocalOperator(page, `/admin/content/packages/${v1.id}`);
   await page.getByRole('button', { name: 'Utwórz Draft' }).click();
   await expect(page.getByRole('alert')).toContainText('zmieniony w innej sesji');
-  await page.goto(`/admin/content/packages/${v2Id}`);
+  await openAsLocalOperator(page, `/admin/content/packages/${v2Id}`);
 
   await page.getByRole('button', { name: 'Publikuj' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Publikuj' }).click();
@@ -53,7 +69,7 @@ test('real package lifecycle: UI publishing, version binding, archive and confli
   expect(v2Room.ok()).toBeTruthy();
   expect((await v2Room.json()).snapshot.contentPackageVersionId).toBe(v2Id);
 
-  await page.goto(`/admin/content/packages/${v1.id}`);
+  await openAsLocalOperator(page, `/admin/content/packages/${v1.id}`);
   await page.getByRole('button', { name: 'Archiwizuj' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Archiwizuj' }).click();
   await expect(page.getByText(/Archived · v1/)).toBeVisible();
@@ -67,7 +83,7 @@ test('real package lifecycle: UI publishing, version binding, archive and confli
   const v3Id = page.url().split('/').pop()!;
   const secondContext = await browser.newContext({ baseURL: process.env.ADMIN_E2E_BASE_URL });
   const secondPage = await secondContext.newPage();
-  await secondPage.goto(`/admin/content/packages/${v3Id}`);
+  await openAsLocalOperator(secondPage, `/admin/content/packages/${v3Id}`);
   await secondPage.getByLabel('Nazwa PL').fill('Zmiana z drugiej sesji');
   await secondPage.getByRole('button', { name: 'Zapisz' }).click();
   await page.getByLabel('Nazwa PL').fill('Niezapisana zmiana pierwszej sesji');

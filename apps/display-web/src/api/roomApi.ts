@@ -41,6 +41,12 @@ export async function getRoomSnapshot(
 }
 
 export function profilePhotoUrl(path?: string | null): string | undefined {
+  return publicMediaUrl(path);
+}
+
+// Public game media is intentionally token-free: Display has no player session.
+// Keep its URL resolution identical to REST requests under a path-prefixed deployment.
+export function publicMediaUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
   if (/^https?:\/\//i.test(path)) return path;
   return apiUrl(path);

@@ -17,6 +17,8 @@ struct GameRouterView: View {
                     ShowingQuestionResultsView(results: game.playerSelectionResults, players: store.snapshot?.players ?? [], store: store)
                 case .roundSummary:
                     RoundSummaryView(summary: game.roundSummary, players: store.snapshot?.players ?? [])
+                case .gameSummary:
+                    GameSummaryView()
                 case .pausedForDisplay:
                     PausedForDisplayView()
                 case .completed:
@@ -109,5 +111,15 @@ struct GameRouterView: View {
     private var snapshotIdentifier: String {
         guard let snapshot = store.snapshot, let game = snapshot.game else { return "game.snapshot.unavailable" }
         return SnapshotAccessibilityMetadata.identifier(snapshot: snapshot, phase: String(describing: game.stage), questionId: game.resolvedQuestionInstanceId)
+    }
+}
+
+private struct GameSummaryView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("game.awaiting_stage")
+        }
+        .accessibilityIdentifier("game-summary-view")
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Domain.Game;
+using PartyGame.Domain.Rooms;
 using PartyGame.Infrastructure.Persistence;
 
 namespace PartyGame.Tests.Api;
@@ -28,6 +29,12 @@ public sealed class PhotoAnswerZeroSubmissionTests
         Assert.Equal(GameStage.RoundSummary, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddSeconds(2)));
         Assert.Equal(GameStage.GameSummary, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddSeconds(10)));
         Assert.Equal(GameStage.Completed, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddSeconds(30)));
+        await using var completedScope = harness.Factory.Services.CreateAsyncScope();
+        var completedDb = completedScope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+        Assert.Equal(RoomPhase.Completed, await completedDb.GameRooms.AsNoTracking()
+            .Where(candidate => candidate.Id == room.RoomId)
+            .Select(candidate => candidate.Phase)
+            .SingleAsync());
     }
 
     [Fact]
