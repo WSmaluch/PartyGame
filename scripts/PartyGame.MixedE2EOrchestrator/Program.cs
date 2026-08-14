@@ -70,7 +70,7 @@ try
     {
         nickname = "E2E Host", contentPackageVersionId = packageId,
         enabledQuestionTypes = new[] { "PlayerSelection", "TextAnswer", "PhotoAnswer", "DrawingAnswer" },
-        settings = new { roundCount = 1, questionsPerRound = 4, playerSelectionSeconds = 60, textAnswerSeconds = 60, votingSeconds = 60, photoSeconds = 90, drawingSeconds = 90, resultPresentationSeconds = 5, finalRoundEnabled = false, finalDrawingPasses = 1 }
+        settings = new { roundCount = 1, questionsPerRound = 4, playerSelectionSeconds = 60, textAnswerSeconds = 60, votingSeconds = 60, photoSeconds = 90, drawingSeconds = 90, resultPresentationSeconds = 5, finalRoundEnabled = true, finalDrawingPasses = 2 }
     });
     var roomCode = roomAccess.GetProperty("roomCode").GetString()!;
     Observe(backendObservations, roomAccess.GetProperty("snapshot"), "room-created");
@@ -124,19 +124,71 @@ try
     ValidateStarted(initial, packageId);
     Mark("game-started");
 
-    stage = "four-question-game";
+    stage = "four-question-game-and-final-round";
     var hostPhoto = await Jpeg(Color.Orange);
     var nodePhoto = await Jpeg(Color.Yellow);
     var hostDrawing = await Png(Color.Purple);
     var nodeDrawing = await Png(Color.Red);
     var actionedStages = new HashSet<string>(StringComparer.Ordinal);
-    var deadline = DateTimeOffset.UtcNow + TimeSpan.FromMinutes(6);
+    var finalActionedStages = new HashSet<string>(StringComparer.Ordinal);
+    var deadline = DateTimeOffset.UtcNow + TimeSpan.FromMinutes(7);
     while (DateTimeOffset.UtcNow < deadline)
     {
         var room = await GetJson($"/api/rooms/{roomCode}");
         ThrowObservationFailure();
         tracker.Observe(room);
         if (IsGameCompleted(room)) break;
+        if (TryFinalStage(room, out var finalStage, out var currentPass))
+        {
+            var finalKey = $"{finalStage}:{currentPass}";
+            if (!finalActionedStages.Add(finalKey))
+            {
+                await Task.Delay(100);
+                continue;
+            }
+
+            switch (finalStage)
+            {
+                case "CollectingFinalSelfies":
+                    await WaitForMarker("display-finalround-selfies", TimeSpan.FromSeconds(30));
+                    await WaitForMarker($"ios-final-selfie-submitted-{room.GetProperty("stateVersion").GetInt64()}", TimeSpan.FromSeconds(45));
+                    var hostFinalSelfieSubmissionId = SubmissionId(host, Guid.Empty, "final-selfie");
+                    await UploadFinalSelfie(roomCode, host, hostPhoto, hostFinalSelfieSubmissionId);
+                    await UploadFinalSelfie(roomCode, host, hostPhoto, hostFinalSelfieSubmissionId);
+                    if (TryFinalStage(await GetJson($"/api/rooms/{roomCode}"), out var selfieStageAfterHost, out _) && selfieStageAfterHost == "CollectingFinalSelfies")
+                        await UploadFinalSelfie(roomCode, node, nodePhoto, SubmissionId(node, Guid.Empty, "final-selfie"));
+                    break;
+                case "CollectingFinalEdits":
+                    await WaitForMarker("display-finalround-edits", TimeSpan.FromSeconds(30));
+                    await WaitForMarker($"ios-final-edit-submitted-pass-{currentPass}", TimeSpan.FromSeconds(45));
+                    var assignments = FinalEditAssignments(room);
+                    var hostAssignment = assignments.Single(assignment => assignment.EditorPlayerId == host.Id);
+                    var nodeAssignment = assignments.Single(assignment => assignment.EditorPlayerId == node.Id);
+                    var hostFinalEditSubmissionId = SubmissionId(host, hostAssignment.ArtifactId, $"final-edit-{currentPass}");
+                    await UploadFinalEdit(roomCode, host, hostAssignment.ArtifactId, hostDrawing, hostFinalEditSubmissionId);
+                    await UploadFinalEdit(roomCode, host, hostAssignment.ArtifactId, hostDrawing, hostFinalEditSubmissionId);
+                    if (TryFinalStage(await GetJson($"/api/rooms/{roomCode}"), out var editStageAfterHost, out var passAfterHost) && editStageAfterHost == "CollectingFinalEdits" && passAfterHost == currentPass)
+                        await UploadFinalEdit(roomCode, node, nodeAssignment.ArtifactId, nodeDrawing, SubmissionId(node, nodeAssignment.ArtifactId, $"final-edit-{currentPass}"));
+                    break;
+                case "ShowingFinalPresentation":
+                    await WaitForMarker("display-finalround-presentation", TimeSpan.FromSeconds(30));
+                    break;
+                case "CollectingFinalVotes":
+                    await WaitForMarker("display-finalround-voting", TimeSpan.FromSeconds(30));
+                    await WaitForMarker($"ios-final-vote-submitted-{room.GetProperty("stateVersion").GetInt64()}", TimeSpan.FromSeconds(30));
+                    var finalArtifactIds = FinalArtifactIds(room);
+                    var hostFinalVoteSubmissionId = SubmissionId(host, Guid.Empty, "final-vote");
+                    await SubmitFinalVote(roomCode, host, finalArtifactIds[0], hostFinalVoteSubmissionId);
+                    await SubmitFinalVote(roomCode, host, finalArtifactIds[0], hostFinalVoteSubmissionId);
+                    if (TryFinalStage(await GetJson($"/api/rooms/{roomCode}"), out var voteStageAfterHost, out _) && voteStageAfterHost == "CollectingFinalVotes")
+                        await SubmitFinalVote(roomCode, node, finalArtifactIds[^1], SubmissionId(node, Guid.Empty, "final-vote"));
+                    break;
+                case "ShowingFinalResults":
+                    await WaitForMarker("display-finalround-results", TimeSpan.FromSeconds(30));
+                    break;
+            }
+            continue;
+        }
         if (!hostObservations.TryGetLatestSnapshot(out var hostSnapshot) || !nodeObservations.TryGetLatestSnapshot(out var nodeSnapshot))
         {
             await Task.Delay(100);
@@ -227,8 +279,9 @@ try
     ThrowObservationFailure();
     tracker.Observe(completed);
     if (!IsGameCompleted(completed))
-        throw new TimeoutException($"Gra nie doszła do Completed przed limitem 6 minut. Ostatnie pytanie: {tracker.LastQuestionType ?? "brak"}, faza: {tracker.LastPhase ?? "brak"}, stateVersion: {tracker.LastStateVersion}.");
+        throw new TimeoutException($"Gra nie doszła do Completed przed limitem 7 minut. Ostatnie pytanie: {tracker.LastQuestionType ?? "brak"}, faza: {tracker.LastPhase ?? "brak"}, stateVersion: {tracker.LastStateVersion}.");
     tracker.AssertComplete(completed, Volatile.Read(ref startedEvents));
+    ValidateFinalRoundCompleted(completed);
     await WaitForMarker("display-completed", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-completed-observed", TimeSpan.FromSeconds(30));
     await WaitForMarker("ios-terminal-snapshot-received", TimeSpan.FromSeconds(30));
@@ -252,6 +305,7 @@ try
     if (finalPlayers.GetArrayLength() != 3 || !finalPlayers.EnumerateArray().Any(player => player.GetProperty("id").GetGuid() == iosPlayerId))
         throw new InvalidOperationException("Reconnect iOS nie odzyskał tego samego gracza w pokoju trzech graczy.");
     var audit = await GetJson($"/api/rooms/{roomCode}/submission-audit?playerId={host.Id}&reconnectToken={Uri.EscapeDataString(host.Token)}");
+    await WriteJson("submission-audit.json", audit);
     var auditEntries = audit.GetProperty("entries").EnumerateArray().ToArray();
     var acceptedUniqueSubmissionCount = AuditCount(auditEntries, "Accepted");
     var idempotentReplayCount = AuditCount(auditEntries, "IdempotentReplay");
@@ -262,6 +316,9 @@ try
     var duplicatePhotoVoteCount = DomainDuplicateCount(auditEntries, "PhotoAnswerVote");
     var duplicateDrawingAnswerCount = DomainDuplicateCount(auditEntries, "DrawingAnswer");
     var duplicateDrawingVoteCount = DomainDuplicateCount(auditEntries, "DrawingAnswerVote");
+    var finalSelfieCount = auditEntries.Count(entry => entry.GetProperty("actionType").GetString() == "FinalSelfie" && entry.GetProperty("result").GetString() == "Accepted");
+    var finalEditCount = auditEntries.Count(entry => entry.GetProperty("actionType").GetString() == "FinalEdit" && entry.GetProperty("result").GetString() == "Accepted");
+    var finalVoteCount = auditEntries.Count(entry => entry.GetProperty("actionType").GetString() == "FinalVote" && entry.GetProperty("result").GetString() == "Accepted");
     var duplicateAnswerCount = duplicateTextAnswerCount + duplicatePhotoAnswerCount + duplicateDrawingAnswerCount;
     var duplicateVoteCount = duplicateTextVoteCount + duplicatePhotoVoteCount + duplicateDrawingVoteCount;
     var duplicateDrawingCount = duplicateDrawingAnswerCount + duplicateDrawingVoteCount;
@@ -274,7 +331,9 @@ try
         var playerId = entry.GetProperty("playerId").GetGuid();
         return playerId != iosPlayerId && playerId != host.Id && playerId != node.Id;
     });
-    if (idempotentReplayCount < 2) throw new InvalidOperationException($"Oczekiwano co najmniej dwóch rzeczywistych replayów, otrzymano {idempotentReplayCount}.");
+    if (idempotentReplayCount < 5) throw new InvalidOperationException($"Oczekiwano co najmniej pięciu rzeczywistych replayów, otrzymano {idempotentReplayCount}.");
+    if (finalSelfieCount != 3 || finalEditCount != 6 || finalVoteCount != 3)
+        throw new InvalidOperationException($"Final Round ma niepełny audyt: selfie={finalSelfieCount}, edits={finalEditCount}, votes={finalVoteCount}.");
     if (conflictingSubmissionIdCount != 0 || duplicateAnswerCount != 0 || duplicateVoteCount != 0 ||
         duplicateClientSubmissionIdCount != 0 || iosPostReconnectDuplicateSubmissionCount != 0 ||
         scriptedPlayerADuplicateSubmissionCount != 0 || scriptedPlayerBDuplicateSubmissionCount != 0 || displaySubmissionCount != 0)
@@ -328,6 +387,9 @@ try
         duplicatePhotoVoteCount,
         duplicateDrawingAnswerCount,
         duplicateDrawingVoteCount,
+        finalSelfieCount,
+        finalEditCount,
+        finalVoteCount,
         duplicateAnswerCount,
         duplicateVoteCount,
         duplicateDrawingCount,
@@ -373,6 +435,19 @@ static async Task<JsonElement> ReadSuccess(HttpResponseMessage response) { var c
 static bool IsGameCompleted(JsonElement room) =>
     room.TryGetProperty("game", out var game) && game.ValueKind == JsonValueKind.Object &&
     game.TryGetProperty("stage", out var stage) && stage.GetString() == "Completed";
+static bool TryFinalStage(JsonElement room, out string stage, out int currentPass)
+{
+    stage = "";
+    currentPass = 0;
+    if (!room.TryGetProperty("game", out var game) || game.ValueKind == JsonValueKind.Null ||
+        !game.TryGetProperty("stage", out var stageValue) || stageValue.ValueKind != JsonValueKind.String)
+        return false;
+    stage = stageValue.GetString()!;
+    if (game.TryGetProperty("finalRound", out var finalRound) && finalRound.ValueKind == JsonValueKind.Object &&
+        finalRound.TryGetProperty("currentPass", out var passValue) && passValue.ValueKind == JsonValueKind.Number)
+        currentPass = passValue.GetInt32();
+    return stage is "CollectingFinalSelfies" or "CollectingFinalEdits" or "ShowingFinalPresentation" or "CollectingFinalVotes" or "ShowingFinalResults";
+}
 async Task UploadProfile(string roomCode, PlayerAccess player, byte[] image) { using var form = new MultipartFormDataContent(); var content = new ByteArrayContent(image); content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg"); form.Add(content, "file", "profile.jpg"); using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/rooms/{roomCode}/players/{player.Id}/profile-photo") { Content = form }; request.Headers.Add("X-Player-Token", player.Token); using var response = await http.SendAsync(request); _ = await ReadSuccess(response); }
 async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, string field, byte[] image, string contentType, Guid clientSubmissionId)
 {
@@ -388,6 +463,32 @@ async Task UploadAnswer(string roomCode, PlayerAccess player, Guid questionId, s
     if ((int)response.StatusCode == 409 && responseBody.Contains($"{field}_answer_not_active", StringComparison.Ordinal)) return;
     if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {responseBody}");
 }
+async Task UploadFinalSelfie(string roomCode, PlayerAccess player, byte[] image, Guid clientSubmissionId)
+{
+    using var form = new MultipartFormDataContent();
+    form.Add(new StringContent(player.Id.ToString()), "playerId");
+    form.Add(new StringContent(player.Token), "reconnectToken");
+    form.Add(new StringContent(clientSubmissionId.ToString()), "clientSubmissionId");
+    var content = new ByteArrayContent(image);
+    content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
+    form.Add(content, "photo", "final-selfie.jpg");
+    using var response = await http.PostAsync($"/api/rooms/{roomCode}/final-round/selfies", form);
+    _ = await ReadSuccess(response);
+}
+async Task UploadFinalEdit(string roomCode, PlayerAccess player, Guid artifactId, byte[] image, Guid clientSubmissionId)
+{
+    using var form = new MultipartFormDataContent();
+    form.Add(new StringContent(player.Id.ToString()), "playerId");
+    form.Add(new StringContent(player.Token), "reconnectToken");
+    form.Add(new StringContent(clientSubmissionId.ToString()), "clientSubmissionId");
+    var content = new ByteArrayContent(image);
+    content.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+    form.Add(content, "drawing", "final-edit.png");
+    using var response = await http.PostAsync($"/api/rooms/{roomCode}/final-round/artifacts/{artifactId}/edits", form);
+    _ = await ReadSuccess(response);
+}
+async Task SubmitFinalVote(string roomCode, PlayerAccess player, Guid artifactId, Guid clientSubmissionId) =>
+    _ = await PostJson($"/api/rooms/{roomCode}/final-round/votes", new { playerId = player.Id, reconnectToken = player.Token, artifactId, clientSubmissionId });
 static async Task<byte[]> Jpeg(Color color) { using var image = new Image<Rgba32>(400, 400, color); await using var stream = new MemoryStream(); await image.SaveAsync(stream, new JpegEncoder()); return stream.ToArray(); }
 static async Task<byte[]> Png(Color color) { using var image = new Image<Rgba32>(400, 400, color); await using var stream = new MemoryStream(); await image.SaveAsync(stream, new PngEncoder()); return stream.ToArray(); }
 async Task WaitForMarker(string name, TimeSpan timeout) => await WaitUntil(() => File.Exists(Path.Combine(coordinationDir, name)), timeout, name);
@@ -421,7 +522,10 @@ static int DomainDuplicateCount(IEnumerable<JsonElement> entries, string action)
     .GroupBy(entry => $"{entry.GetProperty("playerId").GetGuid():N}:{entry.GetProperty("questionInstanceId").GetGuid():N}")
     .Sum(group => Math.Max(0, group.Count() - 1));
 static int DomainDuplicateCountForPlayer(IEnumerable<JsonElement> entries, Guid playerId) => entries
-    .Where(entry => entry.GetProperty("playerId").GetGuid() == playerId && entry.GetProperty("result").GetString() == "Accepted")
+    // A FinalEdit is intentionally accepted once per pass for a player. Its
+    // audit question id is the stable final-session id, so it cannot be
+    // grouped with one-pass answer/vote actions here.
+    .Where(entry => entry.GetProperty("playerId").GetGuid() == playerId && entry.GetProperty("result").GetString() == "Accepted" && entry.GetProperty("actionType").GetString() != "FinalEdit")
     .GroupBy(entry => $"{entry.GetProperty("actionType").GetString()}:{entry.GetProperty("questionInstanceId").GetGuid():N}")
     .Sum(group => Math.Max(0, group.Count() - 1));
 static int DuplicateSubmissionIdCount(IEnumerable<JsonElement> entries) => entries
@@ -469,6 +573,10 @@ static List<Guid> MediaAnswerIds(JsonElement room, string resultsProperty, strin
     return ids;
 }
 static List<Guid> TextAnswerIds(JsonElement room) => room.GetProperty("game").GetProperty("textResults").GetProperty("votingOptions").EnumerateArray().Select(item => item.GetProperty("answerId").GetGuid()).ToList();
+static List<FinalEditAssignment> FinalEditAssignments(JsonElement room) => room.GetProperty("game").GetProperty("finalRound").GetProperty("editAssignments")
+    .EnumerateArray().Select(item => new FinalEditAssignment(item.GetProperty("artifactId").GetGuid(), item.GetProperty("editorPlayerId").GetGuid())).ToList();
+static List<Guid> FinalArtifactIds(JsonElement room) => room.GetProperty("game").GetProperty("finalRound").GetProperty("artifacts")
+    .EnumerateArray().Select(item => item.GetProperty("artifactId").GetGuid()).ToList();
 static void AssertAllMediaSubmitted(JsonElement room, string resultsProperty, string submittedProperty, string requiredProperty, string questionType)
 {
     var results = room.GetProperty("game").GetProperty(resultsProperty);
@@ -478,6 +586,13 @@ static void AssertAllMediaSubmitted(JsonElement room, string resultsProperty, st
         throw new InvalidOperationException($"{questionType}: przyjęto {submitted} z {required} wymaganych odpowiedzi.");
 }
 static void ValidateStarted(JsonElement room, Guid packageId) { if (room.GetProperty("phase").GetString() != "Started") throw new InvalidOperationException("Pokój nie przeszedł do Started."); if (room.GetProperty("contentPackageVersionId").GetGuid() != packageId) throw new InvalidOperationException("Pokój zmienił wersję pakietu."); if (room.GetProperty("startedAtUtc").ValueKind == JsonValueKind.Null) throw new InvalidOperationException("Brakuje startedAtUtc."); if (room.GetProperty("players").EnumerateArray().Any(player => !player.GetProperty("isReady").GetBoolean())) throw new InvalidOperationException("Gra wystartowała przed Ready wszystkich graczy."); }
+static void ValidateFinalRoundCompleted(JsonElement room)
+{
+    var final = room.GetProperty("game").GetProperty("finalRound");
+    if (final.GetProperty("artifacts").GetArrayLength() != 3 || final.GetProperty("submittedSelfies").GetInt32() != 3 ||
+        final.GetProperty("submittedVotes").GetInt32() != 3 || final.GetProperty("artifacts").EnumerateArray().Any(artifact => artifact.GetProperty("displayMediaUrl").ValueKind == JsonValueKind.Null))
+        throw new InvalidOperationException("Końcowy snapshot Final Round nie zawiera trzech kompletnych artefaktów i głosów.");
+}
 
 internal sealed class GameTracker
 {
@@ -512,4 +627,5 @@ internal sealed class GameTracker
 internal sealed record PlayerAccess(Guid Id, string Token, string Name);
 internal sealed record PrivateState(Guid? TextAnswerId = null, Guid? PhotoAnswerId = null, Guid? DrawingAnswerId = null);
 internal sealed record ActiveQuestion(Guid Id, Guid InstanceId, string Type, string Stage, int Number, long StateVersion);
+internal sealed record FinalEditAssignment(Guid ArtifactId, Guid EditorPlayerId);
 internal sealed record QuestionDefinition(string Key, string Type, string TextPl, string TextEn, int SortOrder);

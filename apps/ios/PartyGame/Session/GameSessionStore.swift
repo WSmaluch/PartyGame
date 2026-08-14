@@ -141,7 +141,10 @@ final class GameSessionStore {
               privateGameState?.finalRound?.hasSubmittedVote != true, let session, let reconnectToken, let baseURL,
               let artifactId = selectedFinalRoundVoteId else { return }
         isWorking = true; errorMessage = nil; defer { isWorking = false }
-        do { apply(try await api.submitFinalVote(baseURL: baseURL, session: session, reconnectToken: reconnectToken, artifactId: artifactId, clientSubmissionId: submissionId(artifactId, "final-vote"))) }
+        do {
+            apply(try await api.submitFinalVote(baseURL: baseURL, session: session, reconnectToken: reconnectToken, artifactId: artifactId, clientSubmissionId: submissionId(artifactId, "final-vote")))
+            await refreshFinalRoundPrivateState()
+        }
         catch { errorMessage = error.localizedDescription }
     }
 
@@ -498,6 +501,11 @@ final class GameSessionStore {
             snapshot?.game?.stage != .collectingDrawingAnswers
         let enteredFinalRound = candidate.game.map { [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) } == true &&
             snapshot?.game?.stage != candidate.game?.stage
+        // Final edits can advance to the next pass without changing the public stage.
+        // Refresh the private assignment/submission state in that case as well, otherwise
+        // a player who submitted pass one would remain on the waiting screen for pass two.
+        let advancedFinalEditPass = candidate.game?.stage == .collectingFinalEdits &&
+            candidate.game?.finalRound?.currentPass != snapshot?.game?.finalRound?.currentPass
         snapshot = candidate
         let nextQuestion = candidate.game?.resolvedQuestionInstanceId
         let questionChanged = nextQuestion != activeQuestionInstanceId
@@ -539,7 +547,7 @@ final class GameSessionStore {
                 await self?.refreshPrivateStateForActiveQuestion(nextQuestion)
             }
         }
-        if !isUITesting, enteredFinalRound {
+        if !isUITesting, (enteredFinalRound || advancedFinalEditPass) {
             privateStateRefreshTask?.cancel()
             privateStateRefreshTask = Task { [weak self] in await self?.refreshFinalRoundPrivateState() }
         }
@@ -572,7 +580,9 @@ final class GameSessionStore {
         let photoArgument = arguments.first { $0.hasPrefix("-uiTestingPhoto") }
         let drawingArgument = arguments.first { $0.hasPrefix("-uiTestingDrawing") }
         let gameScreenArgument = arguments.first { $0.hasPrefix("-uiTestingGameScreen") }
-        guard arguments.contains("-uiTestingLobby") || arguments.contains("-uiTestingStarted") || photoArgument != nil || drawingArgument != nil || gameScreenArgument != nil else { return }
+        let finalArgument = arguments.first { $0.hasPrefix("-uiTestingFinal") }
+        guard arguments.contains("-uiTestingLobby") || arguments.contains("-uiTestingStarted") || photoArgument != nil || drawingArgument != nil || gameScreenArgument != nil || finalArgument != nil else { return }
+        if let finalArgument { configureFinalRoundUITestScenario(finalArgument); return }
         if let gameScreenArgument {
             configureGameScreenUITestScenario(gameScreenArgument)
             return
@@ -660,6 +670,32 @@ final class GameSessionStore {
     }
 
     #if DEBUG
+    private func configureFinalRoundUITestScenario(_ argument: String) {
+        isUITesting = true
+        let ola = UUID(uuidString: "0DC81D35-C68D-47C6-AEBB-5E86407A1BB0")!
+        let jan = UUID(uuidString: "38C92C29-2CF5-49E0-BC6B-AEBF9F37BCCA")!
+        let ewa = UUID(uuidString: "71A8C49F-1A2B-418F-A5CD-7D47C9BC9280")!
+        let artifactId = UUID(uuidString: "70000000-0000-0000-0000-000000000001")!
+        let stage: GameStage = switch argument {
+        case "-uiTestingFinalEdit", "-uiTestingFinalEditWaiting": .collectingFinalEdits
+        case "-uiTestingFinalPresentation": .showingFinalPresentation
+        case "-uiTestingFinalVoting", "-uiTestingFinalVoteWaiting": .collectingFinalVotes
+        case "-uiTestingFinalResults": .showingFinalResults
+        case "-uiTestingFinalSummary": .gameSummary
+        case "-uiTestingFinalCompleted": .completed
+        default: .collectingFinalSelfies
+        }
+        let artifact = FinalRoundArtifact(artifactId: artifactId, subjectPlayerId: jan, subjectNickname: "Jan", selfiePrompt: LocalizedText(defaultText: "Pokaż minę", translations: nil), targetRole: LocalizedText(defaultText: "Kosmiczny pirat", translations: nil), displayMediaUrl: nil, thumbnailMediaUrl: nil, voteCount: 2, isTopResult: true)
+        let final = FinalRoundSnapshot(currentPass: 1, totalPasses: 2, submittedSelfies: 3, requiredSelfies: 3, submittedEdits: 1, requiredEdits: 3, submittedVotes: 1, requiredVotes: 3, artifacts: [artifact], editAssignments: [FinalRoundEditAssignment(artifactId: artifactId, editorPlayerId: ola, sourceDisplayMediaUrl: "/api/media/source/display", sourceThumbnailMediaUrl: "/api/media/source/thumbnail")])
+        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: true, serverBaseURL: configuration.baseURL)
+        reconnectToken = "ui-test-token"
+        let players = [RoomPlayer(id: ola, nickname: "Ola", isHost: true, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0), RoomPlayer(id: jan, nickname: "Jan", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 100), RoomPlayer(id: ewa, nickname: "Ewa", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 50)]
+        let game = GameSnapshot(stage: stage, currentRoundNumber: 2, totalRounds: 2, currentQuestionNumber: 0, questionsInCurrentRound: 0, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil, scores: [], categories: nil, currentQuestion: nil, playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil, ranking: nil, finalRound: final)
+        apply(RoomSnapshot(roomCode: "ABCD", phase: stage == .completed ? .completed : .started, stateVersion: 77, displayConnected: true, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: players, createdAtUtc: "2026-08-12T12:00:00Z", startedAtUtc: "2026-08-12T12:01:00Z", game: game))
+        privateGameState = PlayerPrivateGameState(playerId: ola, questionInstanceId: UUID(), hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false, finalRound: FinalRoundPrivateState(hasSubmittedSelfie: argument != "-uiTestingFinalSelfie", assignedArtifactId: artifactId, sourceDisplayMediaUrl: "/api/media/source/display", sourceThumbnailMediaUrl: "/api/media/source/thumbnail", hasSubmittedEdit: argument == "-uiTestingFinalEditWaiting", hasSubmittedVote: argument == "-uiTestingFinalVoteWaiting"))
+        screen = .started
+    }
+
     private func configureGameScreenUITestScenario(_ argument: String) {
         isUITesting = true
         let ola = UUID(uuidString: "0DC81D35-C68D-47C6-AEBB-5E86407A1BB0")!
@@ -958,7 +994,9 @@ final class GameSessionStore {
                 Task { @MainActor in self?.drawingUploadPhase = value >= 1 ? .serverProcessing : .uploading(value) }
             }
             apply(response.roomSnapshot); applyPrivateGameState(response.playerPrivateGameState)
-            drawingUploadPhase = .saved; FinalRoundEditDraftStorage.remove(draft)
+            drawingUploadPhase = .saved
+            FinalRoundEditDraftStorage.remove(draft)
+            finalEditDraft = nil
         } catch is CancellationError { drawingUploadPhase = .ready }
         catch { drawingUploadPhase = .failed(error.localizedDescription); errorMessage = error.localizedDescription }
     }

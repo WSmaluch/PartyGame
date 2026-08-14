@@ -20,7 +20,9 @@ struct FinalRoundEditView: View {
                 ProgressView()
             }
         }
-        .padding().accessibilityIdentifier("final-round-edit-view")
+        .padding()
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(store.privateGameState?.finalRound?.hasSubmittedEdit == true ? "final-round-edit-submitted-state" : "final-round-edit-ready-state")
     }
 
     private func editor(_ draft: FinalRoundEditDraft) -> some View {
@@ -41,7 +43,7 @@ struct FinalRoundEditView: View {
                         if active.isEmpty { active = [DrawingPoint(x: 0.5, y: 0.5)] }
                         var canvas = draft.canvas; canvas.complete(active); store.updateFinalEditCanvas(canvas); active = []
                     })
-                }.clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.secondary))
+                }.clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.secondary)).accessibilityIdentifier("final-round-edit-canvas")
             }.frame(maxWidth: 420).frame(height: min(UIScreen.main.bounds.width - 56, 420))
             HStack { ForEach(DrawingColor.allCases, id: \.self) { color in
                 Button { var canvas = draft.canvas; canvas.selectedColor = color; canvas.selectedTool = .brush; store.updateFinalEditCanvas(canvas) } label: { Circle().fill(color.color).frame(width: 30, height: 30) }
@@ -55,7 +57,10 @@ struct FinalRoundEditView: View {
                 Button("drawing.redo", systemImage: "arrow.uturn.forward") { var canvas = draft.canvas; canvas.redo(); store.updateFinalEditCanvas(canvas) }.disabled(draft.canvas.redoStack.isEmpty)
                 Button("drawing.clear", role: .destructive) { var canvas = draft.canvas; canvas.clear(); store.updateFinalEditCanvas(canvas) }
             }
-            Button("drawing.done") { Task { await store.previewFinalEdit() } }.buttonStyle(.borderedProminent).disabled(draft.canvas.isEmpty)
+            Button("drawing.done") { Task { await store.previewFinalEdit() } }
+                .buttonStyle(.borderedProminent)
+                .disabled(draft.canvas.isEmpty)
+                .accessibilityIdentifier("final-round-edit-preview")
             if let png = draft.previewPNG, let image = UIImage(data: png) {
                 Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 220)
                 switch store.drawingUploadPhase {
@@ -86,7 +91,7 @@ struct FinalRoundVotingView: View {
                 }
             } }
             Button("finalRound.vote") { Task { await store.submitSelectedFinalRoundVote() } }.buttonStyle(.borderedProminent).disabled(store.selectedFinalRoundVoteId == nil || store.isWorking).accessibilityIdentifier("final-round-vote-send")
-        }.padding().accessibilityIdentifier("final-round-voting-view")
+        }.padding().accessibilityElement(children: .contain).accessibilityIdentifier("final-round-voting-view")
     }
 }
 
@@ -111,17 +116,17 @@ private struct FinalRoundVoteCard: View {
 struct FinalRoundWaitingView: View {
     let game: GameSnapshot
     let message: LocalizedStringKey
-    var body: some View { VStack(spacing: 16) { Image(systemName: "checkmark.circle.fill").font(.system(size: 60)).foregroundStyle(.green); Text(message).font(.title3.bold()); Text("finalRound.waiting") }.accessibilityIdentifier("final-round-waiting-view") }
+    var body: some View { VStack(spacing: 16) { Image(systemName: "checkmark.circle.fill").font(.system(size: 60)).foregroundStyle(.green); Text(message).font(.title3.bold()); Text("finalRound.waiting") }.accessibilityElement(children: .contain).accessibilityIdentifier("final-round-waiting-view") }
 }
 
 struct FinalRoundPresentationView: View {
     let store: GameSessionStore
     let game: GameSnapshot
-    var body: some View { VStack(spacing: 14) { Text("finalRound.presentationTitle").font(.title.bold()); ScrollView { ForEach(game.finalRound?.artifacts ?? []) { artifact in VStack { AsyncImage(url: store.mediaURL(artifact.displayMediaUrl)) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }; Text("\(artifact.subjectNickname) · \(artifact.targetRole.local)").bold() }.padding() } } }.accessibilityIdentifier("final-round-presentation-view") }
+    var body: some View { VStack(spacing: 14) { Text("finalRound.presentationTitle").font(.title.bold()); ScrollView { ForEach(game.finalRound?.artifacts ?? []) { artifact in VStack { AsyncImage(url: store.mediaURL(artifact.displayMediaUrl)) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }; Text("\(artifact.subjectNickname) · \(artifact.targetRole.local)").bold() }.padding() } } }.accessibilityElement(children: .contain).accessibilityIdentifier("final-round-presentation-view") }
 }
 
 struct FinalRoundResultsView: View {
     let store: GameSessionStore
     let game: GameSnapshot
-    var body: some View { VStack(spacing: 14) { Text("finalRound.resultsTitle").font(.title.bold()); ScrollView { ForEach(game.finalRound?.artifacts ?? []) { artifact in VStack { AsyncImage(url: store.mediaURL(artifact.displayMediaUrl)) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }; Text("\(artifact.subjectNickname) · \(artifact.targetRole.local)").bold(); Text(String(format: String(localized: "finalRound.votes"), artifact.voteCount)); if artifact.isTopResult { Image(systemName: "trophy.fill") } }.padding() } } }.accessibilityIdentifier("final-round-results-view") }
+    var body: some View { VStack(spacing: 14) { Text("finalRound.resultsTitle").font(.title.bold()); ScrollView { ForEach(game.finalRound?.artifacts ?? []) { artifact in VStack { AsyncImage(url: store.mediaURL(artifact.displayMediaUrl)) { $0.resizable().scaledToFit() } placeholder: { ProgressView() }; Text("\(artifact.subjectNickname) · \(artifact.targetRole.local)").bold(); Text(String(format: String(localized: "finalRound.votes"), artifact.voteCount)); if artifact.isTopResult { Image(systemName: "trophy.fill") } }.padding() } } }.accessibilityElement(children: .contain).accessibilityIdentifier("final-round-results-view") }
 }

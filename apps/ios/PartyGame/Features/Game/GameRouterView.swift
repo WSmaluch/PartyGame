@@ -73,7 +73,7 @@ struct GameRouterView: View {
                 case .showingDrawingAnswerResults:
                     DrawingResultsView(store: store, game: game)
                 case .collectingFinalSelfies:
-                    if store.privateGameState?.hasSubmittedPhotoAnswer == true { PhotoAnswerWaitingView(store: store, game: game) }
+                    if store.privateGameState?.finalRound?.hasSubmittedSelfie == true { FinalRoundWaitingView(game: game, message: "photoAnswer.sent") }
                     else { PhotoAnswerCaptureView(store: store, game: game) }
                 case .collectingFinalEdits:
                     FinalRoundEditView(store: store, game: game)
@@ -132,6 +132,7 @@ private struct GameSummaryView: View {
             ProgressView()
             Text("game.awaiting_stage")
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("game-summary-view")
     }
 }

@@ -202,6 +202,7 @@ struct CompletedView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("game-completed-view")
     }
 }

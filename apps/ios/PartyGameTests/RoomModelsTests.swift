@@ -93,6 +93,14 @@ final class RoomModelsTests: XCTestCase {
         XCTAssertEqual(privateState.finalRound?.assignedArtifactId?.uuidString, "00000000-0000-0000-0000-000000000011")
     }
 
+    func testFinalRoundUsesStableArtifactForLocalDraftIdentity() throws {
+        let json = #"{"roomCode":"ABCD","phase":"Started","stateVersion":55,"displayConnected":true,"minimumPlayers":3,"maximumPlayers":8,"canStart":false,"settings":{"roundCount":1,"questionsPerRound":4,"playerSelectionSeconds":20,"textAnswerSeconds":40,"votingSeconds":20,"photoSeconds":45,"drawingSeconds":90,"resultPresentationSeconds":8,"finalRoundEnabled":true,"finalDrawingPasses":2},"players":[],"createdAtUtc":"2026-07-20T12:00:00Z","game":{"stage":"CollectingFinalSelfies","scores":[],"finalRound":{"currentPass":0,"totalPasses":2,"submittedSelfies":0,"requiredSelfies":3,"submittedEdits":0,"requiredEdits":0,"submittedVotes":0,"requiredVotes":0,"artifacts":[{"artifactId":"00000000-0000-0000-0000-000000000011","subjectPlayerId":"00000000-0000-0000-0000-000000000012","subjectNickname":"Ola","selfiePrompt":{"defaultText":"Pokaż minę"},"targetRole":{"defaultText":"pirat"},"displayMediaUrl":null,"thumbnailMediaUrl":null,"voteCount":0,"isTopResult":false}]}}}"#
+
+        let snapshot = try JSONDecoder().decode(RoomSnapshot.self, from: Data(json.utf8))
+
+        XCTAssertEqual(snapshot.game?.resolvedQuestionInstanceId?.uuidString, "00000000-0000-0000-0000-000000000011")
+    }
+
     @MainActor
     func testRoomCodeNormalizationRemovesAmbiguousCharacters() {
         XCTAssertEqual(GameSessionStore.normalizedRoomCode("a1bi-cd"), "ABCD")

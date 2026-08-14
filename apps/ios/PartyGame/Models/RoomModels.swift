@@ -690,9 +690,11 @@ struct GameSnapshot: Codable, Equatable, Sendable {
 extension GameSnapshot {
     /// Transport actions use the persisted game-question instance id. Older
     /// servers exposed only the question-definition id as `question.id`, so
-    /// media-result snapshots remain a backwards-compatible fallback.
+    /// media-result snapshots remain a backwards-compatible fallback. Final
+    /// Round has no game-question instance, so its first stable artifact id is
+    /// used for the local media-draft lifecycle.
     var resolvedQuestionInstanceId: UUID? {
-        photoAnswerResults?.questionInstanceId ?? drawingAnswerResults?.questionInstanceId ?? currentQuestion?.instanceId
+        photoAnswerResults?.questionInstanceId ?? drawingAnswerResults?.questionInstanceId ?? currentQuestion?.instanceId ?? finalRound?.artifacts.first?.artifactId
     }
 }
 

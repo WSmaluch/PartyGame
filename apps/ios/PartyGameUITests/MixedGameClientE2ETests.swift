@@ -89,17 +89,18 @@ final class MixedGameClientE2ETests: XCTestCase {
         var voted = Set<String>()
         var didReconnect = false
         var mustRecordPostReconnectAction = false
+        var finalEditSubmissionCount = 0
         var drawingPrivateStateLoadingSince: Date?
         var diagnosedDrawingQuestions = Set<String>()
         var diagnosedTextVoteQuestions = Set<String>()
-        let deadline = Date().addingTimeInterval(240)
+        let deadline = Date().addingTimeInterval(360)
 
         while Date() < deadline {
             // CompletedView exposes its root identifier on the title text.
             // Query the matching element type so this observation reflects the
             // rendered terminal state rather than an unrelated accessibility
             // container.
-            if app.staticTexts["game-completed-view"].exists {
+            if app.descendants(matching: .any)["game-completed-view"].exists {
                 let terminal = try recordCurrentSnapshot(event: "ios-terminal-snapshot-received", stage: "completed")
                 try observationWriter.writeMarkerOnce("ios-terminal-snapshot-received", observation: terminal)
                 try waitUntil(timeout: 10, description: "trzy wyrenderowane pozycje rankingu") {
@@ -181,6 +182,41 @@ final class MixedGameClientE2ETests: XCTestCase {
                     performedAction = true
                     mark("ios-text-subject-observed")
                 }
+            } else if !submitted.contains("finalselfie"),
+                      let current = try? snapshot(from: app, event: "final-selfie-detected"),
+                      current.phase == "collectingFinalSelfies",
+                      app.buttons["photoAnswer.chooseLibrary"].exists {
+                app.buttons["photoAnswer.chooseLibrary"].tap()
+                try chooseImportedPhoto()
+                try waitFor(app.buttons["photoAnswer.usePhoto"], timeout: 15, description: "przycisk wysłania finałowego zdjęcia").tap()
+                try waitFor(app.staticTexts["Photo sent"], timeout: 15, description: "zapis finałowego zdjęcia")
+                try waitFor(app.staticTexts["Waiting for the other players"], timeout: 5, description: "oczekiwanie po zapisie finałowego zdjęcia")
+                submitted.insert("finalselfie")
+                performedAction = true
+                mark("ios-final-selfie-submitted-\(current.stateVersion)")
+            } else if let current = try? snapshot(from: app, event: "final-edit-detected"),
+                      current.phase == "collectingFinalEdits",
+                      app.buttons["final-round-edit-start"].exists {
+                app.buttons["final-round-edit-start"].tap()
+                let canvas = try waitFor(app.images["final-round-edit-canvas"], timeout: 10, description: "canvas finałowej edycji")
+                canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25))
+                    .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.7)))
+                try waitFor(app.buttons["final-round-edit-preview"], description: "podgląd finałowej edycji").tap()
+                try waitFor(app.buttons["final-round-edit-send"], timeout: 10, description: "wysłanie finałowej edycji").tap()
+                try waitFor(app.descendants(matching: .any)["final-round-waiting-view"], timeout: 15, description: "zapis finałowej edycji")
+                performedAction = true
+                finalEditSubmissionCount += 1
+                mark("ios-final-edit-submitted-pass-\(finalEditSubmissionCount)")
+            } else if let current = try? snapshot(from: app, event: "final-vote-detected"),
+                      current.phase == "collectingFinalVotes",
+                      firstEnabledButton(prefix: "final-round-vote-") != nil {
+                try submitFirstAcceptedVote(
+                    optionPrefix: "final-round-vote-",
+                    voteButtonIdentifier: "final-round-vote-send",
+                    description: "głos finałowy"
+                )
+                performedAction = true
+                mark("ios-final-vote-submitted-\(current.stateVersion)")
             } else if !submitted.contains("photoanswer"), app.buttons["photoAnswer.chooseLibrary"].exists {
                 app.buttons["photoAnswer.chooseLibrary"].tap()
                 try chooseImportedPhoto()
@@ -257,7 +293,7 @@ final class MixedGameClientE2ETests: XCTestCase {
             } else {
                 drawingPrivateStateLoadingSince = nil
             }
-            if !didReconnect, !submitted.isEmpty {
+            if !didReconnect, submitted.contains("finalselfie") {
                 let before = try recordCurrentSnapshot(event: "snapshot-before-disconnect", stage: "before-disconnect")
                 try observationWriter.writeMarkerOnce("ios-before-reconnect", observation: before)
                 mark("ios-reconnect-requested")

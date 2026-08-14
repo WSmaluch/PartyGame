@@ -34,6 +34,11 @@ const stages = [
     'results',
     '[data-testid="showing-drawing-answer-results"]',
   ],
+  ['finalround', 'selfies', '[data-testid="final-round-selfies-collecting"]'],
+  ['finalround', 'edits', '[data-testid="final-round-edits-collecting"]'],
+  ['finalround', 'presentation', '[data-testid="final-round-presentation"]'],
+  ['finalround', 'voting', '[data-testid="final-round-voting"]'],
+  ['finalround', 'results', '[data-testid="final-round-results"]'],
 ] as const;
 
 test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
@@ -72,7 +77,7 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
 
     const observed = new Set<string>();
     let displayReconnected = false;
-    const deadline = Date.now() + 240_000;
+    const deadline = Date.now() + 360_000;
     while (
       Date.now() < deadline &&
       !(await page.locator('.game-completed').isVisible())
@@ -154,6 +159,8 @@ test.describe('Display Mixed Client E2E (iOS + scripted players)', () => {
     }
     for (const type of ['textanswer', 'photoanswer', 'drawinganswer'])
       expect(observed.has(`${type}-voting`)).toBe(true);
+    for (const phase of ['selfies', 'edits', 'presentation', 'voting', 'results'])
+      expect(observed.has(`finalround-${phase}`)).toBe(true);
     const rankingCount = await page.locator('.game-completed .ranking-entry').count();
     expect(rankingCount).toBe(coordination.scriptedPlayers.length + 1);
     const terminalStateVersion = await displayStateVersion(page);

@@ -762,9 +762,6 @@ public sealed class RoomService(
                 ? state.Artifacts.SingleOrDefault(candidate => candidate.SubjectPlayerId == player.Id)
                 : state.Artifacts.SingleOrDefault(candidate => candidate.Id == requestedArtifactId);
             if (artifact is null) throw new DrawingAnswerException("final_round_artifact_not_found", "Final artifact was not found.");
-            if (isSelfie && artifact.OriginalMediaAssetId is not null)
-                throw new DrawingAnswerException("final_round_already_submitted", "The final selfie was already submitted.");
-
             if (!isSelfie)
             {
                 var participants = state.Artifacts.OrderBy(candidate => candidate.SubjectPlayerId).Select(candidate => candidate.SubjectPlayerId).ToList();
@@ -772,8 +769,6 @@ public sealed class RoomService(
                 var expectedEditor = participants[(subjectIndex + state.CurrentPass) % participants.Count];
                 if (expectedEditor != player.Id || artifact.SubjectPlayerId == player.Id)
                     throw new DrawingAnswerException("final_round_editor_not_eligible", "This final photo is not assigned to the player.");
-                if (state.Edits.Any(edit => edit.ArtifactId == artifact.Id && edit.PassNumber == state.CurrentPass && edit.EditorPlayerId == player.Id))
-                    throw new DrawingAnswerException("final_round_already_submitted", "This final edit was already submitted.");
             }
 
             var action = isSelfie ? SubmissionActionType.FinalSelfie : SubmissionActionType.FinalEdit;
@@ -783,6 +778,10 @@ public sealed class RoomService(
                 await dbContext.SaveChangesAsync(cancellationToken);
                 return new FinalRoundUploadResult(room, artifact.Id, false);
             }
+            if (isSelfie && artifact.OriginalMediaAssetId is not null)
+                throw new DrawingAnswerException("final_round_already_submitted", "The final selfie was already submitted.");
+            if (!isSelfie && state.Edits.Any(edit => edit.ArtifactId == artifact.Id && edit.PassNumber == state.CurrentPass && edit.EditorPlayerId == player.Id))
+                throw new DrawingAnswerException("final_round_already_submitted", "This final edit was already submitted.");
             if (RecordSubmission(room, player, session.Id, action, clientSubmissionId, fingerprint) != SubmissionDecision.Accepted)
                 return new FinalRoundUploadResult(room, artifact.Id, false);
 
@@ -837,8 +836,8 @@ public sealed class RoomService(
         var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new DrawingAnswerException("final_round_not_active", "Final round is not active.");
         if (session.Stage != GameStage.CollectingFinalVotes || session.StageEndsAtUtc <= now) throw new DrawingAnswerException("final_round_not_active", "Final voting is not active.");
         if (!state.Artifacts.Any(artifact => artifact.Id == artifactId && (artifact.FinalMediaAssetId ?? artifact.OriginalMediaAssetId) is not null)) throw new DrawingAnswerException("final_round_artifact_not_found", "Final artifact was not found.");
-        if (state.Votes.Any(vote => vote.VoterPlayerId == player.Id)) throw new DrawingAnswerException("final_round_already_submitted", "The player has already voted.");
         if (HasStableId(clientSubmissionId) && TryRecordReplay(room, player, session.Id, SubmissionActionType.FinalVote, clientSubmissionId!.Value, Fingerprint(artifactId))) return false;
+        if (state.Votes.Any(vote => vote.VoterPlayerId == player.Id)) throw new DrawingAnswerException("final_round_already_submitted", "The player has already voted.");
         if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, session.Id, SubmissionActionType.FinalVote, clientSubmissionId!.Value, Fingerprint(artifactId)) != SubmissionDecision.Accepted) return false;
         state.Votes.Add(new FinalRoundVote { VoterPlayerId = player.Id, ArtifactId = artifactId, ClientSubmissionId = clientSubmissionId });
         session.FinalRoundStateJson = state.Write();
