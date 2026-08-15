@@ -26,8 +26,10 @@ final class GameSessionStore {
     private var privateStateRefreshTask: Task<Void, Never>?
     private var activeQuestionInstanceId: UUID?
     private var privateStateRefreshInFlightQuestionId: UUID?
+    private var finalRoundPrivateStateRefreshInFlight = false
     private var submissionIds: [String: UUID] = [:]
     private(set) var privateStateRefreshFailedQuestionId: UUID?
+    private(set) var finalRoundPrivateStateRefreshFailed = false
 
     private(set) var screen: GameScreen = .idle
     private(set) var session: LocalPlayerSession?
@@ -541,6 +543,9 @@ final class GameSessionStore {
             pendingFinalRoundPrivateState = nil
             applyPrivateGameState(pending)
         }
+        if enteredFinalRound {
+            finalRoundPrivateStateRefreshFailed = false
+        }
         if !isUITesting, (questionChanged || enteredDrawingAnswerCollection), nextQuestion != nil {
             // Drawing eligibility is created with the transition to this stage.
             // A private state fetched during the preceding intro has the same
@@ -1017,14 +1022,12 @@ final class GameSessionStore {
     }
 
     func refreshFinalRoundPrivateState() async {
-        guard let expectedQuestionId = snapshot?.game?.resolvedQuestionInstanceId,
-              privateStateRefreshInFlightQuestionId != expectedQuestionId else { return }
-        privateStateRefreshInFlightQuestionId = expectedQuestionId
-        privateStateRefreshFailedQuestionId = nil
+        guard !finalRoundPrivateStateRefreshInFlight,
+              snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true else { return }
+        finalRoundPrivateStateRefreshInFlight = true
+        finalRoundPrivateStateRefreshFailed = false
         defer {
-            if privateStateRefreshInFlightQuestionId == expectedQuestionId {
-                privateStateRefreshInFlightQuestionId = nil
-            }
+            finalRoundPrivateStateRefreshInFlight = false
         }
         // This is a recovery path, not normal delivery. SignalR carries the
         // private final contract, while a bounded resume retry makes an actual
@@ -1032,20 +1035,19 @@ final class GameSessionStore {
         for attempt in 0 ..< 5 {
             guard !Task.isCancelled,
                   snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true,
-                  snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId,
                   let session, let reconnectToken, let baseURL else { return }
             do {
                 let resumed = try await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken)
                 guard !Task.isCancelled,
-                      snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
+                      snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true else { return }
                 applyPrivateGameState(resumed.privateState)
                 if resumed.privateState.finalRound != nil { return }
             } catch { }
             if attempt < 4 { try? await Task.sleep(for: .milliseconds(500)) }
         }
         guard !Task.isCancelled,
-              snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
-        privateStateRefreshFailedQuestionId = expectedQuestionId
+              snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true else { return }
+        finalRoundPrivateStateRefreshFailed = true
     }
 
     private func refreshPrivateStateAfterStaleResponse() async {
@@ -1108,6 +1110,7 @@ final class GameSessionStore {
         photoUploadTask = nil
         drawingUploadTask = nil
         privateStateRefreshTask = nil
+        finalRoundPrivateStateRefreshInFlight = false
         realtime.onStatusChanged = nil
         realtime.onSnapshot = nil
         realtime.onRoomStarted = nil

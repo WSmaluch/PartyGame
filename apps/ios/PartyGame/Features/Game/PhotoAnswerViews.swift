@@ -108,7 +108,7 @@ struct FinalRoundSelfiePrivateStateLoader: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if store.privateStateRefreshFailedQuestionId == game.resolvedQuestionInstanceId {
+            if store.finalRoundPrivateStateRefreshFailed {
                 Text("finalRound.selfieUnavailable").multilineTextAlignment(.center)
                 Button("common.retry") { Task { await store.refreshFinalRoundPrivateState() } }
                     .buttonStyle(.borderedProminent)

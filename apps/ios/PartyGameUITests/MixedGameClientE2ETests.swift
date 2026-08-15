@@ -185,7 +185,7 @@ final class MixedGameClientE2ETests: XCTestCase {
             } else if !submitted.contains("finalselfie"),
                       let current = try? snapshot(from: app, event: "final-selfie-detected"),
                       current.phase == "collectingFinalSelfies",
-                      app.otherElements["final-round-selfie-view"].exists,
+                      app.descendants(matching: .any)["final-round-selfie-view"].exists,
                       app.buttons["photoAnswer.chooseLibrary"].exists {
                 // The dedicated final-selfie root is rendered only after the
                 // private SignalR/REST contract supplied a non-empty prompt.
