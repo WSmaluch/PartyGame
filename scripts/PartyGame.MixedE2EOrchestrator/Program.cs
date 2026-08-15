@@ -151,6 +151,11 @@ try
             {
                 case "CollectingFinalSelfies":
                     await WaitForMarker("display-finalround-selfies", TimeSpan.FromSeconds(30));
+                    AssertFinalSelfieProgress(room, expectedSubmitted: 0, expectedRequired: 3);
+                    await WaitUntil(() => hostPrivate.FinalSelfieActionable && nodePrivate.FinalSelfieActionable, TimeSpan.FromSeconds(15), "prywatne kontrakty Final Selfie dla obu skryptowanych graczy");
+                    if (string.IsNullOrWhiteSpace(hostPrivate.FinalSelfiePrompt) || string.IsNullOrWhiteSpace(nodePrivate.FinalSelfiePrompt))
+                        throw new InvalidOperationException("Skryptowany gracz dostał Final Selfie bez promptu.");
+                    await WaitForMarker($"ios-final-selfie-actionable-{room.GetProperty("stateVersion").GetInt64()}", TimeSpan.FromSeconds(45));
                     await WaitForMarker($"ios-final-selfie-submitted-{room.GetProperty("stateVersion").GetInt64()}", TimeSpan.FromSeconds(45));
                     var hostFinalSelfieSubmissionId = SubmissionId(host, Guid.Empty, "final-selfie");
                     await UploadFinalSelfie(roomCode, host, hostPhoto, hostFinalSelfieSubmissionId);
@@ -514,7 +519,15 @@ void ThrowObservationFailure()
 }
 static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : throw new InvalidOperationException($"Brak wymaganej zmiennej środowiskowej {name}.");
 static PlayerAccess Access(JsonElement response, string name) => new(response.GetProperty("playerId").GetGuid(), response.GetProperty("reconnectToken").GetString()!, name);
-static PrivateState Private(JsonElement value) => new(ReadGuid(value, "ownTextAnswerId"), ReadGuid(value, "ownPhotoAnswerId"), ReadGuid(value, "ownDrawingAnswerId"));
+static PrivateState Private(JsonElement value)
+{
+    var final = value.TryGetProperty("finalRound", out var finalRound) && finalRound.ValueKind == JsonValueKind.Object ? finalRound : default;
+    var actionable = final.ValueKind == JsonValueKind.Object && final.TryGetProperty("canSubmitSelfie", out var canSubmit) && canSubmit.ValueKind == JsonValueKind.True;
+    var prompt = final.ValueKind == JsonValueKind.Object && final.TryGetProperty("selfiePrompt", out var selfiePrompt) && selfiePrompt.ValueKind == JsonValueKind.Object
+        ? selfiePrompt.TryGetProperty("en", out var en) ? en.GetString() : selfiePrompt.TryGetProperty("pl", out var pl) ? pl.GetString() : null
+        : null;
+    return new(ReadGuid(value, "ownTextAnswerId"), ReadGuid(value, "ownPhotoAnswerId"), ReadGuid(value, "ownDrawingAnswerId"), actionable, prompt);
+}
 static Guid? ReadGuid(JsonElement value, string property) => value.TryGetProperty(property, out var item) && item.ValueKind == JsonValueKind.String && Guid.TryParse(item.GetString(), out var id) ? id : null;
 static int AuditCount(IEnumerable<JsonElement> entries, string result) => entries.Count(entry => entry.GetProperty("result").GetString() == result);
 static int DomainDuplicateCount(IEnumerable<JsonElement> entries, string action) => entries
@@ -585,6 +598,14 @@ static void AssertAllMediaSubmitted(JsonElement room, string resultsProperty, st
     if (submitted != required || required < 1)
         throw new InvalidOperationException($"{questionType}: przyjęto {submitted} z {required} wymaganych odpowiedzi.");
 }
+static void AssertFinalSelfieProgress(JsonElement room, int expectedSubmitted, int expectedRequired)
+{
+    var final = room.GetProperty("game").GetProperty("finalRound");
+    var submitted = final.GetProperty("submittedSelfies").GetInt32();
+    var required = final.GetProperty("requiredSelfies").GetInt32();
+    if (submitted != expectedSubmitted || required != expectedRequired)
+        throw new InvalidOperationException($"Display/public Final Selfie postęp przed uploadami jest nieprawidłowy: {submitted}/{required}.");
+}
 static void ValidateStarted(JsonElement room, Guid packageId) { if (room.GetProperty("phase").GetString() != "Started") throw new InvalidOperationException("Pokój nie przeszedł do Started."); if (room.GetProperty("contentPackageVersionId").GetGuid() != packageId) throw new InvalidOperationException("Pokój zmienił wersję pakietu."); if (room.GetProperty("startedAtUtc").ValueKind == JsonValueKind.Null) throw new InvalidOperationException("Brakuje startedAtUtc."); if (room.GetProperty("players").EnumerateArray().Any(player => !player.GetProperty("isReady").GetBoolean())) throw new InvalidOperationException("Gra wystartowała przed Ready wszystkich graczy."); }
 static void ValidateFinalRoundCompleted(JsonElement room)
 {
@@ -625,7 +646,7 @@ internal sealed class GameTracker
 }
 
 internal sealed record PlayerAccess(Guid Id, string Token, string Name);
-internal sealed record PrivateState(Guid? TextAnswerId = null, Guid? PhotoAnswerId = null, Guid? DrawingAnswerId = null);
+internal sealed record PrivateState(Guid? TextAnswerId = null, Guid? PhotoAnswerId = null, Guid? DrawingAnswerId = null, bool FinalSelfieActionable = false, string? FinalSelfiePrompt = null);
 internal sealed record ActiveQuestion(Guid Id, Guid InstanceId, string Type, string Stage, int Number, long StateVersion);
 internal sealed record FinalEditAssignment(Guid ArtifactId, Guid EditorPlayerId);
 internal sealed record QuestionDefinition(string Key, string Type, string TextPl, string TextEn, int SortOrder);

@@ -6,17 +6,28 @@ import UIKit
 struct PhotoAnswerCaptureView: View {
     let store: GameSessionStore
     let game: GameSnapshot
+    let finalRoundPrivateState: FinalRoundPrivateState?
     @Environment(\.openURL) private var openURL
     @State private var pickerItem: PhotosPickerItem?
     @State private var showsCamera = false
     @State private var cameraMessage: String?
 
+    init(store: GameSessionStore, game: GameSnapshot, finalRoundPrivateState: FinalRoundPrivateState? = nil) {
+        self.store = store
+        self.game = game
+        self.finalRoundPrivateState = finalRoundPrivateState
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                PhotoAnswerTaskHeader(game: game)
-                Text(String(format: String(localized: "photoAnswer.submissionProgress"), game.photoAnswerResults?.submittedPlayers ?? 0,
-                            game.photoAnswerResults?.requiredPlayers ?? 0))
+                if let finalRoundPrivateState {
+                    FinalRoundSelfieTaskHeader(privateState: finalRoundPrivateState)
+                } else {
+                    PhotoAnswerTaskHeader(game: game)
+                }
+                Text(String(format: String(localized: "photoAnswer.submissionProgress"), finalRoundPrivateState == nil ? game.photoAnswerResults?.submittedPlayers ?? 0 : game.finalRound?.submittedSelfies ?? 0,
+                            finalRoundPrivateState == nil ? game.photoAnswerResults?.requiredPlayers ?? 0 : game.finalRound?.requiredSelfies ?? 0))
                     .font(.headline)
 
                 if let draft = store.photoDraft, draft.questionInstanceId == game.resolvedQuestionInstanceId {
@@ -58,6 +69,7 @@ struct PhotoAnswerCaptureView: View {
                 pickerItem = nil
             }
         }
+        .accessibilityIdentifier(finalRoundPrivateState == nil ? "photo-answer-capture-view" : "final-round-selfie-view")
     }
 
     private func requestCamera() {
@@ -77,6 +89,36 @@ struct PhotoAnswerCaptureView: View {
         case .denied, .restricted: cameraMessage = String(localized: "photoAnswer.cameraDenied")
         @unknown default: cameraMessage = String(localized: "photoAnswer.cameraUnavailable")
         }
+    }
+}
+
+struct FinalRoundSelfieView: View {
+    let store: GameSessionStore
+    let game: GameSnapshot
+    let privateState: FinalRoundPrivateState
+
+    var body: some View {
+        PhotoAnswerCaptureView(store: store, game: game, finalRoundPrivateState: privateState)
+    }
+}
+
+struct FinalRoundSelfiePrivateStateLoader: View {
+    let store: GameSessionStore
+    let game: GameSnapshot
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if store.privateStateRefreshFailedQuestionId == game.resolvedQuestionInstanceId {
+                Text("finalRound.selfieUnavailable").multilineTextAlignment(.center)
+                Button("common.retry") { Task { await store.refreshFinalRoundPrivateState() } }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("final-round-selfie-retry")
+            } else {
+                ProgressView().accessibilityIdentifier("final-round-selfie-loading")
+            }
+        }
+        .task { await store.refreshFinalRoundPrivateState() }
+        .accessibilityIdentifier("final-round-selfie-private-state-loader")
     }
 }
 
@@ -249,6 +291,20 @@ private struct PhotoAnswerTaskHeader: View {
             Text("\(String(localized: "round.summary.title")) \(game.currentRoundNumber) · \(game.currentQuestionNumber)/\(game.questionsInCurrentRound)").font(.caption)
             Text(game.categories?.first?.name ?? "").foregroundStyle(.secondary)
             Text(game.currentQuestion?.questionText.local ?? "").font(.title2.bold()).multilineTextAlignment(.center)
+        }
+    }
+}
+
+private struct FinalRoundSelfieTaskHeader: View {
+    let privateState: FinalRoundPrivateState
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("finalRound.selfieTitle").font(.caption).foregroundStyle(.secondary)
+            Text(privateState.selfiePrompt?.local ?? "").font(.title2.bold()).multilineTextAlignment(.center)
+            if let role = privateState.targetRole?.local, !role.isEmpty {
+                Text(role).foregroundStyle(.secondary)
+            }
         }
     }
 }

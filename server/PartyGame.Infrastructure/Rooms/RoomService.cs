@@ -1144,7 +1144,10 @@ public sealed class RoomService(
                         source is Guid sourceId ? $"/api/media/{sourceId}/display" : null,
                         source is Guid thumbnailId ? $"/api/media/{thumbnailId}/thumbnail" : null,
                         assignment is not null && final.Edits.Any(edit => edit.ArtifactId == assignment.Id && edit.PassNumber == final.CurrentPass && edit.EditorPlayerId == playerId),
-                        final.Votes.Any(vote => vote.VoterPlayerId == playerId)));
+                        final.Votes.Any(vote => vote.VoterPlayerId == playerId),
+                        own is null ? null : new PartyGame.Domain.Rooms.FinalRoundPrivateText(own.SelfiePromptPl, own.SelfiePromptEn),
+                        own is null ? null : new PartyGame.Domain.Rooms.FinalRoundPrivateText(own.TargetRolePl, own.TargetRoleEn),
+                        room.Session.Stage == GameStage.CollectingFinalSelfies && own?.OriginalMediaAssetId is null));
             }
         }
 

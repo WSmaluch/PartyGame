@@ -185,7 +185,13 @@ final class MixedGameClientE2ETests: XCTestCase {
             } else if !submitted.contains("finalselfie"),
                       let current = try? snapshot(from: app, event: "final-selfie-detected"),
                       current.phase == "collectingFinalSelfies",
+                      app.otherElements["final-round-selfie-view"].exists,
                       app.buttons["photoAnswer.chooseLibrary"].exists {
+                // The dedicated final-selfie root is rendered only after the
+                // private SignalR/REST contract supplied a non-empty prompt.
+                // Publish this before opening PhotosPicker so the orchestrator
+                // can prove all three players are actionable while Display is 0/3.
+                mark("ios-final-selfie-actionable-\(current.stateVersion)")
                 app.buttons["photoAnswer.chooseLibrary"].tap()
                 try chooseImportedPhoto()
                 try waitFor(app.buttons["photoAnswer.usePhoto"], timeout: 15, description: "przycisk wysłania finałowego zdjęcia").tap()

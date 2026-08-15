@@ -101,6 +101,22 @@ final class RoomModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.game?.resolvedQuestionInstanceId?.uuidString, "00000000-0000-0000-0000-000000000011")
     }
 
+    func testDecodesThreePlayerPrivateFinalSelfieContractsFromBackendWireShape() throws {
+        let payloads = [
+            #"{"playerId":"00000000-0000-0000-0000-000000000001","questionInstanceId":"00000000-0000-0000-0000-000000000099","hasSubmittedTextAnswer":false,"hasSubmittedTextAnswerVote":false,"hasSubmittedPhotoAnswer":false,"hasSubmittedPhotoAnswerVote":false,"hasSubmittedDrawingAnswer":false,"hasSubmittedDrawingAnswerVote":false,"isEligibleForDrawingAnswer":false,"finalRound":{"hasSubmittedSelfie":false,"assignedArtifactId":null,"sourceDisplayMediaUrl":null,"sourceThumbnailMediaUrl":null,"hasSubmittedEdit":false,"hasSubmittedVote":false,"selfiePrompt":{"pl":"Pokaż groźną minę","en":"Make a scary face"},"targetRole":{"pl":"bandyta","en":"bandit"},"canSubmitSelfie":true}}"#,
+            #"{"playerId":"00000000-0000-0000-0000-000000000002","questionInstanceId":"00000000-0000-0000-0000-000000000099","hasSubmittedTextAnswer":false,"hasSubmittedTextAnswerVote":false,"hasSubmittedPhotoAnswer":false,"hasSubmittedPhotoAnswerVote":false,"hasSubmittedDrawingAnswer":false,"hasSubmittedDrawingAnswerVote":false,"isEligibleForDrawingAnswer":false,"finalRound":{"hasSubmittedSelfie":false,"assignedArtifactId":null,"sourceDisplayMediaUrl":null,"sourceThumbnailMediaUrl":null,"hasSubmittedEdit":false,"hasSubmittedVote":false,"selfiePrompt":{"pl":"Zrób minę jak gwiazda rocka","en":"Make a rock-star face"},"targetRole":{"pl":"kosmiczny pirat","en":"space pirate"},"canSubmitSelfie":true}}"#,
+            #"{"playerId":"00000000-0000-0000-0000-000000000003","questionInstanceId":"00000000-0000-0000-0000-000000000099","hasSubmittedTextAnswer":false,"hasSubmittedTextAnswerVote":false,"hasSubmittedPhotoAnswer":false,"hasSubmittedPhotoAnswerVote":false,"hasSubmittedDrawingAnswer":false,"hasSubmittedDrawingAnswerVote":false,"isEligibleForDrawingAnswer":false,"finalRound":{"hasSubmittedSelfie":false,"assignedArtifactId":null,"sourceDisplayMediaUrl":null,"sourceThumbnailMediaUrl":null,"hasSubmittedEdit":false,"hasSubmittedVote":false,"selfiePrompt":{"pl":"Udawaj tajemniczego bohatera","en":"Pose as a mysterious hero"},"targetRole":{"pl":"król disco","en":"disco royalty"},"canSubmitSelfie":true}}"#
+        ]
+
+        let privateStates = try payloads.map { try JSONDecoder().decode(PlayerPrivateGameState.self, from: Data($0.utf8)) }
+
+        XCTAssertEqual(privateStates.count, 3)
+        XCTAssertEqual(Set(privateStates.map(\.playerId)).count, 3)
+        XCTAssertTrue(privateStates.allSatisfy { $0.finalRound?.canSubmitSelfie == true })
+        XCTAssertTrue(privateStates.allSatisfy { !($0.finalRound?.selfiePrompt?.local ?? "").isEmpty })
+        XCTAssertEqual(privateStates[0].finalRound?.selfiePrompt?.translations?["en"], "Make a scary face")
+    }
+
     @MainActor
     func testRoomCodeNormalizationRemovesAmbiguousCharacters() {
         XCTAssertEqual(GameSessionStore.normalizedRoomCode("a1bi-cd"), "ABCD")

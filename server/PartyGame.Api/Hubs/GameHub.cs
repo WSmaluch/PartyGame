@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Contracts;
+using PartyGame.Domain.Game;
 using PartyGame.GameEngine;
 using PartyGame.Infrastructure.Rooms;
 
@@ -307,6 +308,22 @@ public sealed class GameHub : Hub
             await Clients.Group(RoomNotifier.GroupName(result.Room.Code)).SendAsync("RoomStarted", snapshot, Context.ConnectionAborted);
         }
         await Clients.Group(RoomNotifier.GroupName(result.Room.Code)).SendAsync("RoomSnapshotUpdated", snapshot, Context.ConnectionAborted);
+        await NotifyFinalRoundPrivateStatesAsync(result.Room);
+    }
+
+    private async Task NotifyFinalRoundPrivateStatesAsync(PartyGame.Domain.Rooms.GameRoom room)
+    {
+        if (room.Session?.Stage is not (GameStage.CollectingFinalSelfies or GameStage.CollectingFinalEdits or GameStage.CollectingFinalVotes))
+            return;
+
+        foreach (var player in room.Players)
+        {
+            var connectionId = connectionRegistry.GetActivePlayerConnection(player.Id);
+            if (connectionId is null)
+                continue;
+            var privateState = await roomService.GetPlayerPrivateGameStateAsync(room.Code, player.Id, Context.ConnectionAborted);
+            await Clients.Client(connectionId).SendAsync("PlayerPrivateGameStateUpdated", privateState, Context.ConnectionAborted);
+        }
     }
 }
 

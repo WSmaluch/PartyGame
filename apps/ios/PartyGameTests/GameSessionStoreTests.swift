@@ -353,6 +353,38 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(api.resumeCallCount, 5)
     }
 
+    func testFinalSelfiePrivateEventArrivingBeforePublicSnapshotIsBufferedAndApplied() async {
+        let playerId = UUID(), artifactId = UUID(), finalSessionId = UUID()
+        let lobby = roomSnapshot(playerId: playerId, version: 1, game: nil)
+        let finalPrivate = PlayerPrivateGameState(playerId: playerId, questionInstanceId: finalSessionId,
+            hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false,
+            finalRound: FinalRoundPrivateState(hasSubmittedSelfie: false, assignedArtifactId: nil,
+                sourceDisplayMediaUrl: nil, sourceThumbnailMediaUrl: nil, hasSubmittedEdit: false, hasSubmittedVote: false,
+                selfiePrompt: LocalizedText(defaultText: "Pokaż groźną minę", translations: ["pl": "Pokaż groźną minę", "en": "Make a scary face"]),
+                targetRole: LocalizedText(defaultText: "bandyta", translations: ["pl": "bandyta", "en": "bandit"]), canSubmitSelfie: true))
+        let final = GameSnapshot(stage: .collectingFinalSelfies, currentRoundNumber: 2, totalRounds: 2, currentQuestionNumber: 0,
+            questionsInCurrentRound: 0, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil,
+            scores: [], categories: nil, currentQuestion: nil, playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil,
+            finalRound: FinalRoundSnapshot(currentPass: 0, totalPasses: 2, submittedSelfies: 0, requiredSelfies: 3,
+                submittedEdits: 0, requiredEdits: 0, submittedVotes: 0, requiredVotes: 0,
+                artifacts: [FinalRoundArtifact(artifactId: artifactId, subjectPlayerId: playerId, subjectNickname: "Ola",
+                    selfiePrompt: LocalizedText(defaultText: "publiczny, nieużywany", translations: nil), targetRole: LocalizedText(defaultText: "bandyta", translations: nil),
+                    displayMediaUrl: nil, thumbnailMediaUrl: nil, voteCount: 0, isTopResult: false)], editAssignments: nil))
+        let finalSnapshot = roomSnapshot(playerId: playerId, version: 2, game: final)
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: lobby,
+            privateState: PlayerPrivateGameState(playerId: playerId, questionInstanceId: nil, hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false))
+        realtime.attachPlayerResult = lobby
+        api.resumeResult = ResumePlayerResponse(player: finalSnapshot.players[0], snapshot: finalSnapshot, privateState: finalPrivate)
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+
+        realtime.onPlayerPrivateGameStateUpdated?(finalPrivate)
+        XCTAssertNil(store.privateGameState?.finalRound)
+        store.apply(finalSnapshot)
+
+        XCTAssertEqual(store.privateGameState?.finalRound?.selfiePrompt?.local, "Pokaż groźną minę")
+        XCTAssertEqual(store.privateGameState?.finalRound?.canSubmitSelfie, true)
+    }
+
     func testTextAnswerRetryReusesSubmissionIdAndNewQuestionGetsNewId() async {
         let playerId = UUID(), firstQuestion = UUID(), secondQuestion = UUID()
         let first = roomSnapshot(playerId: playerId, version: 1, game: textGame(questionId: firstQuestion))

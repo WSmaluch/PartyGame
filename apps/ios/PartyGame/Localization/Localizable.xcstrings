@@ -3224,6 +3224,8 @@
         "pl" : { "stringUnit" : { "state" : "translated", "value" : "Runda finałowa: dodaj swoją edycję" } }
       }
     },
+    "finalRound.selfieTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Final selfie" } }, "pl" : { "stringUnit" : { "state" : "translated", "value" : "Finałowe selfie" } } } },
+    "finalRound.selfieUnavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your final task could not be loaded." } }, "pl" : { "stringUnit" : { "state" : "translated", "value" : "Nie udało się pobrać Twojego zadania finałowego." } } } },
     "finalRound.editProgress" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Edit %d of %d" } },

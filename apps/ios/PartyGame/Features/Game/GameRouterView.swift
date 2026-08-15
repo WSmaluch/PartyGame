@@ -74,7 +74,14 @@ struct GameRouterView: View {
                     DrawingResultsView(store: store, game: game)
                 case .collectingFinalSelfies:
                     if store.privateGameState?.finalRound?.hasSubmittedSelfie == true { FinalRoundWaitingView(game: game, message: "photoAnswer.sent") }
-                    else { PhotoAnswerCaptureView(store: store, game: game) }
+                    else if let final = store.privateGameState?.finalRound,
+                            final.canSubmitSelfie == true,
+                            let prompt = final.selfiePrompt,
+                            !prompt.local.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        FinalRoundSelfieView(store: store, game: game, privateState: final)
+                    } else {
+                        FinalRoundSelfiePrivateStateLoader(store: store, game: game)
+                    }
                 case .collectingFinalEdits:
                     FinalRoundEditView(store: store, game: game)
                 case .showingFinalPresentation:

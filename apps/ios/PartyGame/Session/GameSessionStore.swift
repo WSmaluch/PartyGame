@@ -33,6 +33,11 @@ final class GameSessionStore {
     private(set) var session: LocalPlayerSession?
     private(set) var snapshot: RoomSnapshot?
     private(set) var privateGameState: PlayerPrivateGameState?
+    // SignalR transports the public snapshot and private player contract on
+    // separate sends. Retain a final-round contract that races ahead of its
+    // public stage instead of discarding it because it belongs to the final
+    // session id rather than the preceding question id.
+    private var pendingFinalRoundPrivateState: PlayerPrivateGameState?
     private(set) var realtimeStatus: RealtimeConnectionStatus = .disconnected
     private(set) var isWorking = false
     private(set) var serverOffset: TimeInterval = 0
@@ -356,7 +361,8 @@ final class GameSessionStore {
 
     func preparePhotoAnswer(_ image: UIImage) async {
         guard let session, let questionId = snapshot?.game?.resolvedQuestionInstanceId,
-              (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies), !photoActionsExpired else { return }
+              (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies), !photoActionsExpired,
+              snapshot?.game?.stage != .collectingFinalSelfies || privateGameState?.finalRound?.canSubmitSelfie == true else { return }
         photoUploadPhase = .preparing
         errorMessage = nil
         do {
@@ -381,7 +387,9 @@ final class GameSessionStore {
 
     func uploadPhotoAnswer() {
         guard photoUploadTask == nil, (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies),
-              !photoActionsExpired, let draft = photoDraft else { return }
+              !photoActionsExpired,
+              snapshot?.game?.stage != .collectingFinalSelfies || privateGameState?.finalRound?.canSubmitSelfie == true,
+              let draft = photoDraft else { return }
         photoUploadTask = Task { [weak self] in
             await self?.performPhotoAnswerUpload(draft)
             self?.photoUploadTask = nil
@@ -529,6 +537,10 @@ final class GameSessionStore {
             privateStateRefreshFailedQuestionId = nil
         }
         activeQuestionInstanceId = nextQuestion
+        if enteredFinalRound, let pending = pendingFinalRoundPrivateState {
+            pendingFinalRoundPrivateState = nil
+            applyPrivateGameState(pending)
+        }
         if !isUITesting, (questionChanged || enteredDrawingAnswerCollection), nextQuestion != nil {
             // Drawing eligibility is created with the transition to this stage.
             // A private state fetched during the preceding intro has the same
@@ -692,7 +704,7 @@ final class GameSessionStore {
         let players = [RoomPlayer(id: ola, nickname: "Ola", isHost: true, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0), RoomPlayer(id: jan, nickname: "Jan", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 100), RoomPlayer(id: ewa, nickname: "Ewa", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 50)]
         let game = GameSnapshot(stage: stage, currentRoundNumber: 2, totalRounds: 2, currentQuestionNumber: 0, questionsInCurrentRound: 0, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil, scores: [], categories: nil, currentQuestion: nil, playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil, ranking: nil, finalRound: final)
         apply(RoomSnapshot(roomCode: "ABCD", phase: stage == .completed ? .completed : .started, stateVersion: 77, displayConnected: true, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: players, createdAtUtc: "2026-08-12T12:00:00Z", startedAtUtc: "2026-08-12T12:01:00Z", game: game))
-        privateGameState = PlayerPrivateGameState(playerId: ola, questionInstanceId: UUID(), hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false, finalRound: FinalRoundPrivateState(hasSubmittedSelfie: argument != "-uiTestingFinalSelfie", assignedArtifactId: artifactId, sourceDisplayMediaUrl: "/api/media/source/display", sourceThumbnailMediaUrl: "/api/media/source/thumbnail", hasSubmittedEdit: argument == "-uiTestingFinalEditWaiting", hasSubmittedVote: argument == "-uiTestingFinalVoteWaiting"))
+        privateGameState = PlayerPrivateGameState(playerId: ola, questionInstanceId: UUID(), hasSubmittedTextAnswer: false, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: false, finalRound: FinalRoundPrivateState(hasSubmittedSelfie: argument != "-uiTestingFinalSelfie", assignedArtifactId: artifactId, sourceDisplayMediaUrl: "/api/media/source/display", sourceThumbnailMediaUrl: "/api/media/source/thumbnail", hasSubmittedEdit: argument == "-uiTestingFinalEditWaiting", hasSubmittedVote: argument == "-uiTestingFinalVoteWaiting", selfiePrompt: LocalizedText(defaultText: "Pokaż groźną minę", translations: ["pl": "Pokaż groźną minę", "en": "Make a scary face"]), targetRole: LocalizedText(defaultText: "bandyta", translations: ["pl": "bandyta", "en": "bandit"]), canSubmitSelfie: argument == "-uiTestingFinalSelfie"))
         screen = .started
     }
 
@@ -874,6 +886,7 @@ final class GameSessionStore {
         accumulator = SnapshotAccumulator()
         snapshot = nil
         privateGameState = nil
+        pendingFinalRoundPrivateState = nil
         photoDraft = nil
         photoUploadPhase = .idle
         selectedPhotoAnswerVoteId = nil
@@ -903,7 +916,9 @@ final class GameSessionStore {
               (snapshot?.game?.stage == .collectingPhotoAnswers || snapshot?.game?.stage == .collectingFinalSelfies),
               !photoActionsExpired,
               snapshot?.game?.resolvedQuestionInstanceId == draft.questionInstanceId,
-              privateGameState?.hasSubmittedPhotoAnswer != true else { return }
+              snapshot?.game?.stage != .collectingFinalSelfies
+                ? privateGameState?.hasSubmittedPhotoAnswer != true
+                : privateGameState?.finalRound?.canSubmitSelfie == true else { return }
         do {
             let data = try await Task.detached { try Data(contentsOf: draft.fileURL) }.value
             photoUploadPhase = .uploading(0)
@@ -1001,13 +1016,36 @@ final class GameSessionStore {
         catch { drawingUploadPhase = .failed(error.localizedDescription); errorMessage = error.localizedDescription }
     }
 
-    private func refreshFinalRoundPrivateState() async {
-        guard let session, let reconnectToken, let baseURL else { return }
-        do {
-            let resumed = try await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken)
-            guard snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true else { return }
-            applyPrivateGameState(resumed.privateState)
-        } catch { return }
+    func refreshFinalRoundPrivateState() async {
+        guard let expectedQuestionId = snapshot?.game?.resolvedQuestionInstanceId,
+              privateStateRefreshInFlightQuestionId != expectedQuestionId else { return }
+        privateStateRefreshInFlightQuestionId = expectedQuestionId
+        privateStateRefreshFailedQuestionId = nil
+        defer {
+            if privateStateRefreshInFlightQuestionId == expectedQuestionId {
+                privateStateRefreshInFlightQuestionId = nil
+            }
+        }
+        // This is a recovery path, not normal delivery. SignalR carries the
+        // private final contract, while a bounded resume retry makes an actual
+        // reconnect failure visible instead of leaving an endless spinner.
+        for attempt in 0 ..< 5 {
+            guard !Task.isCancelled,
+                  snapshot?.game.map({ [.collectingFinalSelfies, .collectingFinalEdits, .collectingFinalVotes].contains($0.stage) }) == true,
+                  snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId,
+                  let session, let reconnectToken, let baseURL else { return }
+            do {
+                let resumed = try await api.resume(baseURL: baseURL, session: session, reconnectToken: reconnectToken)
+                guard !Task.isCancelled,
+                      snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
+                applyPrivateGameState(resumed.privateState)
+                if resumed.privateState.finalRound != nil { return }
+            } catch { }
+            if attempt < 4 { try? await Task.sleep(for: .milliseconds(500)) }
+        }
+        guard !Task.isCancelled,
+              snapshot?.game?.resolvedQuestionInstanceId == expectedQuestionId else { return }
+        privateStateRefreshFailedQuestionId = expectedQuestionId
     }
 
     private func refreshPrivateStateAfterStaleResponse() async {
@@ -1081,6 +1119,10 @@ final class GameSessionStore {
         guard candidate.playerId == session?.playerId else { return }
         let currentQuestion = snapshot?.game?.resolvedQuestionInstanceId
         let finalStage = snapshot?.game.map { [.collectingFinalSelfies, .collectingFinalEdits, .showingFinalPresentation, .collectingFinalVotes, .showingFinalResults].contains($0.stage) } == true
+        if candidate.finalRound != nil && !finalStage {
+            pendingFinalRoundPrivateState = candidate
+            return
+        }
         guard candidate.questionInstanceId == currentQuestion || (finalStage && candidate.finalRound != nil) else { return }
         if let current = privateGameState, current.questionInstanceId == candidate.questionInstanceId {
             privateGameState = PlayerPrivateGameState(
