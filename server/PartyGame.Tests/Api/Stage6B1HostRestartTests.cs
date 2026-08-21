@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Api.Contracts;
+using PartyGame.Api.Hubs;
 using PartyGame.Domain.Game;
 using PartyGame.Infrastructure.Persistence;
 
@@ -75,7 +76,7 @@ public sealed class Stage6B1HostRestartTests
         var secondConnection = Connection(harness);
         var thirdConnection = Connection(harness);
         var connections = new[] { first, secondConnection, thirdConnection };
-        await Task.WhenAll(connections.Append(display).Select(connection => connection.StartAsync()));
+        await Task.WhenAll(connections.Append(display).Select(StartAndConfirmReadyAsync));
         await display.InvokeAsync<RoomSnapshot>("AttachDisplay", host.RoomCode);
         await Task.WhenAll(players.Zip(connections).Select(pair => pair.Second.InvokeAsync<RoomSnapshot>("AttachPlayer", pair.First.RoomCode, pair.First.PlayerId, pair.First.ReconnectToken)));
         await Task.WhenAll(players.Select(player => DrawingAnswerGameE2ETests.UploadProfile(harness, player)));
@@ -218,6 +219,13 @@ public sealed class Stage6B1HostRestartTests
         .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
         .Build();
 
+    private static async Task StartAndConfirmReadyAsync(HubConnection connection)
+    {
+        await connection.StartAsync();
+        var response = await connection.InvokeAsync<HubPingResponse>("Ping");
+        Assert.Equal("pong", response.Status);
+    }
+
     private static async Task<RoomAccessResponse> CreateAsync(
         PhotoAnswerTestHarness harness,
         string nickname,
@@ -253,7 +261,11 @@ public sealed class Stage6B1HostRestartTests
         public async ValueTask DisposeAsync()
         {
             foreach (var connection in connections)
+            {
+                if (connection.State != HubConnectionState.Disconnected)
+                    await connection.StopAsync();
                 await connection.DisposeAsync();
+            }
         }
     }
 
