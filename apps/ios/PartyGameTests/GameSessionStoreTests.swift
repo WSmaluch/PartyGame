@@ -381,7 +381,7 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertNil(store.privateGameState?.finalRound)
         store.apply(finalSnapshot)
 
-        XCTAssertEqual(store.privateGameState?.finalRound?.selfiePrompt?.local, "Pokaż groźną minę")
+        XCTAssertEqual(store.privateGameState?.finalRound?.selfiePrompt?.defaultText, "Pokaż groźną minę")
         XCTAssertEqual(store.privateGameState?.finalRound?.canSubmitSelfie, true)
     }
 
