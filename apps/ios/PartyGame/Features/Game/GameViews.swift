@@ -196,7 +196,6 @@ struct CompletedView: View {
                             HStack {
                                 Text("#\(ranking.position)")
                                     .font(.headline)
-                                    .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                                 if let p = players.first(where: { $0.id == ranking.playerId }) {
                                     Text(p.nickname)
                                 }
@@ -204,6 +203,8 @@ struct CompletedView: View {
                                 Text(String(format: String(localized: "score.points"), ranking.score))
                             }
                             .padding(.vertical, 12)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                             if ranking.playerId != orderedFinalRanking.last?.playerId {
                                 Divider()
                             }
@@ -211,7 +212,13 @@ struct CompletedView: View {
                     }
                     .padding(.horizontal, 16)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .accessibilityIdentifier("game-completed-ranking-card")
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(.clear)
+                            .accessibilityLabel("Final ranking")
+                            .accessibilityIdentifier("game-completed-ranking-card")
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
