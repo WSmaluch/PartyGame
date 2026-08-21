@@ -196,6 +196,7 @@ struct CompletedView: View {
                             HStack {
                                 Text("#\(ranking.position)")
                                     .font(.headline)
+                                    .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
                                 if let p = players.first(where: { $0.id == ranking.playerId }) {
                                     Text(p.nickname)
                                 }
@@ -203,9 +204,6 @@ struct CompletedView: View {
                                 Text(String(format: String(localized: "score.points"), ranking.score))
                             }
                             .padding(.vertical, 12)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
-
                             if ranking.playerId != orderedFinalRanking.last?.playerId {
                                 Divider()
                             }
