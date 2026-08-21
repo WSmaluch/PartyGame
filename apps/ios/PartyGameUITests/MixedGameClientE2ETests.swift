@@ -154,6 +154,7 @@ final class MixedGameClientE2ETests: XCTestCase {
             } else if !submitted.contains("textanswer"), app.textViews["textanswer.input"].exists {
                 let input = app.textViews["textanswer.input"]
                 input.tap()
+                try waitFor(app.keyboards.element, timeout: 5, description: "focus klawiatury pola odpowiedzi tekstowej")
                 input.typeText("Odpowiedź iPhone")
                 app.buttons["textanswer.submit"].tap()
                 if app.staticTexts["textanswer.waiting"].waitForExistence(timeout: 5) {
