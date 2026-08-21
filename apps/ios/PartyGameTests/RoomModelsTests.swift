@@ -91,7 +91,7 @@ final class RoomModelsTests: XCTestCase {
         XCTAssertEqual(snapshot.game?.stage, .collectingFinalEdits)
         XCTAssertEqual(snapshot.game?.finalRound?.editAssignments?.first?.artifactId.uuidString, "00000000-0000-0000-0000-000000000011")
         XCTAssertEqual(snapshot.game?.finalRound?.artifacts.first?.subjectNickname, "Jan")
-        XCTAssertEqual(snapshot.game?.finalRound?.artifacts.first?.targetRole.local, "bandyta")
+        XCTAssertEqual(snapshot.game?.finalRound?.artifacts.first?.targetRole.translations?["pl"], "bandyta")
         XCTAssertEqual(privateState.finalRound?.assignedArtifactId?.uuidString, "00000000-0000-0000-0000-000000000011")
     }
 
