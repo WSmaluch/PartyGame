@@ -7,6 +7,12 @@ final class GameFlowLayoutUITests: XCTestCase {
         assertUsableCard(card, in: app)
     }
 
+    func testSelectionIncludesOwnPlayerAsAVotingOption() {
+        let app = launch("-uiTestingGameScreenSelection")
+        let ownCard = app.descendants(matching: .any)["selection-player-0DC81D35-C68D-47C6-AEBB-5E86407A1BB0"]
+        assertUsableCard(ownCard, in: app)
+    }
+
     func testResultsCardsUseUsableWidthInsideTypicalIPhoneViewport() {
         let app = launch("-uiTestingGameScreenResults")
         let card = app.descendants(matching: .any)["selection-result-0DC81D35-C68D-47C6-AEBB-5E86407A1BB0"]
@@ -26,6 +32,9 @@ final class GameFlowLayoutUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["game-completed-view"].waitForExistence(timeout: 5))
         let entry = app.descendants(matching: .any)["game-ranking-entry-38C92C29-2CF5-49E0-BC6B-AEBF9F37BCCA"]
         assertUsableCard(entry, in: app)
+        let rankingCard = app.descendants(matching: .any)["game-completed-ranking-card"]
+        XCTAssertTrue(rankingCard.waitForExistence(timeout: 5))
+        XCTAssertLessThan(rankingCard.frame.height, app.frame.height * 0.55, "Ranking card must size to its content instead of occupying the screen")
     }
 
     private func launch(_ scenario: String) -> XCUIApplication {

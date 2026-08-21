@@ -11,7 +11,9 @@ final class FinalRoundUITests: XCTestCase {
         XCTAssertTrue(selfie.staticTexts["Pokaż groźną minę"].exists)
         XCTAssertTrue(selfie.buttons["photoAnswer.takePhoto"].exists)
         XCTAssertFalse(selfie.descendants(matching: .any)["final-round-selfie-private-state-loader"].exists)
-        XCTAssertTrue(launch("-uiTestingFinalEdit").buttons["final-round-edit-start"].exists)
+        let edit = launch("-uiTestingFinalEdit")
+        XCTAssertTrue(edit.buttons["final-round-edit-start"].exists)
+        XCTAssertTrue(edit.staticTexts["Spraw, aby Jan wyglądał jak Kosmiczny pirat"].exists)
     }
     func testEditWaitingAndPresentation() { XCTAssertTrue(launch("-uiTestingFinalEditWaiting").otherElements["final-round-waiting-view"].exists); XCTAssertTrue(launch("-uiTestingFinalPresentation").otherElements["final-round-presentation-view"].exists) }
     func testVotingAndWaiting() { let app = launch("-uiTestingFinalVoting"); XCTAssertTrue(app.otherElements["final-round-voting-view"].exists); XCTAssertTrue(launch("-uiTestingFinalVoteWaiting").otherElements["final-round-waiting-view"].exists) }

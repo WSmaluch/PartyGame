@@ -3232,6 +3232,12 @@
         "pl" : { "stringUnit" : { "state" : "translated", "value" : "Edycja %d z %d" } }
       }
     },
+    "finalRound.editTarget" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Make %@ look like %@" } },
+        "pl" : { "stringUnit" : { "state" : "translated", "value" : "Spraw, aby %@ wyglądał jak %@" } }
+      }
+    },
     "finalRound.editSaved" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your edit was saved" } }, "pl" : { "stringUnit" : { "state" : "translated", "value" : "Twoja edycja została zapisana" } } } },
     "finalRound.presentationTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Final round presentation" } }, "pl" : { "stringUnit" : { "state" : "translated", "value" : "Prezentacja rundy finałowej" } } } },
     "finalRound.resultsTitle" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Final round results" } }, "pl" : { "stringUnit" : { "state" : "translated", "value" : "Wyniki rundy finałowej" } } } },

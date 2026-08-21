@@ -217,4 +217,38 @@ public class RoomContractMapperTests
         Assert.Equal(1, ranks[env.wojtek]);
         Assert.Equal(2, ranks[env.kasia]);
     }
+
+    [Fact]
+    public void ToSnapshot_CollectingFinalEdits_ProvidesTheAssignedArtifactTarget()
+    {
+        var env = SetupTestEnvironment();
+        env.session.Stage = GameStage.CollectingFinalEdits;
+        var artifactId = Guid.NewGuid();
+        env.session.FinalRoundStateJson = new FinalRoundState
+        {
+            CurrentPass = 1,
+            TotalPasses = 2,
+            Artifacts =
+            [
+                new FinalRoundArtifact
+                {
+                    Id = artifactId,
+                    SubjectPlayerId = env.wojtek,
+                    SelfiePromptPl = "Pokaż groźną minę",
+                    SelfiePromptEn = "Make a scary face",
+                    TargetRolePl = "bandyta",
+                    TargetRoleEn = "bandit",
+                    OriginalMediaAssetId = Guid.NewGuid()
+                }
+            ]
+        }.Write();
+
+        var snapshot = env.session.ToSnapshot();
+
+        var artifact = Assert.Single(snapshot.FinalRound!.Artifacts);
+        Assert.Equal(artifactId, artifact.ArtifactId);
+        Assert.Equal("Wojtek", artifact.SubjectNickname);
+        Assert.Equal("bandyta", artifact.TargetRole.Pl);
+        Assert.Equal("bandit", artifact.TargetRole.En);
+    }
 }

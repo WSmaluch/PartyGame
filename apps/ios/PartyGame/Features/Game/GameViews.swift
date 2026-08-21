@@ -40,10 +40,9 @@ struct CollectingPlayerSelectionsView: View {
                 .padding()
             Text("selection.prompt")
             
-            let otherPlayers = players.filter { $0.id != store.ownPlayer?.id }
             ScrollView(.horizontal) {
                 HStack {
-                    ForEach(otherPlayers) { player in
+                    ForEach(players) { player in
                         Button(action: {
                             selectedId = player.id
                             Task {
@@ -181,27 +180,46 @@ struct CompletedView: View {
         summary?.rankings ?? ranking ?? []
     }
 
+    private var orderedFinalRanking: [RankingEntry] {
+        finalRanking.sorted(by: { $0.position < $1.position })
+    }
+
     var body: some View {
-        VStack {
-            Text("game.completed")
-                .font(.largeTitle)
-            
-            if !finalRanking.isEmpty {
-                List(finalRanking.sorted(by: { $0.position < $1.position }), id: \.playerId) { ranking in
-                    HStack {
-                        Text("#\(ranking.position)")
-                            .font(.headline)
-                        if let p = players.first(where: { $0.id == ranking.playerId }) {
-                            Text(p.nickname)
+        ScrollView {
+            VStack(spacing: 20) {
+                Text("game.completed")
+                    .font(.largeTitle)
+
+                if !orderedFinalRanking.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(orderedFinalRanking, id: \.playerId) { ranking in
+                            HStack {
+                                Text("#\(ranking.position)")
+                                    .font(.headline)
+                                if let p = players.first(where: { $0.id == ranking.playerId }) {
+                                    Text(p.nickname)
+                                }
+                                Spacer()
+                                Text(String(format: String(localized: "score.points"), ranking.score))
+                            }
+                            .padding(.vertical, 12)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
+
+                            if ranking.playerId != orderedFinalRanking.last?.playerId {
+                                Divider()
+                            }
                         }
-                        Spacer()
-                        Text(String(format: String(localized: "score.points"), ranking.score))
                     }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("game-ranking-entry-\(ranking.playerId.uuidString)")
+                    .padding(.horizontal, 16)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .accessibilityIdentifier("game-completed-ranking-card")
                 }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 16)
         }
+        .scrollIndicators(.hidden)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("game-completed-view")
     }

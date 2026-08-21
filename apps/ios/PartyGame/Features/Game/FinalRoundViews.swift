@@ -9,6 +9,12 @@ struct FinalRoundEditView: View {
         VStack(spacing: 16) {
             Text("finalRound.editTitle").font(.title.bold())
             Text(String(format: String(localized: "finalRound.editProgress"), game.finalRound?.currentPass ?? 0, game.finalRound?.totalPasses ?? 0))
+            if let assignedArtifact {
+                Text(String(format: String(localized: "finalRound.editTarget"), assignedArtifact.subjectNickname, assignedArtifact.targetRole.local))
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("final-round-edit-target")
+            }
             if store.privateGameState?.finalRound?.hasSubmittedEdit == true {
                 FinalRoundWaitingView(game: game, message: "finalRound.editSaved")
             } else if store.finalEditDraft == nil {
@@ -23,6 +29,11 @@ struct FinalRoundEditView: View {
         .padding()
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(store.privateGameState?.finalRound?.hasSubmittedEdit == true ? "final-round-edit-submitted-state" : "final-round-edit-ready-state")
+    }
+
+    private var assignedArtifact: FinalRoundArtifact? {
+        guard let artifactId = store.privateGameState?.finalRound?.assignedArtifactId else { return nil }
+        return game.finalRound?.artifacts.first { $0.artifactId == artifactId }
     }
 
     private func editor(_ draft: FinalRoundEditDraft) -> some View {
