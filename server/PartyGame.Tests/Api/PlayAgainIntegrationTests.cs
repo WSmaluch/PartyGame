@@ -24,6 +24,7 @@ public sealed class PlayAgainIntegrationTests
             room.Phase = RoomPhase.Completed;
             room.Session!.Stage = GameStage.Completed;
             room.Session.FinalRoundStateJson = "{\"completed\":true}";
+            room.Settings.QuestionsPerRound = 1;
             foreach (var player in room.Players)
             {
                 player.Score = 250;
