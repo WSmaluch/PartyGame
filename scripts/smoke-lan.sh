@@ -26,11 +26,11 @@ assert_json_config() {
 }
 
 assert_javascript_asset() {
-  local app="$1" index headers asset
+  local app="$1" public_path="${2:-/$app}" index headers asset
   index="$work/$app-index.html"
   headers="$work/headers"
-  curl --fail --silent --show-error "$base/$app/" -o "$index"
-  asset="$(sed -nE "s#.*src=\"(/$app/assets/[^\"]+\\.js)\".*#\\1#p" "$index" | head -n 1)"
+  curl --fail --silent --show-error "$base$public_path/" -o "$index"
+  asset="$(sed -nE "s#.*src=\"($public_path/assets/[^\"]+\\.js)\".*#\\1#p" "$index" | head -n 1)"
   [[ -n "$asset" ]] || { echo "PartyGame LAN: $app index does not reference a JavaScript asset." >&2; exit 1; }
   curl --fail --silent --show-error --dump-header "$headers" "$base$asset" -o "$work/$app-asset.js"
   grep -Eiq '^Content-Type: (application|text)/javascript([;[:space:]]|$)' "$headers" || { echo "PartyGame LAN: $asset is not JavaScript." >&2; exit 1; }
@@ -50,7 +50,7 @@ assert_json_config /admin/config.json
 assert_json_config /play/config.json
 assert_javascript_asset display
 assert_javascript_asset admin
-assert_javascript_asset player
+assert_javascript_asset player /play
 assert_missing_static_file /display/missing.js
 assert_missing_static_file /admin/missing.json
 assert_missing_static_file /play/missing.js
