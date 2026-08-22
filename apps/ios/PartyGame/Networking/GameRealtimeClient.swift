@@ -21,6 +21,7 @@ protocol GameRealtimeClient: AnyObject {
     func disconnect() async
     func attachPlayer(roomCode: String, playerId: UUID, reconnectToken: String) async throws -> RoomSnapshot
     func setReady(roomCode: String, playerId: UUID, reconnectToken: String, isReady: Bool) async throws -> RoomSnapshot
+    func playAgain(roomCode: String, playerId: UUID, reconnectToken: String) async throws -> RoomSnapshot
     func getRoomSnapshot(roomCode: String) async throws -> RoomSnapshot
     func submitPlayerSelection(roomCode: String, playerId: UUID, reconnectToken: String, selectedPlayerId: UUID) async throws -> RoomSnapshot
     func submitTextAnswer(roomCode: String, playerId: UUID, reconnectToken: String, text: String) async throws -> RoomSnapshot
@@ -35,6 +36,10 @@ protocol GameRealtimeClient: AnyObject {
 }
 
 extension GameRealtimeClient {
+    func playAgain(roomCode: String, playerId: UUID, reconnectToken: String) async throws -> RoomSnapshot {
+        throw RealtimeClientError.notConnected
+    }
+
     func submitPlayerSelection(roomCode: String, playerId: UUID, reconnectToken: String, selectedPlayerId: UUID, questionInstanceId: UUID, clientSubmissionId: UUID) async throws -> RoomSnapshot {
         try await submitPlayerSelection(roomCode: roomCode, playerId: playerId, reconnectToken: reconnectToken, selectedPlayerId: selectedPlayerId)
     }
@@ -134,6 +139,11 @@ final class SignalRGameRealtimeClient: GameRealtimeClient {
             method: "SetReady",
             arguments: roomCode, playerId.uuidString, reconnectToken, isReady
         )
+    }
+
+    func playAgain(roomCode: String, playerId: UUID, reconnectToken: String) async throws -> RoomSnapshot {
+        guard let connection, status == .connected else { throw RealtimeClientError.notConnected }
+        return try await connection.invoke(method: "PlayAgain", arguments: roomCode, playerId.uuidString, reconnectToken)
     }
 
     func getRoomSnapshot(roomCode: String) async throws -> RoomSnapshot {

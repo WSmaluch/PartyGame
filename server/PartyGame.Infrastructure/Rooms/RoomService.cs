@@ -260,6 +260,60 @@ public sealed class RoomService(
             return changed;
         }, cancellationToken);
 
+    public async Task<RoomMutationResult> PlayAgainAsync(string roomCode, Guid playerId, string? token, CancellationToken cancellationToken = default)
+    {
+        var obsoleteStorageKeys = new List<string>();
+        var result = await MutateAuthorizedAsync(roomCode, playerId, token, async (room, player, _) =>
+        {
+            if (!player.IsHost || room.HostPlayerId != player.Id)
+                throw new RoomConflictException("Only the host can start another game.");
+
+            // A replayed command after the successful reset is deliberately a
+            // no-op. This makes the action safe for a reconnecting host without
+            // resurrecting any old per-game state.
+            if (room.Phase == RoomPhase.Lobby && room.Session is null)
+                return false;
+            if (room.Phase != RoomPhase.Completed || room.Session?.Stage != GameStage.Completed)
+                throw new RoomConflictException("Play again is only available after the game is completed.");
+
+            var session = room.Session;
+            var oldGameAssets = await dbContext.MediaAssets
+                .Where(asset => asset.RoomId == room.Id && asset.MediaKind != MediaKind.ProfilePhoto)
+                .ToListAsync(cancellationToken);
+            obsoleteStorageKeys.AddRange(oldGameAssets.SelectMany(asset => new[] { asset.DisplayStorageKey, asset.ThumbnailStorageKey }));
+
+            // Receipts/audit entries belong to a single game and must not leak
+            // into a new session. New question/session ids make all new actions
+            // independently idempotent.
+            var receipts = await dbContext.SubmissionReceipts.Where(entry => entry.RoomId == room.Id).ToListAsync(cancellationToken);
+            var audit = await dbContext.SubmissionAuditEntries.Where(entry => entry.RoomId == room.Id).ToListAsync(cancellationToken);
+            dbContext.MediaAssets.RemoveRange(oldGameAssets);
+            dbContext.SubmissionReceipts.RemoveRange(receipts);
+            dbContext.SubmissionAuditEntries.RemoveRange(audit);
+            dbContext.GameSessions.Remove(session);
+
+            room.Session = null;
+            room.Phase = RoomPhase.Lobby;
+            room.StartedAtUtc = null;
+            foreach (var participant in room.Players)
+            {
+                participant.IsReady = false;
+                participant.Score = 0;
+            }
+            return true;
+        }, cancellationToken);
+
+        // Database references are cleared atomically above. Physical cleanup is
+        // best-effort; stale files are also covered by the existing orphan cleanup
+        // job and never remain reachable through the new game contract.
+        foreach (var storageKey in obsoleteStorageKeys.Distinct(StringComparer.Ordinal))
+        {
+            try { await mediaStorage.DeleteAsync(storageKey, CancellationToken.None); }
+            catch (Exception exception) { logger.LogWarning(exception, "Play-again media cleanup failed for {StorageKey}", storageKey); }
+        }
+        return result;
+    }
+
     public async Task<RoomMutationResult> SetProfilePhotoAsync(string roomCode, Guid playerId, string? token, Guid mediaAssetId, StoredMediaResult storedMedia, CancellationToken cancellationToken = default)
     {
         // The upload endpoint authorizes before it writes the file. A concurrent

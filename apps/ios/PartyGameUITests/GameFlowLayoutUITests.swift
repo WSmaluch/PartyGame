@@ -35,6 +35,15 @@ final class GameFlowLayoutUITests: XCTestCase {
         let rankingCard = app.descendants(matching: .any)["game-completed-ranking-card"]
         XCTAssertTrue(rankingCard.waitForExistence(timeout: 5))
         XCTAssertLessThan(rankingCard.frame.height, app.frame.height * 0.55, "Ranking card must size to its content instead of occupying the screen")
+        let playAgain = app.buttons["game.play-again"]
+        XCTAssertTrue(playAgain.waitForExistence(timeout: 5))
+        XCTAssertTrue(playAgain.isHittable, "The completed-screen bottom action must remain visible and tappable")
+    }
+
+    func testCompletedParticipantSeesWaitingStateInsteadOfHostAction() {
+        let app = launch("-uiTestingGameScreenCompletedParticipant")
+        XCTAssertTrue(app.staticTexts["game-waiting-for-host"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["game.play-again"].exists)
     }
 
     private func launch(_ scenario: String) -> XCUIApplication {

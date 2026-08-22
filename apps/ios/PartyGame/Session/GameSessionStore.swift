@@ -299,6 +299,22 @@ final class GameSessionStore {
         }
     }
 
+    func playAgain() async {
+        guard let session, session.isHost, let reconnectToken else { return }
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+        do {
+            apply(try await realtime.playAgain(
+                roomCode: session.roomCode,
+                playerId: session.playerId,
+                reconnectToken: reconnectToken
+            ))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func submitPlayerSelection(selectedPlayerId: UUID) async {
         guard let session, let reconnectToken, let questionId = snapshot?.game?.currentQuestion?.instanceId else { return }
         isWorking = true
@@ -539,6 +555,11 @@ final class GameSessionStore {
             privateStateRefreshFailedQuestionId = nil
         }
         activeQuestionInstanceId = nextQuestion
+        if candidate.phase == .lobby {
+            privateGameState = nil
+            pendingFinalRoundPrivateState = nil
+            submittedQuestionInstanceIds = []
+        }
         if enteredFinalRound, let pending = pendingFinalRoundPrivateState {
             pendingFinalRoundPrivateState = nil
             applyPrivateGameState(pending)
@@ -577,7 +598,7 @@ final class GameSessionStore {
         }
         
         if candidate.phase != .lobby { screen = .started }
-        else if screen == .reconnecting { screen = ownPlayer?.hasProfilePhoto == true ? .lobby : .profilePhoto }
+        else { screen = ownPlayer?.hasProfilePhoto == true ? .lobby : .profilePhoto }
     }
 
     static func normalizedRoomCode(_ input: String) -> String {
@@ -704,7 +725,8 @@ final class GameSessionStore {
         }
         let artifact = FinalRoundArtifact(artifactId: artifactId, subjectPlayerId: jan, subjectNickname: "Jan", selfiePrompt: LocalizedText(defaultText: "Pokaż minę", translations: nil), targetRole: LocalizedText(defaultText: "Kosmiczny pirat", translations: nil), displayMediaUrl: nil, thumbnailMediaUrl: nil, voteCount: 2, isTopResult: true)
         let final = FinalRoundSnapshot(currentPass: 1, totalPasses: 2, submittedSelfies: 3, requiredSelfies: 3, submittedEdits: 1, requiredEdits: 3, submittedVotes: 1, requiredVotes: 3, artifacts: [artifact], editAssignments: [FinalRoundEditAssignment(artifactId: artifactId, editorPlayerId: ola, sourceDisplayMediaUrl: "/api/media/source/display", sourceThumbnailMediaUrl: "/api/media/source/thumbnail")])
-        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: true, serverBaseURL: configuration.baseURL)
+        let isHost = argument != "-uiTestingGameScreenCompletedParticipant"
+        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: isHost, serverBaseURL: configuration.baseURL)
         reconnectToken = "ui-test-token"
         let players = [RoomPlayer(id: ola, nickname: "Ola", isHost: true, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0), RoomPlayer(id: jan, nickname: "Jan", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 100), RoomPlayer(id: ewa, nickname: "Ewa", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 50)]
         let game = GameSnapshot(stage: stage, currentRoundNumber: 2, totalRounds: 2, currentQuestionNumber: 0, questionsInCurrentRound: 0, stageEndsAtUtc: nil, pausedAtUtc: nil, pausedStage: nil, pausedRemainingMilliseconds: nil, scores: [], categories: nil, currentQuestion: nil, playerSelectionResults: nil, roundSummary: nil, textAnswerResults: nil, ranking: nil, finalRound: final)
@@ -719,10 +741,11 @@ final class GameSessionStore {
         let jan = UUID(uuidString: "38C92C29-2CF5-49E0-BC6B-AEBF9F37BCCA")!
         let ewa = UUID(uuidString: "71A8C49F-1A2B-418F-A5CD-7D47C9BC9280")!
         let questionId = UUID(uuidString: "30000000-0000-0000-0000-000000000001")!
-        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: true, serverBaseURL: configuration.baseURL)
+        let isHost = argument != "-uiTestingGameScreenCompletedParticipant"
+        session = LocalPlayerSession(roomCode: "ABCD", playerId: ola, nickname: "Ola", isHost: isHost, serverBaseURL: configuration.baseURL)
         reconnectToken = "ui-test-token"
         let players = [
-            RoomPlayer(id: ola, nickname: "Ola", isHost: true, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0),
+            RoomPlayer(id: ola, nickname: "Ola", isHost: isHost, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0),
             RoomPlayer(id: jan, nickname: "Jan", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 500),
             RoomPlayer(id: ewa, nickname: "Ewa", isHost: false, isReady: true, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)
         ]
@@ -742,7 +765,7 @@ final class GameSessionStore {
         let stage: GameStage = switch argument {
         case "-uiTestingGameScreenResults": .showingQuestionResults
         case "-uiTestingGameScreenRoundSummary": .roundSummary
-        case "-uiTestingGameScreenCompleted": .completed
+        case "-uiTestingGameScreenCompleted", "-uiTestingGameScreenCompletedParticipant": .completed
         default: .collectingPlayerSelections
         }
         let game = GameSnapshot(stage: stage, currentRoundNumber: 1, totalRounds: 1, currentQuestionNumber: 1,

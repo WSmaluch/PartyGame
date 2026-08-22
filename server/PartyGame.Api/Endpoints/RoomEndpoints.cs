@@ -36,6 +36,13 @@ public static class RoomEndpoints
         rooms.MapGet("/{roomCode}", async (string roomCode, IRoomService roomService, CancellationToken cancellationToken) =>
             Results.Ok((await roomService.GetAsync(roomCode, cancellationToken)).ToSnapshot()));
 
+        rooms.MapPost("/{roomCode}/play-again", async (string roomCode, PlayAgainRequest request, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
+        {
+            var result = await roomService.PlayAgainAsync(roomCode, request.PlayerId, request.ReconnectToken, cancellationToken);
+            await notifier.NotifyAsync(result, cancellationToken);
+            return Results.Ok(result.Room.ToSnapshot());
+        });
+
         // Player-authorized operational diagnostics. It deliberately exposes only
         // hashes and aggregate counts; reconnect tokens and media bytes never leave
         // storage through this endpoint.

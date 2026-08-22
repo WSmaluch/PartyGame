@@ -22,7 +22,7 @@ struct GameRouterView: View {
                 case .pausedForDisplay:
                     PausedForDisplayView()
                 case .completed:
-                    CompletedView(summary: game.roundSummary, ranking: game.ranking, players: store.snapshot?.players ?? [])
+                    CompletedView(store: store, summary: game.roundSummary, ranking: game.ranking, players: store.snapshot?.players ?? [])
                 case .collectingTextAnswers:
                     CollectingTextAnswersView(store: store, question: game.currentQuestion)
                 case .revealingTextAnswers:

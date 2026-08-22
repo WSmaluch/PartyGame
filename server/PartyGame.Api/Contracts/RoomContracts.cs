@@ -4,6 +4,7 @@ namespace PartyGame.Api.Contracts;
 
 public sealed record CreateRoomRequest(string? Nickname, RoomSettingsRequest? Settings, List<string>? SelectedPackageKeys, List<string>? EnabledQuestionTypes, Guid? ContentPackageVersionId = null);
 public sealed record JoinRoomRequest(string? Nickname);
+public sealed record PlayAgainRequest(Guid PlayerId, string? ReconnectToken);
 public sealed record RoomSettingsRequest(
     int RoundCount = 4,
     int QuestionsPerRound = 5,

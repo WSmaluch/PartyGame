@@ -220,6 +220,25 @@ final class GameSessionStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot?.game?.stage, .completed)
     }
 
+    func testHostPlayAgainAppliesLobbyAndClearsPrivateGameState() async {
+        let playerId = UUID()
+        let completed = completedSnapshot(playerId: playerId, version: 42)
+        let lobby = RoomSnapshot(roomCode: "TEST", phase: .lobby, stateVersion: 43, displayConnected: true, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: false, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)], createdAtUtc: "", startedAtUtc: nil, game: nil)
+        let initialPrivate = PlayerPrivateGameState(playerId: playerId, questionInstanceId: UUID(), hasSubmittedTextAnswer: true, ownTextAnswerId: nil, hasSubmittedTextAnswerVote: true)
+        api.createRoomResult = CreateRoomResponse(roomCode: "TEST", playerId: playerId, reconnectToken: "token", snapshot: completed, privateState: initialPrivate)
+        realtime.attachPlayerResult = completed
+        realtime.playAgainResult = lobby
+
+        await store.createRoom(nickname: "Ola", settings: RoomSettings(), selectedPackageKeys: nil)
+        await store.playAgain()
+
+        XCTAssertTrue(realtime.playAgainCalled)
+        XCTAssertEqual(store.snapshot?.phase, .lobby)
+        XCTAssertEqual(store.screen, .lobby)
+        XCTAssertNil(store.privateGameState)
+        XCTAssertTrue(store.submittedQuestionInstanceIds.isEmpty)
+    }
+
     func testApplicationBecameActiveRetriesConnection() async {
         let playerId = UUID()
         let snapshot = RoomSnapshot(roomCode: "TEST", phase: .lobby, stateVersion: 1, displayConnected: false, minimumPlayers: 3, maximumPlayers: 8, canStart: false, settings: RoomSettings(), players: [RoomPlayer(id: playerId, nickname: "Ola", isHost: true, isReady: false, isConnected: true, hasProfilePhoto: true, profilePhotoUrl: nil, score: 0)], createdAtUtc: "", startedAtUtc: nil, game: nil)
@@ -562,6 +581,13 @@ private final class MockGameRealtimeClient: GameRealtimeClient {
     func setReady(roomCode: String, playerId: UUID, reconnectToken: String, isReady: Bool) async throws -> RoomSnapshot {
         setReadyCalled = true
         return setReadyResult!
+    }
+
+    var playAgainCalled = false
+    var playAgainResult: RoomSnapshot?
+    func playAgain(roomCode: String, playerId: UUID, reconnectToken: String) async throws -> RoomSnapshot {
+        playAgainCalled = true
+        return playAgainResult!
     }
 
     var getRoomSnapshotCalled = false

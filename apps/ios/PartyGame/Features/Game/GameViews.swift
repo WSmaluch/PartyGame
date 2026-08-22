@@ -172,6 +172,7 @@ struct PausedForDisplayView: View {
 }
 
 struct CompletedView: View {
+    let store: GameSessionStore
     let summary: RoundSummarySnapshot?
     let ranking: [RankingEntry]?
     let players: [RoomPlayer]
@@ -219,6 +220,17 @@ struct CompletedView: View {
                             .accessibilityIdentifier("game-completed-ranking-card")
                             .allowsHitTesting(false)
                     }
+                }
+
+                if store.session?.isHost == true {
+                    Button("game.play_again") { Task { await store.playAgain() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(store.isWorking)
+                        .accessibilityIdentifier("game.play-again")
+                } else {
+                    Text("game.waiting_for_host")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("game-waiting-for-host")
                 }
             }
             .frame(maxWidth: .infinity)

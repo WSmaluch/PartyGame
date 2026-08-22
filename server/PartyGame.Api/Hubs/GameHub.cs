@@ -136,6 +136,22 @@ public sealed class GameHub : Hub
         }
     }
 
+    public async Task<RoomSnapshot> PlayAgain(string roomCode, Guid playerId, string reconnectToken)
+    {
+        try
+        {
+            if (!connectionRegistry.IsActivePlayer(Context.ConnectionId, roomCode.Trim(), playerId))
+                throw new RoomConflictException("Not an active player.");
+            var result = await roomService.PlayAgainAsync(roomCode, playerId, reconnectToken, Context.ConnectionAborted);
+            await NotifyAsync(result);
+            return result.Room.ToSnapshot();
+        }
+        catch (RoomException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+    }
+
     public async Task<RoomSnapshot> GetRoomSnapshot(string roomCode)
     {
         try
