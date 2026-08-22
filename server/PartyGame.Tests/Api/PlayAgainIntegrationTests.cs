@@ -19,8 +19,9 @@ public sealed class PlayAgainIntegrationTests
         await using (var setup = harness.Factory.Services.CreateAsyncScope())
         {
             var db = setup.ServiceProvider.GetRequiredService<PartyGameDbContext>();
-            var room = await db.GameRooms.Include(candidate => candidate.Players).Include(candidate => candidate.Session)
+            var room = await db.GameRooms.Include(candidate => candidate.Settings).Include(candidate => candidate.Players).Include(candidate => candidate.Session)
                 .SingleAsync(candidate => candidate.Id == access.RoomId);
+            room.ContentPackageVersionId = (await db.GamePackages.SingleAsync()).Id;
             room.Phase = RoomPhase.Completed;
             room.Session!.Stage = GameStage.Completed;
             room.Session.FinalRoundStateJson = "{\"completed\":true}";
