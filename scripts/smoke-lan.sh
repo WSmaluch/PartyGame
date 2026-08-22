@@ -26,7 +26,8 @@ assert_json_config() {
 }
 
 assert_javascript_asset() {
-  local app="$1" public_path="${2:-/$app}" index headers asset
+  local app="$1" public_path index headers asset
+  public_path="${2:-/$app}"
   index="$work/$app-index.html"
   headers="$work/headers"
   curl --fail --silent --show-error "$base$public_path/" -o "$index"
