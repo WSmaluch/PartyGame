@@ -21,7 +21,10 @@ public sealed class PlayAgainIntegrationTests
             var db = setup.ServiceProvider.GetRequiredService<PartyGameDbContext>();
             var room = await db.GameRooms.Include(candidate => candidate.Settings).Include(candidate => candidate.Players).Include(candidate => candidate.Session)
                 .SingleAsync(candidate => candidate.Id == access.RoomId);
-            room.ContentPackageVersionId = (await db.GamePackages.SingleAsync()).Id;
+            var categoryId = await db.GameQuestions.Where(question => question.Key == access.QuestionKey)
+                .Select(question => question.CategoryId).SingleAsync();
+            room.ContentPackageVersionId = await db.GameCategories.Where(category => category.Id == categoryId)
+                .Select(category => category.PackageId).SingleAsync();
             room.Phase = RoomPhase.Completed;
             room.Session!.Stage = GameStage.Completed;
             room.Session.FinalRoundStateJson = "{\"completed\":true}";
