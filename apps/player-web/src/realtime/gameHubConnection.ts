@@ -61,6 +61,13 @@ export class GameHubConnection {
     return connection.invoke<RoomSnapshot>('SetReady', session.roomCode, session.playerId, session.reconnectToken, isReady);
   }
 
+  async playAgain(session: PlayerSession): Promise<RoomSnapshot> {
+    const connection = this.ensureConnection();
+    if (connection.state !== HubConnectionState.Connected) throw new Error('not-connected');
+    return connection.invoke<RoomSnapshot>('PlayAgain', session.roomCode, session.playerId, session.reconnectToken);
+  }
+
+
   async getRoomSnapshot(roomCode: string): Promise<RoomSnapshot> {
     const connection = this.ensureConnection();
     if (connection.state !== HubConnectionState.Connected) throw new Error('not-connected');

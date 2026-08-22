@@ -45,6 +45,8 @@ export type AnonymousDrawingAnswer = { drawingAnswerId: string; displayDrawingUr
 export type DrawingAnswerResultOption = { drawingAnswerId: string; displayDrawingUrl?: string | null; thumbnailDrawingUrl?: string | null; width: number; height: number; authorPlayerId: string; authorNickname: string; authorPhotoUrl?: string | null; voteCount: number; isTopResult: boolean; voters: ResultVoter[] };
 export type DrawingAnswerResults = { questionInstanceId?: string | null; submittedPlayers?: number | null; requiredPlayers?: number | null; votedPlayers?: number | null; requiredVoters?: number | null; highestVoteCount?: number | null; options?: DrawingAnswerResultOption[] | null; anonymousOptions?: AnonymousDrawingAnswer[] | null };
 export type RankingEntry = { playerId: string; nickname?: string | null; profilePhotoUrl?: string | null; score: number; rank?: number | null };
+export type FinalRoundArtifact = { artifactId: string; subjectPlayerId: string; subjectNickname: string; selfiePrompt: LocalizedText; targetRole: LocalizedText; displayMediaUrl?: string | null; thumbnailMediaUrl?: string | null; voteCount: number; isTopResult: boolean };
+export type FinalRoundSnapshot = { currentPass: number; totalPasses: number; submittedSelfies: number; requiredSelfies: number; submittedEdits: number; requiredEdits: number; submittedVotes: number; requiredVotes: number; artifacts: FinalRoundArtifact[] };
 export type RoundSummary = { roundNumber: number; ranking?: RankingEntry[] | null; rankings?: RankingEntry[] | null; hasNextRound?: boolean | null; nextRoundNumber?: number | null };
 
 export type GameSnapshot = {
@@ -66,6 +68,7 @@ export type GameSnapshot = {
   results?: PlayerSelectionResults | null;
   roundSummary?: RoundSummary | null;
   ranking?: RankingEntry[] | null;
+  finalRound?: FinalRoundSnapshot | null;
 };
 
 export function gameQuestion(game: GameSnapshot): GameQuestion | undefined {
@@ -86,6 +89,7 @@ export type PlayerPrivateGameState = {
   ownDrawingAnswerId?: string | null;
   hasSubmittedDrawingAnswerVote?: boolean;
   isEligibleForDrawingAnswer?: boolean;
+  finalRound?: { hasSubmittedSelfie: boolean; assignedArtifactId?: string | null; sourceDisplayMediaUrl?: string | null; sourceThumbnailMediaUrl?: string | null; hasSubmittedEdit: boolean; hasSubmittedVote: boolean; selfiePrompt?: LocalizedText | null; targetRole?: LocalizedText | null; canSubmitSelfie: boolean } | null;
 };
 
 export type MediaUploadResponse = { playerPrivateGameState: PlayerPrivateGameState; roomSnapshot: RoomSnapshot };

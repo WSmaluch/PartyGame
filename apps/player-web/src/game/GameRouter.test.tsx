@@ -4,9 +4,9 @@ import { GameRouter } from './GameRouter';
 import { translations } from '../translations';
 import type { PlayerPrivateGameState, RoomSnapshot } from '../api/types';
 
-const hub = vi.hoisted(() => ({ submitPlayerSelection: vi.fn(), submitTextAnswer: vi.fn(), submitTextAnswerVote: vi.fn(), submitPhotoAnswerVote: vi.fn(), submitDrawingAnswerVote: vi.fn(), getRoomSnapshot: vi.fn(), serverNow: vi.fn(() => Date.now()) }));
+const hub = vi.hoisted(() => ({ submitPlayerSelection: vi.fn(), submitTextAnswer: vi.fn(), submitTextAnswerVote: vi.fn(), submitPhotoAnswerVote: vi.fn(), submitDrawingAnswerVote: vi.fn(), getRoomSnapshot: vi.fn(), playAgain: vi.fn(), serverNow: vi.fn(() => Date.now()) }));
 const media = vi.hoisted(() => ({ preparePhotoAnswer: vi.fn(), drawingPng: vi.fn(), GameMediaError: class GameMediaError extends Error { readonly kind: string; constructor(kind: string) { super(kind); this.kind = kind; } } }));
-const api = vi.hoisted(() => ({ uploadPhotoAnswer: vi.fn(), uploadDrawingAnswer: vi.fn() }));
+const api = vi.hoisted(() => ({ uploadPhotoAnswer: vi.fn(), uploadDrawingAnswer: vi.fn(), uploadFinalSelfie: vi.fn(), uploadFinalEdit: vi.fn(), submitFinalVote: vi.fn() }));
 vi.mock('../realtime/gameHubConnection', () => ({ gameHubConnection: hub }));
 vi.mock('../media/gameMedia', () => media);
 vi.mock('../api/playerApi', () => api);
@@ -35,6 +35,13 @@ describe('GameRouter', () => {
     await waitFor(() => expect(hub.submitPlayerSelection).toHaveBeenCalledTimes(1));
     expect(hub.submitPlayerSelection).toHaveBeenCalledWith(session, 'p2', 'q1', expect.any(String));
     expect(screen.getByText('Odpowiedź wysłana')).toBeInTheDocument();
+  });
+
+  it('keeps the current player as a valid PlayerSelection voting option', async () => {
+    renderGame({ ...baseSnapshot, game: game('CollectingPlayerSelections') });
+    fireEvent.click(screen.getByRole('button', { name: 'Wojtek' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij odpowiedź' }));
+    await waitFor(() => expect(hub.submitPlayerSelection).toHaveBeenCalledWith(session, 'p1', 'q1', expect.any(String)));
   });
 
   it('submits text with the same idempotency identity after a retry', async () => {
@@ -128,6 +135,12 @@ describe('GameRouter', () => {
     rerender(<GameRouter session={session} snapshot={{ ...baseSnapshot, stateVersion: 7, game: { ...game('ShowingDrawingAnswerResults'), drawingAnswerResults: { options: [{ drawingAnswerId: 'drawing', width: 100, height: 100, authorPlayerId: 'p1', authorNickname: 'Wojtek', voteCount: 1, isTopResult: true, voters: [] }] } } }} privateState={privateState} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />); expect(screen.getByRole('heading', { name: 'Wyniki · Wyniki rysunków' })).toBeInTheDocument();
     rerender(<GameRouter session={session} snapshot={{ ...baseSnapshot, stateVersion: 8, game: { ...game('RoundSummary'), roundSummary: summary } }} privateState={privateState} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />); expect(screen.getByText('Podsumowanie rundy 1')).toBeInTheDocument();
     rerender(<GameRouter session={session} snapshot={{ ...baseSnapshot, stateVersion: 9, game: { ...game('Completed'), ranking: summary.ranking } }} privateState={privateState} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />); expect(screen.getByRole('heading', { name: 'Gra zakończona' })).toBeInTheDocument();
+  });
+
+  it('shows every final-round editor the server-provided target caption', () => {
+    const finalPrivate: PlayerPrivateGameState = { ...privateState, finalRound: { hasSubmittedSelfie: true, assignedArtifactId: 'artifact-1', sourceDisplayMediaUrl: '/api/media/source', hasSubmittedEdit: false, hasSubmittedVote: false, targetRole: { pl: 'bandyta' }, canSubmitSelfie: false } };
+    renderGame({ ...baseSnapshot, game: { ...game('CollectingFinalEdits'), finalRound: { currentPass: 1, totalPasses: 2, submittedSelfies: 3, requiredSelfies: 3, submittedEdits: 0, requiredEdits: 3, submittedVotes: 0, requiredVotes: 3, artifacts: [{ artifactId: 'artifact-1', subjectPlayerId: 'p2', subjectNickname: 'Ania', selfiePrompt: { pl: 'Mina' }, targetRole: { pl: 'bandyta' }, voteCount: 0, isTopResult: false }] } } }, finalPrivate);
+    expect(screen.getByRole('heading', { name: 'Spraw, aby Ania wyglądał jak bandyta' })).toBeInTheDocument();
   });
 
   it.each(['CategoryIntro', 'QuestionIntro', 'RevealingTextAnswers', 'RevealingPhotoAnswers', 'RevealingDrawingAnswers', 'PausedForDisplay', 'GameSummary'])('renders a controlled player-facing view for %s', (stage) => {

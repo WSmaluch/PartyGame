@@ -174,16 +174,10 @@ function CollectingPlayerSelections({
           const hasAnswered = answered.includes(p.id);
           const photo = profilePhotoUrl(p.profilePhotoUrl);
           return (
-            <div
-              key={p.id}
-              className={`player-avatar ${hasAnswered ? 'answered' : 'waiting'}`}
-            >
-              {photo ? (
-                <img src={`${photo}?v=${room.stateVersion}`} alt={p.nickname} />
-              ) : (
-                <div className="photo-placeholder">?</div>
-              )}
-            </div>
+            <article key={p.id} className={`player-avatar ${hasAnswered ? 'answered' : 'waiting'}`}>
+              {photo ? <img src={`${photo}?v=${room.stateVersion}`} alt={p.nickname} /> : <div className="photo-placeholder">?</div>}
+              <span>{p.nickname}</span>
+            </article>
           );
         })}
       </div>
@@ -265,7 +259,7 @@ function RoundSummary({
         {t('roundSummary')} - Round {game.roundSummary?.roundNumber}
       </h2>
       <div className="rankings">
-        {rankings.map((rank) => {
+        {[...rankings].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999) || b.score - a.score).map((rank) => {
           const player = room.players.find((p) => p.id === rank.playerId);
           return (
             <div key={rank.playerId} className="ranking-entry">
@@ -292,7 +286,7 @@ function Completed({ game, room }: { game: GameSnapshot; room: RoomSnapshot }) {
     <div className="game-completed" aria-live="assertive">
       <h1>{t('gameCompleted')}</h1>
       <div className="rankings" aria-label="Końcowy ranking">
-        {rankings.map((rank) => {
+        {[...rankings].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999) || b.score - a.score).map((rank) => {
           const player = room.players.find(
             (candidate) => candidate.id === rank.playerId,
           );

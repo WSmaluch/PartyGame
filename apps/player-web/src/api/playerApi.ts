@@ -36,6 +36,23 @@ export async function uploadDrawingAnswer(session: PlayerSession, questionInstan
   return uploadMedia(session, questionInstanceId, file, clientSubmissionId, 'drawing-answers', 'drawing', 'drawing.png');
 }
 
+export async function uploadFinalSelfie(session: PlayerSession, file: Blob, clientSubmissionId: string): Promise<MediaUploadResponse> {
+  const form = new FormData(); form.append('playerId', session.playerId); form.append('reconnectToken', session.reconnectToken); form.append('clientSubmissionId', clientSubmissionId); form.append('photo', file, 'selfie.jpg');
+  return requestJson<MediaUploadResponse>(`/api/rooms/${encodeURIComponent(session.roomCode)}/final-round/selfies`, { method: 'POST', body: form }, false);
+}
+
+export async function uploadFinalEdit(session: PlayerSession, artifactId: string, file: Blob, clientSubmissionId: string): Promise<MediaUploadResponse> {
+  const form = new FormData(); form.append('playerId', session.playerId); form.append('reconnectToken', session.reconnectToken); form.append('clientSubmissionId', clientSubmissionId); form.append('drawing', file, 'final-edit.png');
+  return requestJson<MediaUploadResponse>(`/api/rooms/${encodeURIComponent(session.roomCode)}/final-round/artifacts/${encodeURIComponent(artifactId)}/edits`, { method: 'POST', body: form }, false);
+}
+
+export async function submitFinalVote(session: PlayerSession, artifactId: string, clientSubmissionId: string): Promise<RoomSnapshot> {
+  return requestJson<RoomSnapshot>(`/api/rooms/${encodeURIComponent(session.roomCode)}/final-round/votes`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ playerId: session.playerId, reconnectToken: session.reconnectToken, artifactId, clientSubmissionId }),
+  }, false);
+}
+
 async function uploadMedia(session: PlayerSession, questionInstanceId: string, file: Blob, clientSubmissionId: string, endpoint: string, field: string, filename: string): Promise<MediaUploadResponse> {
   const form = new FormData();
   form.append('playerId', session.playerId); form.append('reconnectToken', session.reconnectToken); form.append('clientSubmissionId', clientSubmissionId); form.append(field, file, filename);

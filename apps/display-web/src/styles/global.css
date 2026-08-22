@@ -215,6 +215,14 @@ h1 {
 .badges span { padding: 5px 9px; border-radius: 999px; background: #c8bfe8; color: #25104f; font-weight: 800; }
 .badges .host-badge { background: #ffd35c; }.badges .ready, .badges .connected { background: #5cffc8; }.badges .offline { background: #ff6b87; }.badges .waiting { background: #d8cfea; }
 .lobby-hint { margin: 26px 0 18px; }.secondary-action { color: #fff; background: rgba(255,255,255,.15); box-shadow: none; }
+.answered-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: clamp(12px, 2vw, 24px); width: min(100%, 900px); margin: 28px auto 0; }
+.player-avatar { display: grid; justify-items: center; gap: 8px; min-width: 0; color: #fff; font-size: clamp(14px, 1.6vw, 20px); font-weight: 800; overflow-wrap: anywhere; }
+.player-avatar img, .player-avatar .photo-placeholder { width: clamp(58px, min(11vw, 118px), 118px); height: clamp(58px, min(11vw, 118px), 118px); margin: 0; border-width: 3px; }
+.player-avatar.waiting { opacity: .52; }.player-avatar.answered img, .player-avatar.answered .photo-placeholder { border-color: #5cffc8; box-shadow: 0 0 20px rgba(92,255,200,.42); }
+.rankings { display: grid; gap: clamp(10px, 1.5vw, 18px); width: min(100%, 880px); margin: 28px auto 0; }
+.ranking-entry { display: grid; grid-template-columns: minmax(52px, .55fr) minmax(0, 2.7fr) minmax(116px, 1fr); align-items: center; gap: clamp(12px, 2vw, 28px); min-height: 68px; padding: 14px clamp(16px, 3vw, 34px); border-radius: 18px; background: rgba(255,255,255,.1); text-align: left; }
+.ranking-entry .rank { color: #ffd35c; font-size: clamp(25px, 3.3vw, 46px); font-weight: 900; }.ranking-entry .name { min-width: 0; font-size: clamp(20px, 2.8vw, 38px); font-weight: 850; overflow-wrap: anywhere; }.ranking-entry .score { justify-self: end; color: #5cffc8; font-size: clamp(19px, 2.6vw, 34px); font-weight: 900; text-align: right; white-space: nowrap; }
+@media (max-width: 520px) { .ranking-entry { grid-template-columns: 54px minmax(0, 1fr); }.ranking-entry .score { grid-column: 2; justify-self: start; }.answered-players { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .party-icon { font-size: 90px; }.started { padding: 30px 0; }
 .diagnostics { margin-top: 34px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,.18); text-align: left; }
 .diagnostics summary { color: #c8bfe8; cursor: pointer; font-weight: 700; }.diagnostics .diagnostics-grid { margin-top: 20px; }

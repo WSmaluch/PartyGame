@@ -1,4 +1,4 @@
-export type SubmissionAction = 'player-selection' | 'text-answer' | 'text-vote' | 'photo-answer' | 'drawing-answer' | 'photo-vote' | 'drawing-vote';
+export type SubmissionAction = 'player-selection' | 'text-answer' | 'text-vote' | 'photo-answer' | 'drawing-answer' | 'photo-vote' | 'drawing-vote' | 'final-selfie' | 'final-edit' | 'final-vote';
 
 export function submissionIdentity(roomCode: string, playerId: string, questionInstanceId: string, action: SubmissionAction): string {
   const key = `partygame.player.submission.${roomCode}.${playerId}.${questionInstanceId}.${action}`;
