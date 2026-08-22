@@ -12,7 +12,7 @@ import { CompletedStage, ResultsStage, RoundSummaryStage } from './GameResults';
 type Translate = (key: TranslationKey) => string;
 type SubmissionState = 'idle' | 'submitting' | 'submitted' | 'failed';
 
-export function GameRouter({ session, snapshot, privateState, locale, status, t, onSnapshot }: {
+export function GameRouter({ session, snapshot, privateState, locale, status, t, onSnapshot, onRecoverFinalEdit, finalEditRecoveryFailed = false }: {
   session: PlayerSession;
   snapshot?: RoomSnapshot;
   privateState?: PlayerPrivateGameState;
@@ -20,6 +20,8 @@ export function GameRouter({ session, snapshot, privateState, locale, status, t,
   status: ConnectionStatus;
   t: Translate;
   onSnapshot: (snapshot: RoomSnapshot) => void;
+  onRecoverFinalEdit?: () => void;
+  finalEditRecoveryFailed?: boolean;
 }) {
   const game = snapshot?.game;
   if (!game) return <GameShell status={status} t={t}><p>{t('gameLoading')}</p></GameShell>;
@@ -38,7 +40,13 @@ export function GameRouter({ session, snapshot, privateState, locale, status, t,
   if (game.stage === 'ShowingDrawingAnswerResults') return <GameShell game={game} status={status} t={t}><ResultsStage kind="drawing" game={game} locale={locale} t={t} /></GameShell>;
   if (game.stage === 'RoundSummary') return <GameShell game={game} status={status} t={t}><RoundSummaryStage game={game} room={snapshot} t={t} /></GameShell>;
   if (game.stage === 'CollectingFinalSelfies') return <FinalSelfie session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
-  if (game.stage === 'CollectingFinalEdits') return <FinalEdit session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
+  if (game.stage === 'CollectingFinalEdits') {
+    // A Final Editing stage contains several independent assignments.  The
+    // stage name intentionally does not change between passes, so it is not a
+    // safe React identity for canvas/submission state.
+    const assignmentKey = finalEditAssignmentKey(game, privateState);
+    return <FinalEdit key={assignmentKey} session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} onRecover={onRecoverFinalEdit} recoveryFailed={finalEditRecoveryFailed} />;
+  }
   if (game.stage === 'ShowingFinalPresentation') return <FinalPresentation game={game} locale={locale} status={status} t={t} />;
   if (game.stage === 'CollectingFinalVotes') return <FinalVoting session={session} game={game} privateState={privateState} locale={locale} status={status} t={t} onSnapshot={onSnapshot} />;
   if (game.stage === 'ShowingFinalResults') return <FinalResults game={game} locale={locale} status={status} t={t} />;
@@ -169,12 +177,47 @@ function FinalSelfie({ session, game, privateState, locale, status, t, onSnapsho
   return <GameShell game={game} status={status} t={t}><h2>{localizedText(final.selfiePrompt, locale)}</h2><p>{t('finalSelfieHint')}</p><label className="file-button" htmlFor="final-selfie">{t('takePhoto')}</label><input id="final-selfie" className="visually-hidden" type="file" accept="image/*" capture="user" onChange={select} />{file && <button type="button" onClick={() => void submit()} disabled={status !== 'connected' || state === 'submitting'}>{state === 'submitting' ? t('submitting') : t('submitPhoto')}</button>}{state === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('photoUploadFailed')} />}</GameShell>;
 }
 
-function FinalEdit({ session, game, privateState, locale, status, t, onSnapshot }: { session: PlayerSession; game: GameSnapshot; privateState?: PlayerPrivateGameState; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void }) {
-  const final = privateState?.finalRound; const artifact = game.finalRound?.artifacts.find((candidate) => candidate.artifactId === final?.assignedArtifactId); const [canvas, setCanvas] = useState<HTMLCanvasElement>(); const [hasInk, setHasInk] = useState(false); const [state, setState] = useState<SubmissionState>(final?.hasSubmittedEdit ? 'submitted' : 'idle');
-  async function submit(): Promise<void> { if (!canvas || !hasInk || !final?.assignedArtifactId) return; setState('submitting'); try { const result = await uploadFinalEdit(session, final.assignedArtifactId, await drawingPng(canvas, hasInk), submissionIdentity(session.roomCode, session.playerId, final.assignedArtifactId, 'final-edit')); onSnapshot(result.roomSnapshot); setState('submitted'); } catch { setState('failed'); } }
+function FinalEdit({ session, game, privateState, locale, status, t, onSnapshot, onRecover, recoveryFailed }: { session: PlayerSession; game: GameSnapshot; privateState?: PlayerPrivateGameState; locale: Locale; status: ConnectionStatus; t: Translate; onSnapshot: (snapshot: RoomSnapshot) => void; onRecover?: () => void; recoveryFailed: boolean }) {
+  const final = privateState?.finalRound;
+  const artifact = game.finalRound?.artifacts.find((candidate) => candidate.artifactId === final?.assignedArtifactId);
+  const [canvas, setCanvas] = useState<HTMLCanvasElement>();
+  const [hasInk, setHasInk] = useState(false);
+  const [state, setState] = useState<SubmissionState>(final?.hasSubmittedEdit ? 'submitted' : 'idle');
+  const inFlight = useRef(false);
+  const pass = game.finalRound?.currentPass;
+
+  async function submit(): Promise<void> {
+    if (!canvas || !hasInk || !final?.assignedArtifactId || inFlight.current) return;
+    inFlight.current = true;
+    setState('submitting');
+    try {
+      const identity = `${final.assignedArtifactId}:pass:${pass ?? 'unknown'}`;
+      const result = await uploadFinalEdit(session, final.assignedArtifactId, await drawingPng(canvas, hasInk), submissionIdentity(session.roomCode, session.playerId, identity, 'final-edit'));
+      onSnapshot(result.roomSnapshot);
+      setState('submitted');
+    } catch {
+      setState('failed');
+    } finally {
+      inFlight.current = false;
+    }
+  }
+
   if (!final?.assignedArtifactId || final.hasSubmittedEdit || state === 'submitted') return <GameShell game={game} status={status} t={t}><WaitingState label={t('waitingForOthers')} t={t} /></GameShell>;
-  const nickname = artifact?.subjectNickname ?? t('player'); const role = localizedText(artifact?.targetRole ?? final.targetRole, locale);
-  return <GameShell game={game} status={status} t={t}><h2>{t('finalEditCaption').replace('{nickname}', nickname).replace('{role}', role)}</h2><DrawingCanvas backgroundImage={final.sourceDisplayMediaUrl ?? undefined} disabled={state === 'submitting'} onCanvas={setCanvas} onInkChange={setHasInk} labels={{ canvas: t('drawingCanvas'), undo: t('undoDrawing'), clear: t('clearDrawing'), clearConfirm: t('clearDrawingConfirm'), cancel: t('cancel') }} /><button type="button" onClick={() => void submit()} disabled={!hasInk || status !== 'connected' || state === 'submitting'}>{t('submitDrawing')}</button>{state === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('drawingSubmitFailed')} />}</GameShell>;
+  // The private event and public snapshot can arrive in either order.  Do not
+  // create a blank editor with an incomplete caption; the App recovery path
+  // will reconcile the pair and a normal snapshot update will mount it.
+  if (!final.sourceDisplayMediaUrl || !artifact) return <GameShell game={game} status={status} t={t}><p role={recoveryFailed ? 'alert' : 'status'}>{recoveryFailed ? t('finalAssignmentUnavailable') : t('gameLoading')}</p>{onRecover && <button type="button" className="secondary-action" onClick={onRecover}>{t('retry')}</button>}</GameShell>;
+  const nickname = artifact.subjectNickname;
+  const role = localizedText(artifact.targetRole, locale);
+  return <GameShell game={game} status={status} t={t}><h2>{t('finalEditCaption').replace('{nickname}', nickname).replace('{role}', role)}</h2><DrawingCanvas backgroundImage={final.sourceDisplayMediaUrl} disabled={state === 'submitting'} onCanvas={setCanvas} onInkChange={setHasInk} labels={{ canvas: t('drawingCanvas'), undo: t('undoDrawing'), clear: t('clearDrawing'), clearConfirm: t('clearDrawingConfirm'), cancel: t('cancel') }} /><button type="button" onClick={() => void submit()} disabled={!hasInk || status !== 'connected' || state === 'submitting'}>{t('submitDrawing')}</button>{state === 'failed' && <Retry onRetry={() => void submit()} t={t} message={t('drawingSubmitFailed')} />}</GameShell>;
+}
+
+function finalEditAssignmentKey(game: GameSnapshot, privateState?: PlayerPrivateGameState): string {
+  const final = privateState?.finalRound;
+  // The source URL is versioned by immutable media id (/api/media/{id}/…), and
+  // CurrentPass distinguishes an assignment even if the same artifact moves
+  // again later in the round.
+  return `${game.finalRound?.currentPass ?? 'unknown'}:${final?.assignedArtifactId ?? 'pending'}:${final?.sourceDisplayMediaUrl ?? 'pending'}`;
 }
 
 function FinalPresentation({ game, locale, status, t }: { game: GameSnapshot; locale: Locale; status: ConnectionStatus; t: Translate }) { return <GameShell game={game} status={status} t={t}><section className="results-stage"><h1>{t('finalPresentation')}</h1>{(game.finalRound?.artifacts ?? []).map((artifact) => <article className="result-card" key={artifact.artifactId}>{artifact.displayMediaUrl && <img className="result-media" src={artifact.displayMediaUrl} alt={artifact.subjectNickname} />}<h2>{artifact.subjectNickname} {t('asRole')} {localizedText(artifact.targetRole, locale)}</h2></article>)}</section></GameShell>; }

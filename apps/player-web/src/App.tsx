@@ -22,7 +22,9 @@ export default function App() {
   const [error, setError] = useState<TranslationKey | undefined>();
   const [isJoining, setIsJoining] = useState(false);
   const [privateState, setPrivateState] = useState<import('./api/types').PlayerPrivateGameState>();
+  const [finalAssignmentRecoveryFailed, setFinalAssignmentRecoveryFailed] = useState(false);
   const roomInputRef = useRef<HTMLInputElement>(null);
+  const recoveredFinalEditPass = useRef<string | undefined>(undefined);
 
   useEffect(() => gameHubConnection.subscribe(setConnectionStatus), []);
   const applySnapshot = useCallback((snapshot: RoomSnapshot): void => {
@@ -50,6 +52,26 @@ export default function App() {
       }
     }
   }, [applySnapshot, attach]);
+  const recoverFinalEditAssignment = useCallback(async (session: PlayerSession): Promise<void> => {
+    // SignalR is the normal route. This bounded REST reconciliation covers the
+    // valid ordering where a private next-pass assignment reaches the browser
+    // before the corresponding public snapshot, and reconnects mid-pass.
+    setFinalAssignmentRecoveryFailed(false);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const resumed = await resumePlayer(session);
+        setPrivateState(resumed.privateState);
+        applySnapshot(resumed.snapshot);
+        return;
+      } catch (recoveryError) {
+        if (recoveryError instanceof PlayerApiError && recoveryError.kind === 'invalid-session') {
+          clearPlayerSession(); setScreen({ kind: 'join' }); setError('sessionExpired'); return;
+        }
+        if (attempt < 4) await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+      }
+    }
+    setFinalAssignmentRecoveryFailed(true);
+  }, [applySnapshot]);
   useEffect(() => gameHubConnection.onSnapshot((snapshot) => applySnapshot(snapshot)), [applySnapshot]);
   useEffect(() => gameHubConnection.onGameStarted((snapshot) => {
     applySnapshot(snapshot);
@@ -72,6 +94,19 @@ export default function App() {
   // after the persisted identity has been loaded into the initial view state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (initialSession) void restore(initialSession); }, [initialSession, restore]);
+  const finalEditPass = screen.kind === 'game' && screen.snapshot?.game?.stage === 'CollectingFinalEdits'
+    ? `${screen.session.roomCode}:${screen.snapshot.game.finalRound?.currentPass ?? 'unknown'}`
+    : undefined;
+  const finalEditSession = screen.kind === 'game' && screen.snapshot?.game?.stage === 'CollectingFinalEdits' ? screen.session : undefined;
+  useEffect(() => {
+    if (!finalEditPass || !finalEditSession) {
+      recoveredFinalEditPass.current = undefined;
+      return;
+    }
+    if (recoveredFinalEditPass.current === finalEditPass) return;
+    recoveredFinalEditPass.current = finalEditPass;
+    void recoverFinalEditAssignment(finalEditSession);
+  }, [finalEditPass, finalEditSession, recoverFinalEditAssignment]);
   useEffect(() => {
     const resumeVisibleSession = () => {
       if (document.visibilityState !== 'visible') return;
@@ -99,7 +134,7 @@ export default function App() {
     } catch (joinError) { setError(joinError instanceof PlayerApiError ? errorMessage(joinError) : 'server'); } finally { setIsJoining(false); }
   }
 
-  if (screen.kind === 'game') return <GameRouter session={screen.session} snapshot={screen.snapshot} privateState={privateState} locale={locale} status={connectionStatus} t={t} onSnapshot={applySnapshot} />;
+  if (screen.kind === 'game') return <GameRouter session={screen.session} snapshot={screen.snapshot} privateState={privateState} locale={locale} status={connectionStatus} t={t} onSnapshot={applySnapshot} onRecoverFinalEdit={() => void recoverFinalEditAssignment(screen.session)} finalEditRecoveryFailed={finalAssignmentRecoveryFailed} />;
   if (screen.kind === 'lobby') return <Lobby session={screen.session} snapshot={screen.snapshot} status={connectionStatus} error={error} t={t} onSnapshot={applySnapshot} onError={setError} onReconnect={() => void restore(screen.session)} />;
   return <main className="page-shell"><section className="card" aria-labelledby="page-title"><p className="eyebrow">{t('title')}</p><h1 id="page-title">{t('join')}</h1><form onSubmit={submit} noValidate><label htmlFor="roomCode">{t('roomCode')}</label><input ref={roomInputRef} id="roomCode" name="roomCode" value={roomCode} onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))} maxLength={4} autoFocus={!initialSession} autoCapitalize="characters" autoCorrect="off" spellCheck="false" inputMode="text" autoComplete="off" /><label htmlFor="nickname">{t('nickname')}</label><input id="nickname" name="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={20} autoCapitalize="words" autoComplete="nickname" />{error && <p className="form-error" role="alert">{t(error)}</p>}<button type="submit" disabled={isJoining}>{isJoining ? t('joining') : t('join')}</button></form></section></main>;
 }

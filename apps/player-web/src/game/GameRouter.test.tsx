@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({ uploadPhotoAnswer: vi.fn(), uploadDrawingAnswer:
 vi.mock('../realtime/gameHubConnection', () => ({ gameHubConnection: hub }));
 vi.mock('../media/gameMedia', () => media);
 vi.mock('../api/playerApi', () => api);
-vi.mock('./DrawingCanvas', () => ({ DrawingCanvas: ({ onCanvas, onInkChange, labels }: { onCanvas: (canvas: HTMLCanvasElement) => void; onInkChange: (hasInk: boolean) => void; labels: { canvas: string } }) => <button type="button" onClick={() => { onCanvas(document.createElement('canvas')); onInkChange(true); }}>{labels.canvas}</button> }));
+vi.mock('./DrawingCanvas', () => ({ DrawingCanvas: ({ onCanvas, onInkChange, labels, backgroundImage }: { onCanvas: (canvas: HTMLCanvasElement) => void; onInkChange: (hasInk: boolean) => void; labels: { canvas: string }; backgroundImage?: string }) => <button type="button" data-background-image={backgroundImage} onClick={() => { onCanvas(document.createElement('canvas')); onInkChange(true); }}>{labels.canvas}</button> }));
 
 const session = { roomCode: 'AB12', playerId: 'p1', reconnectToken: 'token', nickname: 'Wojtek' };
 const privateState: PlayerPrivateGameState = { playerId: 'p1', questionInstanceId: 'q1', hasSubmittedTextAnswer: false, hasSubmittedTextAnswerVote: false, isEligibleForTextAnswerVote: true };
@@ -141,6 +141,30 @@ describe('GameRouter', () => {
     const finalPrivate: PlayerPrivateGameState = { ...privateState, finalRound: { hasSubmittedSelfie: true, assignedArtifactId: 'artifact-1', sourceDisplayMediaUrl: '/api/media/source', hasSubmittedEdit: false, hasSubmittedVote: false, targetRole: { pl: 'bandyta' }, canSubmitSelfie: false } };
     renderGame({ ...baseSnapshot, game: { ...game('CollectingFinalEdits'), finalRound: { currentPass: 1, totalPasses: 2, submittedSelfies: 3, requiredSelfies: 3, submittedEdits: 0, requiredEdits: 3, submittedVotes: 0, requiredVotes: 3, artifacts: [{ artifactId: 'artifact-1', subjectPlayerId: 'p2', subjectNickname: 'Ania', selfiePrompt: { pl: 'Mina' }, targetRole: { pl: 'bandyta' }, voteCount: 0, isTopResult: false }] } } }, finalPrivate);
     expect(screen.getByRole('heading', { name: 'Spraw, aby Ania wyglądał jak bandyta' })).toBeInTheDocument();
+  });
+
+  it('starts a fresh final editor session when a later pass assigns a different accumulated artifact', async () => {
+    const passOnePrivate: PlayerPrivateGameState = { ...privateState, finalRound: { hasSubmittedSelfie: true, assignedArtifactId: 'artifact-a', sourceDisplayMediaUrl: '/api/media/edited-a/display', hasSubmittedEdit: false, hasSubmittedVote: false, canSubmitSelfie: false } };
+    const passTwoPrivate: PlayerPrivateGameState = { ...privateState, finalRound: { hasSubmittedSelfie: true, assignedArtifactId: 'artifact-b', sourceDisplayMediaUrl: '/api/media/edited-b-pass-one/display', hasSubmittedEdit: false, hasSubmittedVote: false, canSubmitSelfie: false } };
+    const finalSnapshot = (currentPass: number, artifactId: string, subjectNickname: string, targetRole: string): RoomSnapshot => ({ ...baseSnapshot, stateVersion: 100 + currentPass, game: { ...game('CollectingFinalEdits'), finalRound: { currentPass, totalPasses: 2, submittedSelfies: 3, requiredSelfies: 3, submittedEdits: 0, requiredEdits: 3, submittedVotes: 0, requiredVotes: 3, artifacts: [{ artifactId, subjectPlayerId: artifactId === 'artifact-a' ? 'p2' : 'p3', subjectNickname, selfiePrompt: { pl: 'Mina' }, targetRole: { pl: targetRole }, voteCount: 0, isTopResult: false }] } } });
+    api.uploadFinalEdit.mockResolvedValue({ playerPrivateGameState: passOnePrivate, roomSnapshot: baseSnapshot });
+    const { rerender } = renderGame(finalSnapshot(1, 'artifact-a', 'Ania', 'bandyta'), passOnePrivate);
+    expect(screen.getByRole('heading', { name: 'Spraw, aby Ania wyglądał jak bandyta' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Obszar rysowania' })).toHaveAttribute('data-background-image', '/api/media/edited-a/display');
+    fireEvent.click(screen.getByRole('button', { name: 'Obszar rysowania' }));
+    media.drawingPng.mockResolvedValue(new Blob(['pass-one'], { type: 'image/png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij rysunek' }));
+    await waitFor(() => expect(api.uploadFinalEdit).toHaveBeenCalledWith(session, 'artifact-a', expect.any(Blob), expect.any(String)));
+
+    rerender(<GameRouter session={session} snapshot={finalSnapshot(2, 'artifact-b', 'Kamil', 'kosmonauta')} privateState={passTwoPrivate} locale="pl" status="connected" t={(key) => translations.pl[key]} onSnapshot={() => undefined} />);
+
+    expect(screen.getByRole('heading', { name: 'Spraw, aby Kamil wyglądał jak kosmonauta' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Obszar rysowania' })).toHaveAttribute('data-background-image', '/api/media/edited-b-pass-one/display');
+    fireEvent.click(screen.getByRole('button', { name: 'Obszar rysowania' }));
+    media.drawingPng.mockResolvedValue(new Blob(['pass-two'], { type: 'image/png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wyślij rysunek' }));
+    await waitFor(() => expect(api.uploadFinalEdit).toHaveBeenCalledWith(session, 'artifact-b', expect.any(Blob), expect.any(String)));
+    expect(api.uploadFinalEdit).toHaveBeenCalledTimes(2);
   });
 
   it.each(['CategoryIntro', 'QuestionIntro', 'RevealingTextAnswers', 'RevealingPhotoAnswers', 'RevealingDrawingAnswers', 'PausedForDisplay', 'GameSummary'])('renders a controlled player-facing view for %s', (stage) => {
