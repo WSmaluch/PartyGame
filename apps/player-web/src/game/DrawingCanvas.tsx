@@ -1,0 +1,19 @@
+import { useEffect, useRef, useState } from 'react';
+
+type Point = { x: number; y: number };
+type Stroke = Point[];
+
+export function DrawingCanvas({ disabled, onCanvas, onInkChange, labels }: { disabled: boolean; onCanvas: (canvas: HTMLCanvasElement | undefined) => void; onInkChange: (hasInk: boolean) => void; labels: { canvas: string; undo: string; clear: string; clearConfirm: string; cancel: string } }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null); const active = useRef<Stroke | undefined>(undefined);
+  const [strokes, setStrokes] = useState<Stroke[]>([]); const [confirmingClear, setConfirmingClear] = useState(false);
+  useEffect(() => { onCanvas(canvasRef.current ?? undefined); return () => onCanvas(undefined); }, [onCanvas]);
+  useEffect(() => { onInkChange(strokes.length > 0); const canvas = canvasRef.current; const context = canvas?.getContext('2d'); if (!canvas || !context) return; context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); context.strokeStyle = '#111'; context.lineWidth = 12; context.lineCap = 'round'; context.lineJoin = 'round'; for (const stroke of strokes) draw(context, stroke, canvas); }, [strokes, onInkChange]);
+  function point(event: React.PointerEvent<HTMLCanvasElement>): Point { const rect = event.currentTarget.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)) }; }
+  function start(event: React.PointerEvent<HTMLCanvasElement>): void { if (disabled) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); active.current = [point(event)]; }
+  function move(event: React.PointerEvent<HTMLCanvasElement>): void { if (!active.current || disabled) return; event.preventDefault(); active.current.push(point(event)); renderActive(); }
+  function finish(event: React.PointerEvent<HTMLCanvasElement>): void { if (!active.current || disabled) return; event.preventDefault(); const stroke = active.current; active.current = undefined; if (stroke) setStrokes((current) => [...current, stroke]); }
+  function renderActive(): void { const canvas = canvasRef.current; const context = canvas?.getContext('2d'); if (!canvas || !context) return; context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); context.strokeStyle = '#111'; context.lineWidth = 12; context.lineCap = 'round'; context.lineJoin = 'round'; for (const stroke of strokes) draw(context, stroke, canvas); if (active.current) draw(context, active.current, canvas); }
+  return <section className="drawing-editor"><canvas ref={canvasRef} className="drawing-canvas" width="1024" height="1024" aria-label={labels.canvas} role="img" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} /> <div className="drawing-tools"><button type="button" onClick={() => setStrokes((current) => current.slice(0, -1))} disabled={disabled || !strokes.length}>{labels.undo}</button><button type="button" onClick={() => setConfirmingClear(true)} disabled={disabled || !strokes.length}>{labels.clear}</button></div>{confirmingClear && <div className="drawing-clear-confirmation" role="alertdialog" aria-label={labels.clearConfirm}><p>{labels.clearConfirm}</p><button type="button" onClick={() => setConfirmingClear(false)}>{labels.cancel}</button><button type="button" onClick={() => { setStrokes([]); setConfirmingClear(false); }}>{labels.clear}</button></div>}</section>;
+}
+
+function draw(context: CanvasRenderingContext2D, points: Stroke, canvas: HTMLCanvasElement): void { const first = points[0]; if (!first) return; context.beginPath(); context.moveTo(first.x * canvas.width, first.y * canvas.height); for (const point of points.slice(1)) context.lineTo(point.x * canvas.width, point.y * canvas.height); if (points.length === 1) context.lineTo(first.x * canvas.width + 0.1, first.y * canvas.height + 0.1); context.stroke(); }

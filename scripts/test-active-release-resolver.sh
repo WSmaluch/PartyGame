@@ -10,13 +10,14 @@ trap cleanup EXIT INT TERM
 
 make_release() {
   local directory="$1"
-  mkdir -p "$directory"/{api,display,admin}
+  mkdir -p "$directory"/{api,display,admin,player}
   : > "$directory/manifest.json"
   : > "$directory/BUILD_INFO.txt"
   : > "$directory/checksums.sha256"
   : > "$directory/api/PartyGame.Api.dll"
   : > "$directory/display/index.html"
   : > "$directory/admin/index.html"
+  : > "$directory/player/index.html"
 }
 
 expect_resolved() {

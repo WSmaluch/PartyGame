@@ -7,8 +7,10 @@ public sealed class DeploymentOptions
     public bool Enabled { get; set; }
     public string DisplayRoot { get; set; } = string.Empty;
     public string AdminRoot { get; set; } = string.Empty;
+    public string PlayerRoot { get; set; } = string.Empty;
     public string DisplayPathBase { get; set; } = "/display";
     public string AdminPathBase { get; set; } = "/admin";
+    public string PlayerPathBase { get; set; } = "/play";
 }
 
 public static class DeploymentConfiguration

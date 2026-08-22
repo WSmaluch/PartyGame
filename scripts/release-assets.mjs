@@ -34,7 +34,7 @@ if (command === 'config') {
     const [hash, file] = line.split('  ');
     return [file, hash];
   }));
-  const artifacts = ['api', 'display', 'admin'].map(name => ({ name, files: included.filter(file => file.startsWith(`${name}/`)).length }));
+  const artifacts = ['api', 'display', 'admin', 'player'].map(name => ({ name, files: included.filter(file => file.startsWith(`${name}/`)).length }));
   const manifest = {
     version,
     applicationVersion: version,
@@ -44,7 +44,7 @@ if (command === 'config') {
     tools: { dotnet: dotnetVersion, node: nodeVersion, npm: npmVersion },
     artifacts,
     checksums,
-    testSummary: { backend: 'dotnet test', display: 'vitest/lint/build', admin: 'vitest/lint/build', ios: 'Release build-for-testing' },
+    testSummary: { backend: 'dotnet test', display: 'vitest/lint/build', admin: 'vitest/lint/build', player: 'vitest/lint/build', ios: 'Release build-for-testing' },
   };
   await fs.writeFile(path.join(releaseRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await fs.writeFile(path.join(releaseRoot, 'BUILD_INFO.txt'), [

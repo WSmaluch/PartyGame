@@ -131,8 +131,8 @@ builder.Services.AddOptions<ReleaseRuntimeOptions>()
     .ValidateOnStart();
 builder.Services.AddOptions<DeploymentOptions>()
     .Bind(builder.Configuration.GetSection(DeploymentOptions.SectionName))
-    .Validate(options => !options.Enabled || (!string.IsNullOrWhiteSpace(options.DisplayRoot) && !string.IsNullOrWhiteSpace(options.AdminRoot)), "Deployment:DisplayRoot and Deployment:AdminRoot are required when Deployment is enabled.")
-    .Validate(options => !options.Enabled || (DeploymentConfiguration.IsValidPathBase(options.DisplayPathBase) && DeploymentConfiguration.IsValidPathBase(options.AdminPathBase) && !string.Equals(options.DisplayPathBase, options.AdminPathBase, StringComparison.OrdinalIgnoreCase)), "Deployment path bases must be distinct absolute single-root paths without traversal.")
+    .Validate(options => !options.Enabled || (!string.IsNullOrWhiteSpace(options.DisplayRoot) && !string.IsNullOrWhiteSpace(options.AdminRoot) && !string.IsNullOrWhiteSpace(options.PlayerRoot)), "Deployment:DisplayRoot, Deployment:AdminRoot and Deployment:PlayerRoot are required when Deployment is enabled.")
+    .Validate(options => !options.Enabled || (DeploymentConfiguration.IsValidPathBase(options.DisplayPathBase) && DeploymentConfiguration.IsValidPathBase(options.AdminPathBase) && DeploymentConfiguration.IsValidPathBase(options.PlayerPathBase) && !string.Equals(options.DisplayPathBase, options.AdminPathBase, StringComparison.OrdinalIgnoreCase) && !string.Equals(options.DisplayPathBase, options.PlayerPathBase, StringComparison.OrdinalIgnoreCase) && !string.Equals(options.AdminPathBase, options.PlayerPathBase, StringComparison.OrdinalIgnoreCase)), "Deployment path bases must be distinct absolute single-root paths without traversal.")
     .ValidateOnStart();
 builder.Services.AddOptions<MediaOptions>()
     .Bind(builder.Configuration.GetSection(MediaOptions.SectionName))
@@ -368,14 +368,19 @@ if (deployment.Enabled)
 {
     var displayRoot = DeploymentConfiguration.ResolveStaticRoot(deployment.DisplayRoot, app.Environment.ContentRootPath, "Deployment:DisplayRoot");
     var adminRoot = DeploymentConfiguration.ResolveStaticRoot(deployment.AdminRoot, app.Environment.ContentRootPath, "Deployment:AdminRoot");
+    var playerRoot = DeploymentConfiguration.ResolveStaticRoot(deployment.PlayerRoot, app.Environment.ContentRootPath, "Deployment:PlayerRoot");
     if (!Directory.Exists(displayRoot) || !File.Exists(Path.Combine(displayRoot, "index.html")))
         app.Logger.LogError("Deployment Display root is unavailable or missing index.html: {DisplayRoot}", displayRoot);
     if (!Directory.Exists(adminRoot) || !File.Exists(Path.Combine(adminRoot, "index.html")))
         app.Logger.LogError("Deployment Admin root is unavailable or missing index.html: {AdminRoot}", adminRoot);
+    if (!Directory.Exists(playerRoot) || !File.Exists(Path.Combine(playerRoot, "index.html")))
+        app.Logger.LogError("Deployment Player root is unavailable or missing index.html: {PlayerRoot}", playerRoot);
     app.MapMethods($"{deployment.DisplayPathBase}/{{**path}}", [HttpMethods.Get, HttpMethods.Head],
         (string? path) => StaticFileOrSpaFallback(displayRoot, path));
     app.MapMethods($"{deployment.AdminPathBase}/{{**path}}", [HttpMethods.Get, HttpMethods.Head],
         (string? path) => StaticFileOrSpaFallback(adminRoot, path));
+    app.MapMethods($"{deployment.PlayerPathBase}/{{**path}}", [HttpMethods.Get, HttpMethods.Head],
+        (string? path) => StaticFileOrSpaFallback(playerRoot, path));
 }
 
 static IResult StaticFileOrSpaFallback(string staticRoot, string? relativePath)

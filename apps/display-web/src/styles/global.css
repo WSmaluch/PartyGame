@@ -203,6 +203,7 @@ h1 {
 .room-heading { display: flex; align-items: baseline; justify-content: center; gap: 22px; }
 .room-heading span { color: #c8bfe8; font-size: clamp(18px, 2vw, 28px); }
 .room-heading strong { font: 900 clamp(54px, 8vw, 106px)/1 monospace; letter-spacing: .12em; }
+.player-join-qr { display: flex; align-items: center; justify-content: center; gap: 16px; max-width: 480px; margin: 18px auto 22px; padding: 12px 16px; border-radius: 22px; background: rgb(255 255 255 / 10%); text-align: left; }.player-join-qr img, .player-join-qr__loading { width: 122px; height: 122px; flex: 0 0 auto; border-radius: 12px; background: #fff; }.player-join-qr__loading { display: grid; place-items: center; padding: 8px; color: #2b105f; font-size: 13px; font-weight: 800; text-align: center; }.player-join-qr div { display: grid; gap: 7px; }.player-join-qr strong { font-size: clamp(18px, 2vw, 24px); }.player-join-qr a { color: #7ff7e8; font-weight: 800; overflow-wrap: anywhere; }
 .lobby-count { margin: 4px 0 24px; color: #7ff7e8; font-size: 24px; font-weight: 800; }
 .player-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; }
 .player-card { padding: 20px; border: 2px solid rgba(255,255,255,.18); border-radius: 26px; background: rgba(255,255,255,.08); }
@@ -245,6 +246,7 @@ h1 {
   .server-address {
     flex-direction: column;
   }
+  .player-join-qr { align-items: flex-start; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

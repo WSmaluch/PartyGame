@@ -152,16 +152,22 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
         var root = Path.Combine(Path.GetTempPath(), "PartyGame.Tests", Guid.NewGuid().ToString("N"));
         var display = Path.Combine(root, "display");
         var admin = Path.Combine(root, "admin");
+        var player = Path.Combine(root, "player");
         Directory.CreateDirectory(display);
         Directory.CreateDirectory(admin);
+        Directory.CreateDirectory(player);
         await File.WriteAllTextAsync(Path.Combine(display, "index.html"), "<html>display</html>");
         await File.WriteAllTextAsync(Path.Combine(admin, "index.html"), "<html>admin</html>");
+        await File.WriteAllTextAsync(Path.Combine(player, "index.html"), "<html>player</html>");
         await File.WriteAllTextAsync(Path.Combine(display, "config.json"), "{\"app\":\"display\"}");
         await File.WriteAllTextAsync(Path.Combine(admin, "config.json"), "{\"app\":\"admin\"}");
+        await File.WriteAllTextAsync(Path.Combine(player, "config.json"), "{\"app\":\"player\"}");
         Directory.CreateDirectory(Path.Combine(display, "assets"));
         Directory.CreateDirectory(Path.Combine(admin, "assets"));
+        Directory.CreateDirectory(Path.Combine(player, "assets"));
         await File.WriteAllTextAsync(Path.Combine(display, "assets", "app.js"), "display asset");
         await File.WriteAllTextAsync(Path.Combine(admin, "assets", "app.js"), "admin asset");
+        await File.WriteAllTextAsync(Path.Combine(player, "assets", "app.js"), "player asset");
         try
         {
             using var deploymentFactory = new PartyGameApiFactory(
@@ -171,25 +177,36 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
                     ["Deployment:Enabled"] = "true",
                     ["Deployment:DisplayRoot"] = display,
                     ["Deployment:AdminRoot"] = admin,
+                    ["Deployment:PlayerRoot"] = player,
                 });
             using var client = deploymentFactory.CreateClient();
 
             Assert.Equal("<html>display</html>", await client.GetStringAsync("/display/"));
             Assert.Equal("<html>admin</html>", await client.GetStringAsync("/admin/"));
+            Assert.Equal("<html>player</html>", await client.GetStringAsync("/play/"));
             Assert.Equal("<html>display</html>", await client.GetStringAsync("/display/room/ABCD"));
             Assert.Equal("<html>admin</html>", await client.GetStringAsync("/admin/content/packages"));
+            Assert.Equal("<html>player</html>", await client.GetStringAsync("/play/room/AB12"));
             var displayConfig = await client.GetAsync("/display/config.json");
             var adminConfig = await client.GetAsync("/admin/config.json");
+            var playerConfig = await client.GetAsync("/play/config.json");
             Assert.Equal(HttpStatusCode.OK, displayConfig.StatusCode);
             Assert.Equal("application/json", displayConfig.Content.Headers.ContentType?.MediaType);
             Assert.Equal("{\"app\":\"display\"}", await displayConfig.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.OK, adminConfig.StatusCode);
             Assert.Equal("application/json", adminConfig.Content.Headers.ContentType?.MediaType);
             Assert.Equal("{\"app\":\"admin\"}", await adminConfig.Content.ReadAsStringAsync());
+            Assert.Equal(HttpStatusCode.OK, playerConfig.StatusCode);
+            Assert.Equal("application/json", playerConfig.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("{\"app\":\"player\"}", await playerConfig.Content.ReadAsStringAsync());
             Assert.Equal("display asset", await client.GetStringAsync("/display/assets/app.js"));
             Assert.Equal("admin asset", await client.GetStringAsync("/admin/assets/app.js"));
+            var playerAsset = await client.GetAsync("/play/assets/app.js");
+            Assert.Equal("player asset", await playerAsset.Content.ReadAsStringAsync());
+            Assert.Contains("javascript", playerAsset.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/display/missing.js")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/admin/missing.json")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/play/missing.js")).StatusCode);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/not-a-spa-route")).StatusCode);
             Assert.NotEqual("text/html", (await client.PostAsync("/hubs/game/negotiate?negotiateVersion=1", null)).Content.Headers.ContentType?.MediaType);
         }
@@ -223,7 +240,7 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
             var result = await RuntimeReadiness.CheckAsync(
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(new MediaOptions { RootPath = media }),
-                Options.Create(new DeploymentOptions { Enabled = true, DisplayRoot = Path.Combine(root, "missing"), AdminRoot = root }),
+                Options.Create(new DeploymentOptions { Enabled = true, DisplayRoot = Path.Combine(root, "missing"), AdminRoot = root, PlayerRoot = root }),
                 CancellationToken.None);
 
             Assert.Equal("not-ready", result.Status);
@@ -245,5 +262,5 @@ public sealed class ReleaseEndpointsTests(PartyGameApiFactory factory)
     }
 
     private sealed record SystemVersionResponse(string Version, string InformationalVersion, string CommitHash, string BuildTimestampUtc, string Environment);
-    private sealed record RuntimeReadinessResponse(string Status, string Database, string MediaStorage, string Display, string Admin);
+    private sealed record RuntimeReadinessResponse(string Status, string Database, string MediaStorage, string Display, string Admin, string Player);
 }

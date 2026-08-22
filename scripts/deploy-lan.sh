@@ -30,15 +30,17 @@ switch_current() {
 }
 write_web_config() {
   local target="$1" version="$2" public; public="$(lan_url)"
-  for app in display admin; do
+  for app in display admin player; do
+    local public_path="/$app/"
+    [[ "$app" == "player" ]] && public_path="/play/"
     cat > "$target/$app/config.json" <<EOF
 {
   "apiBaseUrl": "/",
   "signalRHubUrl": "/hubs/game",
-  "publicBaseUrl": "/$app/",
+  "publicBaseUrl": "$public_path",
   "applicationVersion": "$version",
   "signalRBaseUrl": "/",
-  "publicAppUrl": "$public/$app/",
+  "publicAppUrl": "$public$public_path",
   "buildVersion": "$version"
 }
 EOF
@@ -90,15 +92,15 @@ target="$LAN_DEPLOY_ROOT/releases/$version"
 if [[ -e "$target" ]]; then
   lan_verify_installed_release "$target"
   cmp -s "$LAN_RELEASE_DIR/manifest.json" "$target/manifest.json" || lan_die "release version $version already exists with different manifest."
-  chmod u+w "$target/display/config.json" "$target/admin/config.json"
+  chmod u+w "$target/display/config.json" "$target/admin/config.json" "$target/player/config.json"
   write_web_config "$target" "$version"
-  chmod a-w "$target/display/config.json" "$target/admin/config.json"
+  chmod a-w "$target/display/config.json" "$target/admin/config.json" "$target/player/config.json"
 else
   staging="$(mktemp -d "$LAN_DEPLOY_ROOT/releases/.${version}.staging.XXXXXX")"
   trap 'rm -rf "$staging"' EXIT
   cp -R "$LAN_RELEASE_DIR/." "$staging/"
   write_web_config "$staging" "$version"
-  chmod -R a-w "$staging/api" "$staging/display" "$staging/admin" || true
+  chmod -R a-w "$staging/api" "$staging/display" "$staging/admin" "$staging/player" || true
   mv "$staging" "$target"
   trap - EXIT
 fi

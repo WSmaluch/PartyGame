@@ -26,6 +26,10 @@ run admin-install npm --prefix apps/admin-web ci
 run admin-lint npm --prefix apps/admin-web run lint
 run admin-test npm --prefix apps/admin-web run test
 run admin-build npm --prefix apps/admin-web run build
+run player-install npm --prefix apps/player-web ci
+run player-lint npm --prefix apps/player-web run lint
+run player-test npm --prefix apps/player-web run test
+run player-build npm --prefix apps/player-web run build
 run ios-release xcodebuild -project apps/ios/PartyGame.xcodeproj -scheme PartyGame -configuration Release -destination "platform=iOS Simulator,id=$ios_destination" build-for-testing
 run release-build scripts/build-release.sh
 version="$(tr -d '[:space:]' < release/VERSION)"; release_dir="$REPO_DIR/artifacts/release/$version"; package="$REPO_DIR/artifacts/packages/partygame-$version.tar.gz"
