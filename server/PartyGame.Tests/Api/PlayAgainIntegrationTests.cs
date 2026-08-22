@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using PartyGame.Domain.Content;
 using PartyGame.Domain.Game;
 using PartyGame.Domain.Rooms;
 using PartyGame.Infrastructure.Persistence;
