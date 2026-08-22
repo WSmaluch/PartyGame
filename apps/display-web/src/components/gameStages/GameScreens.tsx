@@ -169,12 +169,12 @@ function CollectingPlayerSelections({
         </p>
       </div>
 
-      <div className="answered-players">
+      <div className="answered-players" data-testid="selection-player-grid">
         {room.players.map((p) => {
           const hasAnswered = answered.includes(p.id);
           const photo = profilePhotoUrl(p.profilePhotoUrl);
           return (
-            <article key={p.id} className={`player-avatar ${hasAnswered ? 'answered' : 'waiting'}`}>
+            <article key={p.id} data-testid={`selection-player-${p.id}`} className={`player-avatar ${hasAnswered ? 'answered' : 'waiting'}`}>
               {photo ? <img src={`${photo}${photo.includes('?') ? '&' : '?'}v=${room.stateVersion}`} alt={p.nickname} /> : <div className="photo-placeholder">?</div>}
               <span>{p.nickname}</span>
             </article>
@@ -262,7 +262,7 @@ function RoundSummary({
         {[...rankings].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999) || b.score - a.score).map((rank) => {
           const player = room.players.find((p) => p.id === rank.playerId);
           return (
-            <div key={rank.playerId} className="ranking-entry">
+            <div key={rank.playerId} data-testid={`ranking-entry-${rank.playerId}`} className="ranking-entry">
               <span className="rank">#{rank.rank}</span>
               <span className="name">{player?.nickname}</span>
               <span className="score">
@@ -291,7 +291,7 @@ function Completed({ game, room }: { game: GameSnapshot; room: RoomSnapshot }) {
             (candidate) => candidate.id === rank.playerId,
           );
           return (
-            <div key={rank.playerId} className="ranking-entry">
+            <div key={rank.playerId} data-testid={`ranking-entry-${rank.playerId}`} className="ranking-entry">
               <span className="rank">#{rank.rank}</span>
               <span className="name">{player?.nickname}</span>
               <span className="score">
