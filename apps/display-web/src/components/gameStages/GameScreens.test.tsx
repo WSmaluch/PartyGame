@@ -100,7 +100,7 @@ describe('GameScreens', () => {
 
     it('renders completed ties as separate rank, nickname, and score cells', () => {
         const players = [{ id: 'p1', nickname: 'Very long nickname for display readability', isHost: true, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1400 }, { id: 'p2', nickname: 'Ania', isHost: false, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1300 }, { id: 'p3', nickname: 'Jan', isHost: false, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1300 }];
-        render(<GameScreens snapshot={{ ...defaultRoom, players, game: { ...defaultGame, stage: 'Completed', ranking: [{ playerId: 'p1', score: 1400, rank: 1 }, { playerId: 'p2', score: 1300, rank: 2 }, { playerId: 'p3', score: 1300, rank: 2 }] } }} />);
+        render(<GameScreens snapshot={{ ...defaultRoom, players, game: { ...defaultGame, stage: 'Completed', ranking: [{ playerId: 'p1', score: 1400, rank: 1, previousScore: 0, previousRank: 1 }, { playerId: 'p2', score: 1300, rank: 2, previousScore: 0, previousRank: 2 }, { playerId: 'p3', score: 1300, rank: 2, previousScore: 0, previousRank: 2 }] } }} />);
         expect(screen.getAllByTestId(/^ranking-entry-/)).toHaveLength(3);
         const ania = within(screen.getByTestId('ranking-entry-p2'));
         expect(ania.getByText('#2')).toBeInTheDocument();
