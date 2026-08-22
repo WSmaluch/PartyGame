@@ -5,6 +5,7 @@ source "$SCRIPT_DIR/lib/lan-common.sh"
 lan_parse_arguments "$@"
 lan_load_environment
 base="$(lan_url)"
+release="$(lan_current_release)"
 for path in /health /health/ready /api/system/version; do
   curl --fail --silent --show-error "$base$path" >/dev/null
 done
@@ -45,16 +46,18 @@ assert_missing_static_file() {
 
 assert_html /display/
 assert_html /admin/
-assert_html /play/
 assert_json_config /display/config.json
 assert_json_config /admin/config.json
-assert_json_config /play/config.json
 assert_javascript_asset display
 assert_javascript_asset admin
-assert_javascript_asset player /play
+if lan_release_has_player "$release"; then
+  assert_html /play/
+  assert_json_config /play/config.json
+  assert_javascript_asset player /play
+  assert_missing_static_file /play/missing.js
+fi
 assert_missing_static_file /display/missing.js
 assert_missing_static_file /admin/missing.json
-assert_missing_static_file /play/missing.js
 curl --fail --silent --show-error --request POST "$base/hubs/game/negotiate?negotiateVersion=1" >/dev/null
 if curl --fail --silent "$base/display/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
   echo "PartyGame LAN: Display config contains a loopback address." >&2; exit 1
@@ -62,7 +65,7 @@ fi
 if curl --fail --silent "$base/admin/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
   echo "PartyGame LAN: Admin config contains a loopback address." >&2; exit 1
 fi
-if curl --fail --silent "$base/play/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
+if lan_release_has_player "$release" && curl --fail --silent "$base/play/config.json" | grep -Eq 'localhost|127\.0\.0\.1'; then
   echo "PartyGame LAN: Web Player config contains a loopback address." >&2; exit 1
 fi
 echo "PartyGame LAN smoke PASS: $base"

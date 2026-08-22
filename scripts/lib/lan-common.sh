@@ -76,6 +76,11 @@ lan_prepare_runtime() {
   mkdir -p "$(lan_runtime_dir)"/{database,media,logs,pid,temp} "$LAN_DEPLOY_ROOT/config" "$LAN_DEPLOY_ROOT/releases"
 }
 
+lan_release_has_player() {
+  local release="$1"
+  node -e 'const manifest=require(process.argv[1]); process.exit(Array.isArray(manifest.artifacts) && manifest.artifacts.some(({name}) => name === "player") ? 0 : 1)' "$release/manifest.json"
+}
+
 lan_release_layout_missing() {
   local release="$1" missing=()
   [[ -f "$release/manifest.json" ]] || missing+=(manifest.json)
@@ -84,7 +89,9 @@ lan_release_layout_missing() {
   [[ -f "$release/api/PartyGame.Api.dll" ]] || missing+=(api/PartyGame.Api.dll)
   [[ -f "$release/display/index.html" ]] || missing+=(display/index.html)
   [[ -f "$release/admin/index.html" ]] || missing+=(admin/index.html)
-  [[ -f "$release/player/index.html" ]] || missing+=(player/index.html)
+  if lan_release_has_player "$release"; then
+    [[ -f "$release/player/index.html" ]] || missing+=(player/index.html)
+  fi
   if (( ${#missing[@]} > 0 )); then
     (IFS=,; printf '%s' "${missing[*]}")
   fi

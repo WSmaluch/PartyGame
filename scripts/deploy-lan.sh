@@ -30,7 +30,9 @@ switch_current() {
 }
 write_web_config() {
   local target="$1" version="$2" public; public="$(lan_url)"
-  for app in display admin player; do
+  local apps=(display admin)
+  [[ -d "$target/player" ]] && apps+=(player)
+  for app in "${apps[@]}"; do
     local public_path="/$app/"
     [[ "$app" == "player" ]] && public_path="/play/"
     cat > "$target/$app/config.json" <<EOF
