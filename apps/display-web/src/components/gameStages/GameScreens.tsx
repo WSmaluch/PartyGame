@@ -175,7 +175,7 @@ function CollectingPlayerSelections({
           const photo = profilePhotoUrl(p.profilePhotoUrl);
           return (
             <article key={p.id} className={`player-avatar ${hasAnswered ? 'answered' : 'waiting'}`}>
-              {photo ? <img src={`${photo}?v=${room.stateVersion}`} alt={p.nickname} /> : <div className="photo-placeholder">?</div>}
+              {photo ? <img src={`${photo}${photo.includes('?') ? '&' : '?'}v=${room.stateVersion}`} alt={p.nickname} /> : <div className="photo-placeholder">?</div>}
               <span>{p.nickname}</span>
             </article>
           );

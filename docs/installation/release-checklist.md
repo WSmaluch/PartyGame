@@ -16,6 +16,10 @@ Use a normal published content package rather than changing the game planner or 
 
 On the LAN server, start the installed release with `scripts/start-lan.sh --deploy-root <install-root> --runtime-root <runtime-root> --host <private-lan-ip> --port <port>`. Open Admin at `http://<private-lan-ip>:<port>/admin/` and create/publish the package there. On the iPhone, set the same server address, choose **Host game**, select only `RC5 physical QA`, select all four entries in **Question types**, set one round and four questions per round, then create the room. Join two additional players, attach Display, and mark all players ready.
 
+## RC8 browser and replay QA
+
+With an iPhone and an Android/desktop browser in the same room, scan the Display QR code and confirm that it opens `/play/?room=<roomCode>` on the LAN host. Complete PlayerSelection (including a self-vote), Text, Photo, Drawing, and Final Round. During Final Edit verify that the target caption is visible, then verify the final presentation, vote, results, Completed ranking, and **Play again**. The host action must return iPhone, browser, and Display to the same room's Lobby without duplicate players; reconnect each client once during this run.
+
 The production `GamePlanner` may shuffle the four questions, but because the selected package contains exactly one question of each enabled type and the game requires four questions, every run contains exactly one Player Selection, Text Answer, Photo Answer, and Drawing Answer. This guarantees the media checks without a test endpoint, a random seed, or manual database changes. Record the observed order and verify all of the following: the rendered Text prompt contains a real player nickname and no token, both eligible answers reach voting, Photo and Drawing render on Display, a Wi-Fi/relaunch reconnect restores the authoritative stage, and every phone reaches Completed with the final ranking.
 
 ### Final Round acceptance

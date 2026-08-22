@@ -62,6 +62,13 @@ describe('GameScreens', () => {
         expect(screen.getByText(/2 outOf 3 players/i)).toBeInTheDocument();
     });
 
+    it.each([3, 4, 6, 8, 10])('uses one bounded avatar-grid item per player for %i players', (count) => {
+        const players = Array.from({ length: count }, (_, index) => ({ id: `p${index}`, nickname: `Player ${index + 1}`, isHost: index === 0, isReady: true, isConnected: true, hasProfilePhoto: false, score: 0 }));
+        render(<GameScreens snapshot={{ ...defaultRoom, players, game: { ...defaultGame, stage: 'CollectingPlayerSelections', answeredPlayers: count, requiredPlayers: count, answeredPlayerIds: players.map(player => player.id) } }} />);
+        expect(document.querySelectorAll('.answered-players .player-avatar')).toHaveLength(count);
+        expect(document.querySelector('.answered-players')).toHaveClass('answered-players');
+    });
+
     it('ShowingQuestionResults with pointsAwarded', () => {
         const game: GameSnapshot = {
             ...defaultGame,
@@ -89,6 +96,16 @@ describe('GameScreens', () => {
         
         rerender(<GameScreens snapshot={{ ...defaultRoom, game: { ...defaultGame, stage: 'Completed' } }} />);
         expect(screen.getByText(/gameCompleted/i)).toBeInTheDocument();
+    });
+
+    it('renders completed ties as separate rank, nickname, and score cells', () => {
+        const players = [{ id: 'p1', nickname: 'Very long nickname for display readability', isHost: true, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1400 }, { id: 'p2', nickname: 'Ania', isHost: false, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1300 }, { id: 'p3', nickname: 'Jan', isHost: false, isReady: true, isConnected: true, hasProfilePhoto: false, score: 1300 }];
+        render(<GameScreens snapshot={{ ...defaultRoom, players, game: { ...defaultGame, stage: 'Completed', ranking: [{ playerId: 'p1', score: 1400, rank: 1 }, { playerId: 'p2', score: 1300, rank: 2 }, { playerId: 'p3', score: 1300, rank: 2 }] } }} />);
+        const rows = document.querySelectorAll('.game-completed .ranking-entry');
+        expect(rows).toHaveLength(3);
+        expect(rows[1].querySelector('.rank')).toHaveTextContent('#2');
+        expect(rows[1].querySelector('.name')).toHaveTextContent('Ania');
+        expect(rows[1].querySelector('.score')).toHaveTextContent('1300 points');
     });
 
     it('PausedForDisplay and unknown GameStage', () => {
