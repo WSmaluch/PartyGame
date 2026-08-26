@@ -59,6 +59,10 @@ enum DrawingImageGeometry {
         guard let rect = aspectFitRect(container: container, image: image) else { return nil }
         return DrawingCoordinateMapper.logicalPoint(CGPoint(x: location.x - rect.minX, y: location.y - rect.minY), in: rect.size)
     }
+
+    static func renderedPoint(_ point: DrawingPoint, in rect: CGRect) -> CGPoint {
+        CGPoint(x: rect.minX + point.x * rect.width, y: rect.minY + point.y * rect.height)
+    }
 }
 
 struct DrawingStroke: Identifiable, Codable, Equatable, Sendable {
@@ -109,11 +113,10 @@ struct DrawingRenderer: Sendable {
                 for stroke in state.completedStrokes {
                     let points = stroke.points
                     guard let first = points.first else { continue }
-                    func mapped(_ point: DrawingPoint) -> CGPoint { CGPoint(x: drawingRect.minX + point.x * drawingRect.width, y: drawingRect.minY + point.y * drawingRect.height) }
-                    let path = UIBezierPath(); path.move(to: mapped(first))
-                    for point in points.dropFirst() { path.addLine(to: mapped(point)) }
+                    let path = UIBezierPath(); path.move(to: DrawingImageGeometry.renderedPoint(first, in: drawingRect))
+                    for point in points.dropFirst() { path.addLine(to: DrawingImageGeometry.renderedPoint(point, in: drawingRect)) }
                     let scaledWidth = stroke.lineWidth * (drawingRect.width / Self.logicalSize.width)
-                    if points.count == 1 { path.addArc(withCenter: mapped(first), radius: scaledWidth / 2, startAngle: 0, endAngle: .pi * 2, clockwise: true) }
+                    if points.count == 1 { path.addArc(withCenter: DrawingImageGeometry.renderedPoint(first, in: drawingRect), radius: scaledWidth / 2, startAngle: 0, endAngle: .pi * 2, clockwise: true) }
                     path.lineCapStyle = .round; path.lineJoinStyle = .round
                     path.lineWidth = scaledWidth
                     (stroke.tool == .eraser ? UIColor.white : stroke.color.uiColor).setStroke()

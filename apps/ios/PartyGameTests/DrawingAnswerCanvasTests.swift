@@ -37,6 +37,22 @@ final class DrawingAnswerCanvasTests: XCTestCase {
             XCTAssertEqual(DrawingImageGeometry.logicalPoint(CGPoint(x: rect.midX, y: rect.maxY), container: container, image: image), DrawingPoint(x: 0.5, y: 1))
         }
     }
+
+    func testFinalEditPreviewAndExportUseIdenticalNormalizedStrokeLocations() {
+        let previewContainer = CGSize(width: 390, height: 500)
+        let exportContainer = DrawingRenderer.logicalSize
+        let stroke = [DrawingPoint(x: 0.1, y: 0.1), DrawingPoint(x: 0.5, y: 0.5), DrawingPoint(x: 0.9, y: 0.9)]
+        for image in [CGSize(width: 1000, height: 1000), CGSize(width: 1600, height: 900), CGSize(width: 900, height: 1600)] {
+            let previewRect = try! XCTUnwrap(DrawingImageGeometry.aspectFitRect(container: previewContainer, image: image))
+            let exportRect = try! XCTUnwrap(DrawingImageGeometry.aspectFitRect(container: exportContainer, image: image))
+            for point in stroke {
+                let previewPoint = DrawingImageGeometry.renderedPoint(point, in: previewRect)
+                let exportPoint = DrawingImageGeometry.renderedPoint(point, in: exportRect)
+                XCTAssertEqual((previewPoint.x - previewRect.minX) / previewRect.width, (exportPoint.x - exportRect.minX) / exportRect.width, accuracy: 0.000_001)
+                XCTAssertEqual((previewPoint.y - previewRect.minY) / previewRect.height, (exportPoint.y - exportRect.minY) / exportRect.height, accuracy: 0.000_001)
+            }
+        }
+    }
     func testUndoRedoAndClearPreserveExpectedStrokes() {
         var canvas = DrawingCanvasState()
         canvas.complete([DrawingPoint(x: 0.1, y: 0.1), DrawingPoint(x: 0.9, y: 0.9)])
