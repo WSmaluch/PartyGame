@@ -26,6 +26,24 @@ enum DrawingLineWidth: CGFloat, CaseIterable, Codable, Sendable {
 
 struct DrawingPoint: Codable, Equatable, Sendable { var x: CGFloat; var y: CGFloat }
 
+/// Converts a gesture point in the editor's local canvas space to the logical
+/// unit square used by both the live SwiftUI Canvas and the 1024px exporter.
+/// Keeping this transform independent of the surrounding scroll/header layout
+/// prevents global-coordinate and safe-area offsets from leaking into strokes.
+enum DrawingCoordinateMapper {
+    static func logicalPoint(_ location: CGPoint, in canvasSize: CGSize) -> DrawingPoint? {
+        guard canvasSize.width > 0, canvasSize.height > 0 else { return nil }
+        return DrawingPoint(
+            x: min(1, max(0, location.x / canvasSize.width)),
+            y: min(1, max(0, location.y / canvasSize.height))
+        )
+    }
+
+    static func bitmapPoint(_ point: DrawingPoint, size: CGSize = DrawingRenderer.logicalSize) -> CGPoint {
+        CGPoint(x: point.x * size.width, y: point.y * size.height)
+    }
+}
+
 struct DrawingStroke: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var points: [DrawingPoint]

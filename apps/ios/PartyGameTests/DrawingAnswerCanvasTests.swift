@@ -5,6 +5,23 @@ import UIKit
 
 @MainActor
 final class DrawingAnswerCanvasTests: XCTestCase {
+    func testCoordinateMapperPreservesCanonicalPointsAcrossCanvasSizes() {
+        let samples: [(CGPoint, CGSize, DrawingPoint)] = [
+            (.zero, CGSize(width: 320, height: 320), DrawingPoint(x: 0, y: 0)),
+            (CGPoint(x: 160, y: 0), CGSize(width: 320, height: 320), DrawingPoint(x: 0.5, y: 0)),
+            (CGPoint(x: 160, y: 160), CGSize(width: 320, height: 320), DrawingPoint(x: 0.5, y: 0.5)),
+            (CGPoint(x: 160, y: 320), CGSize(width: 320, height: 320), DrawingPoint(x: 0.5, y: 1)),
+            (CGPoint(x: 320, y: 320), CGSize(width: 320, height: 320), DrawingPoint(x: 1, y: 1)),
+            (CGPoint(x: 75, y: 150), CGSize(width: 300, height: 600), DrawingPoint(x: 0.25, y: 0.25)),
+            (CGPoint(x: 150, y: 300), CGSize(width: 300, height: 600), DrawingPoint(x: 0.5, y: 0.5)),
+            (CGPoint(x: 225, y: 450), CGSize(width: 300, height: 600), DrawingPoint(x: 0.75, y: 0.75)),
+            (CGPoint(x: 450, y: 150), CGSize(width: 600, height: 300), DrawingPoint(x: 0.75, y: 0.5))
+        ]
+        for (touch, size, expected) in samples {
+            XCTAssertEqual(DrawingCoordinateMapper.logicalPoint(touch, in: size), expected)
+            XCTAssertEqual(DrawingCoordinateMapper.bitmapPoint(expected), CGPoint(x: expected.x * 1024, y: expected.y * 1024))
+        }
+    }
     func testUndoRedoAndClearPreserveExpectedStrokes() {
         var canvas = DrawingCanvasState()
         canvas.complete([DrawingPoint(x: 0.1, y: 0.1), DrawingPoint(x: 0.9, y: 0.9)])

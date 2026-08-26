@@ -48,8 +48,8 @@ struct FinalRoundEditView: View {
                         draw(active, color: draft.canvas.selectedTool == .eraser ? .white : draft.canvas.selectedColor.color, width: draft.canvas.selectedLineWidth.rawValue, context: context, size: size)
                     }
                     Color.clear.contentShape(Rectangle()).gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                        guard proxy.size.width > 0, proxy.size.height > 0 else { return }
-                        active.append(DrawingPoint(x: min(1, max(0, value.location.x / proxy.size.width)), y: min(1, max(0, value.location.y / proxy.size.height))))
+                        guard let point = DrawingCoordinateMapper.logicalPoint(value.location, in: proxy.size) else { return }
+                        active.append(point)
                     }.onEnded { _ in
                         if active.isEmpty { active = [DrawingPoint(x: 0.5, y: 0.5)] }
                         var canvas = draft.canvas; canvas.complete(active); store.updateFinalEditCanvas(canvas); active = []
