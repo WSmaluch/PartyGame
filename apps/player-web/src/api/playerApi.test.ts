@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { uploadDrawingAnswer, uploadPhotoAnswer } from './playerApi';
+import { createRoom, fetchPackages, uploadDrawingAnswer, uploadPhotoAnswer } from './playerApi';
 
 const session = { roomCode: 'AB12', playerId: 'player-1', reconnectToken: 'reconnect-token', nickname: 'Wojtek' };
 
@@ -16,5 +16,21 @@ describe('media answer API', () => {
     expect(url).toBe('http://test-api.local/api/rooms/AB12/questions/question-1/' + endpoint); expect(url).not.toContain(session.reconnectToken);
     const form = init.body as FormData; expect(form.get('playerId')).toBe(session.playerId); expect(form.get('reconnectToken')).toBe(session.reconnectToken); expect(form.get('clientSubmissionId')).toBe('submission-1');
     const media = form.get(field) as File; expect(media.name).toBe(filename);
+  });
+});
+
+describe('room creation API', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uses the public create-room and package endpoints without an operator credential', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ roomCode: 'AB12' }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    await createRoom({ nickname: 'Host', settings: { roundCount: 1, questionsPerRound: 4, playerSelectionSeconds: 5, textAnswerSeconds: 5, votingSeconds: 5, photoSeconds: 10, drawingSeconds: 30, resultPresentationSeconds: 3, finalRoundEnabled: false, finalDrawingPasses: 1 }, selectedPackageKeys: ['starter'], enabledQuestionTypes: ['PlayerSelection'] });
+    await fetchPackages();
+    const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(createUrl).toBe('http://test-api.local/api/rooms'); expect(createInit.method).toBe('POST'); expect(createInit.headers).not.toHaveProperty('Authorization'); expect(JSON.parse(createInit.body as string)).toMatchObject({ nickname: 'Host', selectedPackageKeys: ['starter'] });
+    expect(fetchMock.mock.calls[1][0]).toBe('http://test-api.local/api/content/packages');
   });
 });

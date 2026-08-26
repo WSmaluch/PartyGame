@@ -1,5 +1,5 @@
 import { apiUrl } from './apiConfig';
-import type { MediaUploadResponse, PlayerSession, ResumePlayerResponse, RoomAccessResponse, RoomSnapshot } from './types';
+import type { ContentPackage, CreateRoomRequest, MediaUploadResponse, PlayerSession, ResumePlayerResponse, RoomAccessResponse, RoomSnapshot } from './types';
 
 export class PlayerApiError extends Error {
   readonly kind: 'not-found' | 'started' | 'validation' | 'network' | 'server' | 'invalid-session';
@@ -63,6 +63,16 @@ export async function joinRoom(roomCode: string, nickname: string): Promise<Room
   return requestJson<RoomAccessResponse>(`/api/rooms/${encodeURIComponent(roomCode)}/players`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ nickname }),
   }, false);
+}
+
+export async function createRoom(request: CreateRoomRequest): Promise<RoomAccessResponse> {
+  return requestJson<RoomAccessResponse>('/api/rooms', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(request),
+  }, false);
+}
+
+export async function fetchPackages(): Promise<ContentPackage[]> {
+  return requestJson<ContentPackage[]>('/api/content/packages', { method: 'GET', headers: { Accept: 'application/json' } }, false);
 }
 
 async function requestJson<T>(path: string, init: RequestInit, sessionRequest: boolean): Promise<T> {

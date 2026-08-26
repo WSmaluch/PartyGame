@@ -98,8 +98,42 @@ export type RoomSnapshot = {
   roomCode: string;
   phase: string;
   stateVersion: number;
+  minimumPlayers?: number;
+  maximumPlayers?: number;
+  canStart?: boolean;
+  settings?: RoomSettings;
   players: PublicPlayer[];
   game?: GameSnapshot | null;
+};
+
+export type RoomSettings = {
+  roundCount: number;
+  questionsPerRound: number;
+  playerSelectionSeconds: number;
+  textAnswerSeconds: number;
+  votingSeconds: number;
+  photoSeconds: number;
+  drawingSeconds: number;
+  resultPresentationSeconds: number;
+  finalRoundEnabled: boolean;
+  finalDrawingPasses: number;
+};
+
+export type CreateRoomRequest = {
+  nickname: string;
+  settings: RoomSettings;
+  selectedPackageKeys?: string[];
+  enabledQuestionTypes: string[];
+};
+
+export type ContentPackage = {
+  key: string;
+  name: LocalizedText;
+  description: LocalizedText;
+  categoryCount: number;
+  minimumSupportedRounds: number;
+  maximumSupportedRounds: number;
+  isDefault: boolean;
 };
 
 export type RoomAccessResponse = {

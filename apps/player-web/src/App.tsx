@@ -7,6 +7,7 @@ import { gameHubConnection, type ConnectionStatus } from './realtime/gameHubConn
 import { clearPlayerSession, loadPlayerSession, savePlayerSession } from './session/playerSession';
 import { preferredLocale, translations, type Locale, type TranslationKey } from './translations';
 import { GameRouter } from './game/GameRouter';
+import { HostSetup } from './HostSetup';
 
 type Screen = { kind: 'join' } | { kind: 'lobby'; session: PlayerSession; snapshot?: RoomSnapshot } | { kind: 'game'; session: PlayerSession; snapshot?: RoomSnapshot };
 
@@ -18,6 +19,7 @@ export default function App() {
   const [roomCode, setRoomCode] = useState(initialSession?.roomCode ?? initialRoom);
   const [nickname, setNickname] = useState(initialSession?.nickname ?? '');
   const [screen, setScreen] = useState<Screen>(() => initialSession ? { kind: 'lobby', session: initialSession } : { kind: 'join' });
+  const [entryMode, setEntryMode] = useState<'join' | 'host'>('join');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [error, setError] = useState<TranslationKey | undefined>();
   const [isJoining, setIsJoining] = useState(false);
@@ -134,9 +136,15 @@ export default function App() {
     } catch (joinError) { setError(joinError instanceof PlayerApiError ? errorMessage(joinError) : 'server'); } finally { setIsJoining(false); }
   }
 
+  function hostCreated(created: import('./api/types').RoomAccessResponse, hostNickname: string): void {
+    const session: PlayerSession = { roomCode: created.roomCode, playerId: created.playerId, reconnectToken: created.reconnectToken, nickname: hostNickname };
+    setRoomCode(created.roomCode); setNickname(hostNickname); savePlayerSession(session); setPrivateState(created.privateState); setError(undefined); setScreen({ kind: 'lobby', session, snapshot: created.snapshot }); void attach(session);
+  }
+
   if (screen.kind === 'game') return <GameRouter session={screen.session} snapshot={screen.snapshot} privateState={privateState} locale={locale} status={connectionStatus} t={t} onSnapshot={applySnapshot} onRecoverFinalEdit={() => void recoverFinalEditAssignment(screen.session)} finalEditRecoveryFailed={finalAssignmentRecoveryFailed} />;
   if (screen.kind === 'lobby') return <Lobby session={screen.session} snapshot={screen.snapshot} status={connectionStatus} error={error} t={t} onSnapshot={applySnapshot} onError={setError} onReconnect={() => void restore(screen.session)} />;
-  return <main className="page-shell"><section className="card" aria-labelledby="page-title"><p className="eyebrow">{t('title')}</p><h1 id="page-title">{t('join')}</h1><form onSubmit={submit} noValidate><label htmlFor="roomCode">{t('roomCode')}</label><input ref={roomInputRef} id="roomCode" name="roomCode" value={roomCode} onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))} maxLength={4} autoFocus={!initialSession} autoCapitalize="characters" autoCorrect="off" spellCheck="false" inputMode="text" autoComplete="off" /><label htmlFor="nickname">{t('nickname')}</label><input id="nickname" name="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={20} autoCapitalize="words" autoComplete="nickname" />{error && <p className="form-error" role="alert">{t(error)}</p>}<button type="submit" disabled={isJoining}>{isJoining ? t('joining') : t('join')}</button></form></section></main>;
+  if (entryMode === 'host') return <HostSetup locale={locale} t={t} error={error} onBack={() => { setEntryMode('join'); setError(undefined); }} onCreated={hostCreated} onError={setError} />;
+  return <main className="page-shell"><section className="card" aria-labelledby="page-title"><p className="eyebrow">{t('title')}</p><div className="entry-actions"><button type="button" className="entry-action" onClick={() => { setEntryMode('host'); setError(undefined); }}>{t('hostGame')}</button></div><h1 id="page-title">{t('join')}</h1><form onSubmit={submit} noValidate><label htmlFor="roomCode">{t('roomCode')}</label><input ref={roomInputRef} id="roomCode" name="roomCode" value={roomCode} onChange={(event) => setRoomCode(normalizeRoomCode(event.target.value))} maxLength={4} autoFocus={!initialSession} autoCapitalize="characters" autoCorrect="off" spellCheck="false" inputMode="text" autoComplete="off" /><label htmlFor="nickname">{t('nickname')}</label><input id="nickname" name="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={20} autoCapitalize="words" autoComplete="nickname" />{error && <p className="form-error" role="alert">{t(error)}</p>}<button type="submit" disabled={isJoining}>{isJoining ? t('joining') : t('join')}</button></form></section></main>;
 }
 
 function Lobby({ session, snapshot, status, error, t, onSnapshot, onError, onReconnect }: { session: PlayerSession; snapshot?: RoomSnapshot; status: ConnectionStatus; error?: TranslationKey; t: (key: TranslationKey) => string; onSnapshot: (snapshot: RoomSnapshot) => void; onError: (key: TranslationKey | undefined) => void; onReconnect: () => void }) {

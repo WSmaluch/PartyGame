@@ -2,13 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { joinRoom, PlayerApiError, resumePlayer, uploadProfilePhoto } from './api/playerApi';
+import { createRoom, fetchPackages, joinRoom, PlayerApiError, resumePlayer, uploadProfilePhoto } from './api/playerApi';
 import type { RoomSnapshot } from './api/types';
 import { prepareProfilePhoto, ProfilePhotoError } from './media/profilePhoto';
 import { clearPlayerSession, loadPlayerSession, savePlayerSession } from './session/playerSession';
 
 const realtime = vi.hoisted(() => ({ attach: vi.fn(), setReady: vi.fn(), snapshotListener: undefined as ((snapshot: RoomSnapshot) => void) | undefined, startedListener: undefined as ((snapshot: RoomSnapshot) => void) | undefined, privateListener: undefined as ((state: unknown) => void) | undefined }));
-vi.mock('./api/playerApi', () => ({ joinRoom: vi.fn(), resumePlayer: vi.fn(), uploadProfilePhoto: vi.fn(), PlayerApiError: class PlayerApiError extends Error { kind: string; constructor(kind: string) { super(kind); this.kind = kind; } } }));
+vi.mock('./api/playerApi', () => ({ createRoom: vi.fn(), fetchPackages: vi.fn(), joinRoom: vi.fn(), resumePlayer: vi.fn(), uploadProfilePhoto: vi.fn(), PlayerApiError: class PlayerApiError extends Error { kind: string; constructor(kind: string) { super(kind); this.kind = kind; } } }));
 vi.mock('./media/profilePhoto', () => ({ prepareProfilePhoto: vi.fn(), ProfilePhotoError: class ProfilePhotoError extends Error { kind: string; constructor(kind: string) { super(kind); this.kind = kind; } } }));
 vi.mock('./realtime/gameHubConnection', () => ({ gameHubConnection: { subscribe: (listener: (value: 'connected') => void) => { listener('connected'); return () => undefined; }, onSnapshot: (listener: (snapshot: RoomSnapshot) => void) => { realtime.snapshotListener = listener; return () => undefined; }, onGameStarted: (listener: (snapshot: RoomSnapshot) => void) => { realtime.startedListener = listener; return () => undefined; }, onPrivateState: (listener: (state: unknown) => void) => { realtime.privateListener = listener; return () => undefined; }, attach: realtime.attach, setReady: realtime.setReady, serverNow: () => Date.now(), getRoomSnapshot: vi.fn(), submitPlayerSelection: vi.fn(), submitTextAnswer: vi.fn(), submitTextAnswerVote: vi.fn() } }));
 
@@ -22,7 +22,7 @@ const snapshot: RoomSnapshot = { roomCode: 'AB12', phase: 'Lobby', stateVersion:
 const joined = { ...session, snapshot, privateState };
 
 describe('Web Player lobby', () => {
-  beforeEach(() => { clearPlayerSession(); vi.mocked(joinRoom).mockReset(); vi.mocked(resumePlayer).mockReset(); vi.mocked(uploadProfilePhoto).mockReset(); vi.mocked(prepareProfilePhoto).mockReset(); realtime.attach.mockReset().mockResolvedValue(snapshot); realtime.setReady.mockReset().mockResolvedValue({ ...snapshot, players: [{ ...snapshot.players[0], isReady: true }, ...snapshot.players.slice(1)] }); realtime.snapshotListener = undefined; realtime.startedListener = undefined; window.history.replaceState({}, '', '/play/?room=ab12'); });
+  beforeEach(() => { clearPlayerSession(); vi.mocked(createRoom).mockReset(); vi.mocked(fetchPackages).mockReset().mockResolvedValue([{ key: 'starter', name: { pl: 'Startowy', en: 'Starter' }, description: { pl: '', en: '' }, categoryCount: 1, minimumSupportedRounds: 1, maximumSupportedRounds: 1, isDefault: true }]); vi.mocked(joinRoom).mockReset(); vi.mocked(resumePlayer).mockReset(); vi.mocked(uploadProfilePhoto).mockReset(); vi.mocked(prepareProfilePhoto).mockReset(); realtime.attach.mockReset().mockResolvedValue(snapshot); realtime.setReady.mockReset().mockResolvedValue({ ...snapshot, players: [{ ...snapshot.players[0], isReady: true }, ...snapshot.players.slice(1)] }); realtime.snapshotListener = undefined; realtime.startedListener = undefined; window.history.replaceState({}, '', '/play/?room=ab12'); });
   it('prefills the room code and validates a missing nickname', async () => {
     render(<App />); expect(screen.getByLabelText('Kod pokoju')).toHaveValue('AB12'); await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' })); expect(screen.getByRole('alert')).toHaveTextContent('Wpisz nick');
   });
@@ -30,6 +30,28 @@ describe('Web Player lobby', () => {
     render(<App />); expect(screen.getByLabelText('Kod pokoju')).toHaveValue('AB12');
     await userEvent.clear(screen.getByLabelText('Kod pokoju')); await userEvent.type(screen.getByLabelText('Kod pokoju'), 'a1bi-cd');
     expect(screen.getByLabelText('Kod pokoju')).toHaveValue('A1BI');
+  });
+  it('creates a host as a normal persisted player using the public room and package contracts', async () => {
+    vi.mocked(createRoom).mockResolvedValue(joined); render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Hostuj grę' }));
+    expect(await screen.findByText('Startowy')).toBeInTheDocument(); expect(fetchPackages).toHaveBeenCalledOnce();
+    await userEvent.type(screen.getByLabelText('Twój nick'), 'Wojtek');
+    await userEvent.click(screen.getByLabelText('Startowy'));
+    await userEvent.click(screen.getByLabelText('Odpowiedź tekstowa'));
+    fireEvent.change(screen.getByLabelText('Liczba rund'), { target: { value: '2' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Utwórz pokój' }));
+    expect(createRoom).toHaveBeenCalledWith(expect.objectContaining({
+      nickname: 'Wojtek', selectedPackageKeys: ['starter'], enabledQuestionTypes: ['PlayerSelection', 'TextAnswer'], settings: expect.objectContaining({ roundCount: 2, finalDrawingPasses: 3 }),
+    }));
+    expect(await screen.findByText('Ania')).toBeInTheDocument(); expect(loadPlayerSession()).toEqual(session); expect(realtime.attach).toHaveBeenCalledWith(session);
+  });
+  it('requires one enabled host question type and hides final passes when the final round is disabled', async () => {
+    render(<App />); await userEvent.click(screen.getByRole('button', { name: 'Hostuj grę' })); await screen.findByText('Startowy');
+    await userEvent.click(screen.getByLabelText('Wybór gracza')); await userEvent.click(screen.getByRole('button', { name: 'Utwórz pokój' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Wpisz nick');
+    await userEvent.type(screen.getByLabelText('Twój nick'), 'Ada'); await userEvent.click(screen.getByRole('button', { name: 'Utwórz pokój' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Wybierz co najmniej jeden typ pytania');
+    expect(screen.getByLabelText('Liczba finałowych przekazań')).toBeInTheDocument(); await userEvent.click(screen.getByLabelText('Włącz rundę finałową')); expect(screen.queryByLabelText('Liczba finałowych przekazań')).not.toBeInTheDocument();
   });
   it('joins, stores the player session, and renders all lobby players', async () => {
     vi.mocked(joinRoom).mockResolvedValue(joined); render(<App />); await userEvent.type(screen.getByLabelText('Twój nick'), 'Wojtek'); await userEvent.click(screen.getByRole('button', { name: 'Dołącz do gry' }));
