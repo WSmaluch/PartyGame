@@ -22,6 +22,21 @@ final class DrawingAnswerCanvasTests: XCTestCase {
             XCTAssertEqual(DrawingCoordinateMapper.bitmapPoint(expected), CGPoint(x: expected.x * 1024, y: expected.y * 1024))
         }
     }
+
+    func testFinalEditAspectFitGeometryUsesTheVisibleImageRectForInputAndExport() {
+        let container = CGSize(width: 390, height: 500)
+        let cases: [(CGSize, CGRect)] = [
+            (CGSize(width: 1000, height: 1000), CGRect(x: 0, y: 55, width: 390, height: 390)),
+            (CGSize(width: 1600, height: 900), CGRect(x: 0, y: 140.3125, width: 390, height: 219.375)),
+            (CGSize(width: 900, height: 1600), CGRect(x: 54.375, y: 0, width: 281.25, height: 500))
+        ]
+        for (image, rect) in cases {
+            XCTAssertEqual(DrawingImageGeometry.aspectFitRect(container: container, image: image), rect)
+            XCTAssertEqual(DrawingImageGeometry.logicalPoint(CGPoint(x: rect.midX, y: rect.minY), container: container, image: image), DrawingPoint(x: 0.5, y: 0))
+            XCTAssertEqual(DrawingImageGeometry.logicalPoint(CGPoint(x: rect.midX, y: rect.midY), container: container, image: image), DrawingPoint(x: 0.5, y: 0.5))
+            XCTAssertEqual(DrawingImageGeometry.logicalPoint(CGPoint(x: rect.midX, y: rect.maxY), container: container, image: image), DrawingPoint(x: 0.5, y: 1))
+        }
+    }
     func testUndoRedoAndClearPreserveExpectedStrokes() {
         var canvas = DrawingCanvasState()
         canvas.complete([DrawingPoint(x: 0.1, y: 0.1), DrawingPoint(x: 0.9, y: 0.9)])

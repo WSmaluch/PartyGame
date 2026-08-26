@@ -44,6 +44,23 @@ enum DrawingCoordinateMapper {
     }
 }
 
+/// The image and editable layer must share this exact rect.  In particular, a
+/// portrait source in a square canvas is not stretched just because the export
+/// bitmap is square; the same letterboxing is used on-screen and in the PNG.
+enum DrawingImageGeometry {
+    static func aspectFitRect(container: CGSize, image: CGSize) -> CGRect? {
+        guard container.width > 0, container.height > 0, image.width > 0, image.height > 0 else { return nil }
+        let scale = min(container.width / image.width, container.height / image.height)
+        let size = CGSize(width: image.width * scale, height: image.height * scale)
+        return CGRect(x: (container.width - size.width) / 2, y: (container.height - size.height) / 2, width: size.width, height: size.height)
+    }
+
+    static func logicalPoint(_ location: CGPoint, container: CGSize, image: CGSize) -> DrawingPoint? {
+        guard let rect = aspectFitRect(container: container, image: image) else { return nil }
+        return DrawingCoordinateMapper.logicalPoint(CGPoint(x: location.x - rect.minX, y: location.y - rect.minY), in: rect.size)
+    }
+}
+
 struct DrawingStroke: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var points: [DrawingPoint]
@@ -82,17 +99,23 @@ struct DrawingRenderer: Sendable {
             let format = UIGraphicsImageRendererFormat(); format.scale = 1; format.opaque = true
             let image = UIGraphicsImageRenderer(size: Self.logicalSize, format: format).image { context in
                 UIColor.white.setFill(); context.fill(CGRect(origin: .zero, size: Self.logicalSize))
-                if let background {
-                    background.draw(in: CGRect(origin: .zero, size: Self.logicalSize))
+                let drawingRect: CGRect
+                if let background, let rect = DrawingImageGeometry.aspectFitRect(container: Self.logicalSize, image: background.size) {
+                    background.draw(in: rect)
+                    drawingRect = rect
+                } else {
+                    drawingRect = CGRect(origin: .zero, size: Self.logicalSize)
                 }
                 for stroke in state.completedStrokes {
                     let points = stroke.points
                     guard let first = points.first else { continue }
-                    let path = UIBezierPath(); path.move(to: CGPoint(x: first.x * Self.logicalSize.width, y: first.y * Self.logicalSize.height))
-                    for point in points.dropFirst() { path.addLine(to: CGPoint(x: point.x * Self.logicalSize.width, y: point.y * Self.logicalSize.height)) }
-                    if points.count == 1 { path.addArc(withCenter: CGPoint(x: first.x * Self.logicalSize.width, y: first.y * Self.logicalSize.height), radius: stroke.lineWidth / 2, startAngle: 0, endAngle: .pi * 2, clockwise: true) }
+                    func mapped(_ point: DrawingPoint) -> CGPoint { CGPoint(x: drawingRect.minX + point.x * drawingRect.width, y: drawingRect.minY + point.y * drawingRect.height) }
+                    let path = UIBezierPath(); path.move(to: mapped(first))
+                    for point in points.dropFirst() { path.addLine(to: mapped(point)) }
+                    let scaledWidth = stroke.lineWidth * (drawingRect.width / Self.logicalSize.width)
+                    if points.count == 1 { path.addArc(withCenter: mapped(first), radius: scaledWidth / 2, startAngle: 0, endAngle: .pi * 2, clockwise: true) }
                     path.lineCapStyle = .round; path.lineJoinStyle = .round
-                    path.lineWidth = stroke.lineWidth
+                    path.lineWidth = scaledWidth
                     (stroke.tool == .eraser ? UIColor.white : stroke.color.uiColor).setStroke()
                     path.stroke()
                 }
