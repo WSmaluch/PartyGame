@@ -1,9 +1,11 @@
 import SwiftUI
+import UIKit
 
 struct FinalRoundEditView: View {
     let store: GameSessionStore
     let game: GameSnapshot
     @State private var active: [DrawingPoint] = []
+    @State private var sourceImage: UIImage?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -39,23 +41,30 @@ struct FinalRoundEditView: View {
     private func editor(_ draft: FinalRoundEditDraft) -> some View {
         VStack(spacing: 12) {
             GeometryReader { proxy in
-                ZStack {
-                    AsyncImage(url: store.mediaURL(draft.sourceDisplayMediaUrl)) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: { ProgressView() }
-                    Canvas { context, size in
-                        for stroke in draft.canvas.completedStrokes { draw(stroke.points, color: stroke.tool == .eraser ? .white : stroke.color.color, width: stroke.lineWidth, context: context, size: size) }
-                        draw(active, color: draft.canvas.selectedTool == .eraser ? .white : draft.canvas.selectedColor.color, width: draft.canvas.selectedLineWidth.rawValue, context: context, size: size)
+                if let sourceImage,
+                   let imageRect = DrawingImageGeometry.aspectFitRect(container: proxy.size, image: sourceImage.size) {
+                    ZStack(alignment: .topLeading) {
+                        Image(uiImage: sourceImage).resizable().frame(width: imageRect.width, height: imageRect.height).position(x: imageRect.midX, y: imageRect.midY)
+                        Canvas { context, size in
+                            for stroke in draft.canvas.completedStrokes { draw(stroke.points, color: stroke.tool == .eraser ? .white : stroke.color.color, width: stroke.lineWidth, context: context, size: size) }
+                            draw(active, color: draft.canvas.selectedTool == .eraser ? .white : draft.canvas.selectedColor.color, width: draft.canvas.selectedLineWidth.rawValue, context: context, size: size)
+                        }.frame(width: imageRect.width, height: imageRect.height).position(x: imageRect.midX, y: imageRect.midY)
+                        Color.clear.frame(width: imageRect.width, height: imageRect.height).position(x: imageRect.midX, y: imageRect.midY).contentShape(Rectangle()).gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                            guard let point = DrawingCoordinateMapper.logicalPoint(value.location, in: imageRect.size) else { return }
+                            active.append(point)
+                        }.onEnded { _ in
+                            if active.isEmpty { active = [DrawingPoint(x: 0.5, y: 0.5)] }
+                            var canvas = draft.canvas; canvas.complete(active); store.updateFinalEditCanvas(canvas); active = []
+                        })
                     }
-                    Color.clear.contentShape(Rectangle()).gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                        guard let point = DrawingCoordinateMapper.logicalPoint(value.location, in: proxy.size) else { return }
-                        active.append(point)
-                    }.onEnded { _ in
-                        if active.isEmpty { active = [DrawingPoint(x: 0.5, y: 0.5)] }
-                        var canvas = draft.canvas; canvas.complete(active); store.updateFinalEditCanvas(canvas); active = []
-                    })
-                }.clipShape(RoundedRectangle(cornerRadius: 16)).overlay(RoundedRectangle(cornerRadius: 16).stroke(.secondary)).accessibilityIdentifier("final-round-edit-canvas")
-            }.frame(maxWidth: 420).frame(height: min(UIScreen.main.bounds.width - 56, 420))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(.secondary))
+                    .accessibilityIdentifier("final-round-edit-canvas")
+                } else { ProgressView() }
+            }
+            .frame(maxWidth: 420)
+            .frame(height: min(UIScreen.main.bounds.width - 56, 420))
+            .task(id: draft.sourceDisplayMediaUrl) { await loadSourceImage(draft.sourceDisplayMediaUrl) }
             HStack { ForEach(DrawingColor.allCases, id: \.self) { color in
                 Button { var canvas = draft.canvas; canvas.selectedColor = color; canvas.selectedTool = .brush; store.updateFinalEditCanvas(canvas) } label: { Circle().fill(color.color).frame(width: 30, height: 30) }
             } }
@@ -82,6 +91,15 @@ struct FinalRoundEditView: View {
                 }
             }
         }
+    }
+
+    private func loadSourceImage(_ path: String) async {
+        guard let url = store.mediaURL(path) else { sourceImage = nil; return }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard !Task.isCancelled else { return }
+            sourceImage = UIImage(data: data)
+        } catch { sourceImage = nil }
     }
 
     private func draw(_ points: [DrawingPoint], color: Color, width: CGFloat, context: GraphicsContext, size: CGSize) {
