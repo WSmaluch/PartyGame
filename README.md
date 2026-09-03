@@ -159,6 +159,25 @@ W trybie deweloperskim obie aplikacje odczytują jawnie podane `VITE_API_BASE_UR
 
 Aplikację iOS uruchom z [projektu Xcode](apps/ios/PartyGame.xcodeproj). W symulatorze `localhost` oznacza Maca i działa z lokalnym backendem. Na fizycznym iPhonie `localhost` oznacza telefon, dlatego w ekranie ustawień trzeba wpisać `http://ADRES_IP_MACA:5050`. Ustawienie waliduje URL, normalizuje końcowy `/`, jest zapisane lokalnie i przyciskiem połączenia sprawdza `/health` (w tym wersję API).
 
+## Manual LAN test
+
+Do codziennego testu na urządzeniach fizycznych wystarczą dwa polecenia z katalogu repozytorium:
+
+```bash
+scripts/open-ios.sh
+scripts/manual-restart.sh
+```
+
+`manual-restart.sh` zwalnia wyłącznie skonfigurowany port (domyślnie `5050`), buduje API oraz aktualne aplikacje Display, Admin i Web Player, wykrywa adres IPv4 aktywnego interfejsu trasy domyślnej, uruchamia serwer na `0.0.0.0` i czeka na `/health/ready`. Na końcu wypisuje gotowe adresy Display, `/play/`, `/admin/` i adres serwera dla aplikacji iOS. Inny port można podać każdemu helperowi przez `--port`, np. `scripts/manual-restart.sh --port 5051`.
+
+Zatrzymanie serwera:
+
+```bash
+scripts/manual-down.sh
+```
+
+Aplikację iOS buduje i instaluje się osobno z Xcode; helper LAN celowo nie uruchamia certyfikacyjnego `xcodebuild` ani pełnej walidacji RC.
+
 ## Release build (Etap 8.1)
 
 Powtarzalny lokalny artefakt Release utworzysz na czystym drzewie Git:

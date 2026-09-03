@@ -9,6 +9,7 @@ import { PlayerJoinQrCode } from '../components/PlayerJoinQrCode';
 import { GameScreens } from '../components/gameStages/GameScreens';
 import { gameHubConnection } from '../realtime/gameHubConnection';
 import type { GameHubStatus, HubPingResponse } from '../realtime/types';
+import { questionVoiceSupported } from '../speech/questionVoice';
 
 const roomStorageKey = 'partygame.display.roomCode';
 const allowedCodeCharacters = /[^A-HJ-NP-Z2-9]/g;
@@ -125,6 +126,7 @@ export function DisplayPage() {
       >
         <p className="eyebrow">Ekran gry</p>
         <h1>PartyGame</h1>
+        {snapshot?.settings.questionVoiceEnabled === true && <p className={`voice-status ${questionVoiceSupported() ? '' : 'voice-status--unavailable'}`} role="status">{questionVoiceSupported() ? '🔊 Lektor pytań włączony' : 'Lektor pytań niedostępny w tej przeglądarce'}</p>}
 
         {error && <div className="error-banner" role="alert">{error}</div>}
         {view === 'code' && <CodeEntry roomCode={roomCode} setRoomCode={setRoomCode} submit={submit} />}

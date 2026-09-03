@@ -1067,6 +1067,9 @@ namespace PartyGame.Infrastructure.Persistence.Migrations
                     b.Property<int>("QuestionsPerRound")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("QuestionVoiceEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ResultPresentationSeconds")
                         .HasColumnType("INTEGER");
 

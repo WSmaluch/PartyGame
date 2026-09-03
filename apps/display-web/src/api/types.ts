@@ -18,6 +18,7 @@ export interface RoomSettings {
   resultPresentationSeconds: number;
   finalRoundEnabled: boolean;
   finalDrawingPasses: number;
+  questionVoiceEnabled?: boolean;
 }
 
 export interface RoomPlayer {
@@ -86,6 +87,7 @@ export interface GameCategorySnapshot {
 
 export interface GameQuestionSnapshot {
   id: string;
+  instanceId?: string | null;
   text: LocalizedText;
 }
 

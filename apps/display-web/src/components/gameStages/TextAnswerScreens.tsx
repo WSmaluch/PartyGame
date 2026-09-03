@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { gameQuestion, localizedText, type GameSnapshot, type RoomSnapshot } from '../../api/types';
 import { t } from '../../translations';
-import { useTimer } from './useTimer';
+import { StageTimer } from './StageTimer';
 
 export function CollectingTextAnswers({ game, room }: { game: GameSnapshot, room: RoomSnapshot }) {
-  const timeLeft = useTimer(game.stageEndsAtUtc);
   const answeredCount = game.answeredPlayers || 0;
   const requiredCount = game.requiredPlayers || room.players.length;
 
@@ -13,9 +12,7 @@ export function CollectingTextAnswers({ game, room }: { game: GameSnapshot, room
       <h2>{t('question')}</h2>
       <h1>{localizedText(gameQuestion(game)?.text)}</h1>
       
-      <div className="timer-container">
-        <span className="timer">{timeLeft}s</span>
-      </div>
+      <StageTimer endsAtUtc={game.stageEndsAtUtc} />
 
       <div className="answered-status">
         <p>{t('waitingForAnswers')}</p>
@@ -50,7 +47,6 @@ export function RevealingTextAnswers({ game }: { game: GameSnapshot }) {
 }
 
 export function CollectingTextAnswerVotes({ game, room }: { game: GameSnapshot, room: RoomSnapshot }) {
-  const timeLeft = useTimer(game.stageEndsAtUtc);
   const answeredCount = game.textResults?.answeredPlayers || 0;
   const requiredCount = game.textResults?.requiredPlayers || room.players.length;
   const options = game.textResults?.votingOptions || [];
@@ -60,9 +56,7 @@ export function CollectingTextAnswerVotes({ game, room }: { game: GameSnapshot, 
       <h2>{t('question')}</h2>
       <h1>{localizedText(gameQuestion(game)?.text)}</h1>
       
-      <div className="timer-container">
-        <span className="timer">{timeLeft}s</span>
-      </div>
+      <StageTimer endsAtUtc={game.stageEndsAtUtc} />
 
       <div className="answered-status">
         <p>{t('waitingForVotes')}</p>

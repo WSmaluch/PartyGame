@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import {
   gameCategory,
   gameQuestion,
@@ -14,7 +14,10 @@ import {
   CollectingTextAnswerVotes,
   ShowingTextAnswerResults,
 } from './TextAnswerScreens';
-import { useTimer } from './useTimer';
+import { StageTimer } from './StageTimer';
+import { motionIdentity } from './motionIdentity';
+import { StageTransition } from './StageTransition';
+import { useQuestionVoice } from '../../speech/useQuestionVoice';
 import {
   CollectingPhotoAnswersView,
   RevealingPhotoAnswersView,
@@ -29,6 +32,12 @@ import {
 } from './DrawingAnswerScreens';
 
 export function GameScreens({ snapshot }: { snapshot: RoomSnapshot }) {
+  useQuestionVoice(snapshot);
+  const identity = snapshot.game ? motionIdentity(snapshot.game) : 'not-started';
+  return <StageTransition identity={identity}><GameScreenContent snapshot={snapshot} /></StageTransition>;
+}
+
+function GameScreenContent({ snapshot }: { snapshot: RoomSnapshot }) {
   const game = snapshot.game;
   if (!game || game.stage === 'NotStarted') {
     return (
@@ -109,7 +118,7 @@ function FinalRoundProgress({ game }: { game: GameSnapshot }) {
 
 function FinalRoundPresentation({ game }: { game: GameSnapshot }) {
   const stage = game.stage === 'ShowingFinalPresentation' ? 'presentation' : game.stage === 'CollectingFinalVotes' ? 'voting' : 'results';
-  return <section className="photo-results" aria-label="Final round presentation" data-testid={`final-round-${stage}`}><h2>Runda finałowa</h2><div className="photo-grid">{(game.finalRound?.artifacts ?? []).map((artifact) => <article key={artifact.artifactId} className="photo-card">{artifact.displayMediaUrl ? <img src={publicMediaUrl(artifact.displayMediaUrl)} alt={`${artifact.subjectNickname} as ${localizedText(artifact.targetRole)}`} /> : <div className="photo-placeholder">Przygotowywanie zdjęcia…</div>}<h3>{artifact.subjectNickname} as {localizedText(artifact.targetRole)}</h3>{game.stage === 'ShowingFinalResults' && <p>{artifact.voteCount} głosów{artifact.isTopResult ? ' 🏆' : ''}</p>}</article>)}</div></section>;
+  return <section className="photo-results final-presentation" aria-label="Final round presentation" data-testid={`final-round-${stage}`}><h2>Runda finałowa</h2><div className="photo-grid">{(game.finalRound?.artifacts ?? []).map((artifact, index) => <article key={artifact.artifactId} className="photo-card final-artifact" style={{ '--motion-index': Math.min(index, 8) } as CSSProperties}>{artifact.displayMediaUrl ? <img src={publicMediaUrl(artifact.displayMediaUrl)} alt={`${artifact.subjectNickname} as ${localizedText(artifact.targetRole)}`} /> : <div className="photo-placeholder">Przygotowywanie zdjęcia…</div>}<h3>{artifact.subjectNickname} jako {localizedText(artifact.targetRole)}</h3>{game.stage === 'ShowingFinalResults' && <p>{artifact.voteCount} głosów{artifact.isTopResult ? ' 🏆' : ''}</p>}</article>)}</div></section>;
 }
 
 function CategoryIntro({ game }: { game: GameSnapshot }) {
@@ -142,7 +151,6 @@ function CollectingPlayerSelections({
   game: GameSnapshot;
   room: RoomSnapshot;
 }) {
-  const timeLeft = useTimer(game.stageEndsAtUtc);
   const maxPlayers = game.requiredPlayers || room.players.length;
   // We mock the answered status by taking the first `answeredCount` players as answered
   // But wait! We no longer have `answeredPlayerIds` during this stage in `GameSnapshot`.
@@ -157,9 +165,7 @@ function CollectingPlayerSelections({
       <h2>{t('question')}</h2>
       <h1>{localizedText(gameQuestion(game)?.text)}</h1>
 
-      <div className="timer-container">
-        <span className="timer">{timeLeft}s</span>
-      </div>
+      <StageTimer endsAtUtc={game.stageEndsAtUtc} />
 
       <div className="answered-status">
         <p>{t('waitingForVotes')}</p>

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { publicMediaUrl } from '../../api/roomApi';
 import { gameCategory, gameQuestion, localizedText, type AnonymousDrawingOption, type DrawingAnswerResultOption, type GameSnapshot, type RoomSnapshot } from '../../api/types';
-import { useTimer } from './useTimer';
+import { StageTimer } from './StageTimer';
 
 function url(path?: string | null) { return publicMediaUrl(path); }
-function Header({ game }: { game: GameSnapshot }) { const seconds = useTimer(game.stageEndsAtUtc); return <header className="photo-stage-header"><p>Runda {game.currentRoundNumber} · Pytanie {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p><p>{localizedText(gameCategory(game)?.name)}</p><h1>{localizedText(gameQuestion(game)?.text)}</h1><strong>{seconds}s</strong></header>; }
+function Header({ game }: { game: GameSnapshot }) { return <header className="photo-stage-header"><p>Runda {game.currentRoundNumber} · Pytanie {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p><p>{localizedText(gameCategory(game)?.name)}</p><h1>{localizedText(gameQuestion(game)?.text)}</h1><StageTimer endsAtUtc={game.stageEndsAtUtc} /></header>; }
 function DrawingImage({ src, alt }: { src?: string | null; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <div className="photo-fallback" role="img" aria-label={`${alt}. Rysunek niedostępny`} data-testid="drawing-answer-image">✏️</div>;

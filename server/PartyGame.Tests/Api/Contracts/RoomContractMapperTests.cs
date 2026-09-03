@@ -120,6 +120,17 @@ public class RoomContractMapperTests
     }
 
     [Fact]
+    public void ToSnapshot_ExposesDisplayQuestionVoicePreference()
+    {
+        var env = SetupTestEnvironment();
+        env.room.Settings.QuestionVoiceEnabled = true;
+
+        var snapshot = env.room.ToSnapshot();
+
+        Assert.True(snapshot.Settings.QuestionVoiceEnabled);
+    }
+
+    [Fact]
     public void ToSnapshot_RendersPersistedTextQuestionSubjectWithoutTemplateTokens()
     {
         var env = SetupTestEnvironment();

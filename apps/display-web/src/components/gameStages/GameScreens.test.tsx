@@ -49,6 +49,16 @@ describe('GameScreens', () => {
         expect(screen.getByText('QuestText')).toBeInTheDocument();
     });
 
+    it('keeps the same motion container for timer refreshes and replaces it for a new stage', () => {
+        const firstGame = { ...defaultGame, stage: 'QuestionIntro' as GameStage, stageEndsAtUtc: '2026-09-03T20:00:00Z' };
+        const { rerender } = render(<GameScreens snapshot={{ ...defaultRoom, game: firstGame }} />);
+        const first = screen.getByTestId('motion-stage');
+        rerender(<GameScreens snapshot={{ ...defaultRoom, stateVersion: 2, game: { ...firstGame, stageEndsAtUtc: '2026-09-03T20:00:01Z' } }} />);
+        expect(screen.getByTestId('motion-stage')).toBe(first);
+        rerender(<GameScreens snapshot={{ ...defaultRoom, stateVersion: 3, game: { ...firstGame, stage: 'CollectingPlayerSelections' } }} />);
+        expect(screen.getByTestId('motion-stage')).not.toBe(first);
+    });
+
     it('CollectingPlayerSelections does not leak partial results and respects requiredPlayers', () => {
         const game: GameSnapshot = {
             ...defaultGame,

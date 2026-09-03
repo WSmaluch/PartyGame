@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { publicMediaUrl } from '../../api/roomApi';
 import { gameCategory, gameQuestion, localizedText, type AnonymousPhotoAnswer, type GameSnapshot, type PhotoAnswerResultOption, type RoomSnapshot } from '../../api/types';
-import { useTimer } from './useTimer';
+import { StageTimer } from './StageTimer';
 
 function mediaUrl(path: string): string {
   return publicMediaUrl(path) ?? path;
@@ -31,12 +31,11 @@ function PlayerAvatar({ src, name }: { src?: string | null; name: string }) {
 }
 
 function Header({ game }: { game: GameSnapshot }) {
-  const seconds = useTimer(game.stageEndsAtUtc);
   return <header className="photo-stage-header">
     <p>Runda {game.currentRoundNumber} · Pytanie {game.currentQuestionNumber}/{game.questionsInCurrentRound}</p>
     <p className="photo-category">{localizedText(gameCategory(game)?.name)}</p>
     <h1>{localizedText(gameQuestion(game)?.text)}</h1>
-    <strong className="timer" aria-label={`Pozostało ${seconds} sekund`}>{seconds}s</strong>
+    <StageTimer endsAtUtc={game.stageEndsAtUtc} />
   </header>;
 }
 

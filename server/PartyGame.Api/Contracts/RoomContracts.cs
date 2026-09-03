@@ -144,4 +144,5 @@ public sealed record PublicRoomSettings(
     int DrawingSeconds,
     int ResultPresentationSeconds,
     bool FinalRoundEnabled,
-    int FinalDrawingPasses);
+    int FinalDrawingPasses,
+    bool QuestionVoiceEnabled);

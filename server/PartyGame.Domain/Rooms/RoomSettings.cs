@@ -13,6 +13,7 @@ public sealed class RoomSettings
     public int ResultPresentationSeconds { get; set; } = 8;
     public bool FinalRoundEnabled { get; set; } = true;
     public int FinalDrawingPasses { get; set; } = 3;
+    public bool QuestionVoiceEnabled { get; set; }
 
     public void Validate()
     {

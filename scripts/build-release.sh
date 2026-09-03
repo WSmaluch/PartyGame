@@ -13,7 +13,7 @@ if [[ "$ALLOW_DIRTY" != true ]] && [[ -n "$(git status --porcelain)" ]]; then
   exit 65
 fi
 
-SHORT_HASH="$(git rev-parse --short=12 HEAD)"
+COMMIT_HASH="$(git rev-parse HEAD)"
 TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 VERSION_FILE="$REPO_DIR/release/VERSION"
 [[ -f "$VERSION_FILE" ]] || { echo "Missing release version source: $VERSION_FILE" >&2; exit 66; }
@@ -33,7 +33,7 @@ dotnet publish server/PartyGame.Api/PartyGame.Api.csproj --no-restore --configur
   -p:PartyGameReleaseVersion="$VERSION" \
   -p:Version="$VERSION" \
   -p:InformationalVersion="$VERSION" \
-  -p:SourceRevisionId="$SHORT_HASH" \
+  -p:SourceRevisionId="$COMMIT_HASH" \
   -p:PartyGameBuildTimestampUtc="$TIMESTAMP"
 
 for app in display-web admin-web player-web; do
@@ -45,9 +45,9 @@ for app in display-web admin-web player-web; do
   cp -R "apps/$app/dist" "$RELEASE_DIR/${app%-web}"
 done
 
-node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/display/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_DISPLAY_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
-node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/admin/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_ADMIN_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
-node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/player/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_PLAYER_PUBLIC_URL:-}" "$VERSION" "$SHORT_HASH"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/display/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_DISPLAY_PUBLIC_URL:-}" "$VERSION" "$COMMIT_HASH"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/admin/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_ADMIN_PUBLIC_URL:-}" "$VERSION" "$COMMIT_HASH"
+node "$REPO_DIR/scripts/release-assets.mjs" config "$RELEASE_DIR/player/config.json" "${PARTYGAME_PUBLIC_BASE_URL:-}" "${PARTYGAME_PLAYER_PUBLIC_URL:-}" "$VERSION" "$COMMIT_HASH"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export PATH="$DEVELOPER_DIR/usr/bin:$PATH"
@@ -58,7 +58,7 @@ xcodebuild -project apps/ios/PartyGame.xcodeproj -scheme PartyGame -configuratio
   PARTYGAME_RELEASE_VERSION="$VERSION" \
   build-for-testing
 
-node "$REPO_DIR/scripts/release-assets.mjs" manifest "$RELEASE_DIR" "$VERSION" "$SHORT_HASH" "$TIMESTAMP" "$(dotnet --version)" "$(node --version)" "$(npm --version)"
+node "$REPO_DIR/scripts/release-assets.mjs" manifest "$RELEASE_DIR" "$VERSION" "$COMMIT_HASH" "$TIMESTAMP" "$(dotnet --version)" "$(node --version)" "$(npm --version)"
 bash "$REPO_DIR/scripts/smoke-release.sh" "$RELEASE_DIR"
 
 if find "$RELEASE_DIR" \( -name node_modules -o -name DerivedData -o -name '*.db' -o -name '*.log' \) -print -quit | grep -q .; then

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DrawingAnswerResultOption, GameSnapshot, PhotoAnswerResultOption, PlayerSelectionResultOption, RankingEntry, ResultVoter, RoomSnapshot, TextAnswerResultOption } from '../api/types';
 import { localizedText } from '../api/types';
 import type { Locale, TranslationKey } from '../translations';
@@ -29,7 +29,28 @@ export function RankingList({ rankings, room, t }: { rankings: RankingEntry[]; r
 
 export function RankingRow({ entry, room, t }: { entry: RankingEntry; room: RoomSnapshot; t: Translate }) {
   const player = room.players.find((candidate) => candidate.id === entry.playerId); const nickname = entry.nickname || player?.nickname || t('player'); const avatar = entry.profilePhotoUrl ?? player?.profilePhotoUrl;
-  return <li className={`ranking-row ${entry.rank === 1 ? 'ranking-row--winner' : ''}`} aria-label={`${t('place')} ${rankText(entry.rank)}, ${nickname}, ${entry.score} ${t('points')}`}><span className="ranking-place">{rankText(entry.rank)}</span>{avatar ? <img className="avatar" src={avatar} alt={`${t('avatarOf')}: ${nickname}`} onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <span className="avatar avatar--placeholder" aria-hidden="true">👤</span>}<strong>{nickname}</strong><span className="ranking-score">{entry.score} {t('points')}</span>{entry.rank === 1 && <span className="winner-label">{t('winner')}</span>}</li>;
+  const displayedScore = useAnimatedScore(entry.score);
+  return <li className={`ranking-row ${entry.rank === 1 ? 'ranking-row--winner' : ''}`} aria-label={`${t('place')} ${rankText(entry.rank)}, ${nickname}, ${entry.score} ${t('points')}`}><span className="ranking-place">{rankText(entry.rank)}</span>{avatar ? <img className="avatar" src={avatar} alt={`${t('avatarOf')}: ${nickname}`} onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <span className="avatar avatar--placeholder" aria-hidden="true">👤</span>}<strong>{nickname}</strong><span className="ranking-score" aria-hidden="true">{displayedScore} {t('points')}</span>{entry.rank === 1 && <span className="winner-label">{t('winner')}</span>}</li>;
+}
+
+function useAnimatedScore(score: number): number {
+  const previous = useRef(score);
+  const [displayed, setDisplayed] = useState(score);
+  useEffect(() => {
+    const from = previous.current;
+    previous.current = score;
+    if (from === score || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setDisplayed(score); return; }
+    const started = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - started) / 420);
+      setDisplayed(Math.round(from + (score - from) * (1 - Math.pow(1 - progress, 3))));
+      if (progress < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [score]);
+  return displayed;
 }
 
 function rankText(rank?: number | null): string { return typeof rank === 'number' && rank > 0 ? `#${rank}` : '—'; }

@@ -13,7 +13,7 @@ const questionTypes = [
 const defaultSettings: RoomSettings = {
   roundCount: 4, questionsPerRound: 5, playerSelectionSeconds: 20, textAnswerSeconds: 40,
   votingSeconds: 20, photoSeconds: 45, drawingSeconds: 90, resultPresentationSeconds: 8,
-  finalRoundEnabled: true, finalDrawingPasses: 3,
+  finalRoundEnabled: true, finalDrawingPasses: 3, questionVoiceEnabled: false,
 };
 
 type Props = {
@@ -78,6 +78,7 @@ export function HostSetup({ locale, t, error, onBack, onCreated, onError }: Prop
         <NumberSetting label={t('photoSeconds')} value={settings.photoSeconds} min={10} max={180} step={5} onChange={(value) => changeNumber('photoSeconds', value)} />
         <NumberSetting label={t('drawingSeconds')} value={settings.drawingSeconds} min={30} max={300} step={10} onChange={(value) => changeNumber('drawingSeconds', value)} />
         <NumberSetting label={t('resultPresentationSeconds')} value={settings.resultPresentationSeconds} min={3} max={30} onChange={(value) => changeNumber('resultPresentationSeconds', value)} />
+        <label className="checkbox-row"><input type="checkbox" checked={settings.questionVoiceEnabled} onChange={(event) => setSettings((current) => ({ ...current, questionVoiceEnabled: event.target.checked }))} /><span>{t('questionVoice')}</span></label>
         <label className="checkbox-row"><input type="checkbox" checked={settings.finalRoundEnabled} onChange={(event) => setSettings((current) => ({ ...current, finalRoundEnabled: event.target.checked }))} /><span>{t('finalRoundEnabled')}</span></label>
         {settings.finalRoundEnabled && <NumberSetting label={t('finalDrawingPasses')} value={settings.finalDrawingPasses} min={1} max={9} onChange={(value) => changeNumber('finalDrawingPasses', value)} />}
       </fieldset>

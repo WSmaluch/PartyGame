@@ -117,6 +117,7 @@ export type RoomSettings = {
   resultPresentationSeconds: number;
   finalRoundEnabled: boolean;
   finalDrawingPasses: number;
+  questionVoiceEnabled?: boolean;
 };
 
 export type CreateRoomRequest = {

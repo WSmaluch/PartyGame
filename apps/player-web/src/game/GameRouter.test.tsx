@@ -28,6 +28,13 @@ describe('GameRouter', () => {
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:preview') }); Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
   });
 
+  it('keeps question progress and connection status in one flow header', () => {
+    renderGame({ ...baseSnapshot, game: { ...game('CollectingPlayerSelections'), currentQuestionNumber: 4, questionsInCurrentRound: 5 } });
+    const header = screen.getByTestId('game-header');
+    expect(header).toContainElement(screen.getByText('Pytanie 4/5'));
+    expect(header).toContainElement(screen.getByText('Połączono'));
+  });
+
   it('renders eligible player choices and submits a selection exactly once', async () => {
     renderGame({ ...baseSnapshot, game: game('CollectingPlayerSelections') });
     fireEvent.click(screen.getByRole('button', { name: 'Ania' }));
