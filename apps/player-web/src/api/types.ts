@@ -92,7 +92,7 @@ export type PlayerPrivateGameState = {
   finalRound?: { hasSubmittedSelfie: boolean; assignedArtifactId?: string | null; sourceDisplayMediaUrl?: string | null; sourceThumbnailMediaUrl?: string | null; hasSubmittedEdit: boolean; hasSubmittedVote: boolean; selfiePrompt?: LocalizedText | null; targetRole?: LocalizedText | null; canSubmitSelfie: boolean } | null;
 };
 
-export type MediaUploadResponse = { playerPrivateGameState: PlayerPrivateGameState; roomSnapshot: RoomSnapshot };
+export type MediaUploadResponse = { mediaId?: string | null; playerPrivateGameState: PlayerPrivateGameState; roomSnapshot: RoomSnapshot };
 
 export type RoomSnapshot = {
   roomCode: string;

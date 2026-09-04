@@ -874,7 +874,7 @@ public sealed class RoomService(
                 : state.Edits.Count(edit => edit.PassNumber == state.CurrentPass && edit.MediaAssetId is not null);
             if (completed >= expected) await stateMachine.ForceTransitionAsync(session, clock.UtcNow, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
-            return new FinalRoundUploadResult(room, artifact.Id, true);
+            return new FinalRoundUploadResult(room, artifact.Id, true, asset.Id);
         }
         catch
         {
@@ -1147,6 +1147,11 @@ public sealed class RoomService(
             .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.DrawingAnswerVoteEligiblePlayers)
             .Include(room => room.Session).ThenInclude(s => s!.Rounds).ThenInclude(r => r.Questions).ThenInclude(i => i.DrawingAnswerVotes)
             .Include(room => room.Session).ThenInclude(s => s!.ScoreTransactions)
+            // The session graph has many sibling collections. A single joined
+            // query multiplies historical submissions, votes and eligibility
+            // rows as a game progresses; split queries preserve the complete
+            // transactional aggregate without that cartesian materialization.
+            .AsSplitQuery()
             .SingleOrDefaultAsync(room => room.Code == code, cancellationToken)
         ?? throw new RoomNotFoundException();
 

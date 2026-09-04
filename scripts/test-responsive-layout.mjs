@@ -42,6 +42,23 @@ try {
   if (reducedAnimations.some((name) => name !== 'none')) throw new Error(`Reduced motion still animates: ${reducedAnimations.join(', ')}`);
   await reduced.close();
   console.log(`Responsive layout tests PASS (${viewports.length} viewports + reduced motion)`);
+
+  const displayViewports = [[1024, 640], [1280, 720], [1920, 1080], [2560, 1440]];
+  const displayCases = [
+    `<section class="collecting-text-votes"><h2>Pytanie 4 / 5</h2><h1>Bardzo długie pytanie o wspólną podróż, które musi zawinąć się bez wypchnięcia anonimowych odpowiedzi poza ekran telewizora</h1><div class="timer-container"><strong class="timer">24</strong></div><div class="answers-grid">${Array.from({ length: 6 }, (_, i) => `<article class="answer-card"><p>Odpowiedź ${i + 1}: dłuższa anonimowa propozycja widoczna w całości</p></article>`).join('')}</div></section>`,
+    `<section class="photo-results"><h1>Prezentacja finałowa</h1><div class="photo-grid">${Array.from({ length: 3 }, (_, i) => `<article class="final-artifact"><div class="photo-placeholder">${i + 1}</div><h3>Gracz ${i + 1} jako kosmiczny pirat</h3></article>`).join('')}</div></section>`,
+    `<section class="game-completed"><h1>Gra zakończona</h1><div class="rankings">${Array.from({ length: 3 }, (_, i) => `<article class="ranking-entry"><span class="rank">#${i + 1}</span><span class="name">Gracz ${i + 1}</span><span class="score">${300 - i * 50} pkt</span></article>`).join('')}</div></section>`,
+  ];
+  for (const [width, height] of displayViewports) for (const content of displayCases) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    await page.setContent(`<main class="display-shell"><section class="hero-card hero-card--started"><p class="eyebrow">Ekran gry</p><h1>PartyGame</h1><div class="game-screen-container">${content}</div></section></main>`);
+    await page.addStyleTag({ path: path.join(repo, 'apps/display-web/src/styles/global.css') });
+    const metrics = await page.evaluate(() => ({ scrollHeight: document.documentElement.scrollHeight, scrollWidth: document.documentElement.scrollWidth, viewportHeight: window.innerHeight, bottom: Math.max(...[...document.querySelectorAll('.answer-card, .final-artifact, .ranking-entry')].map((element) => element.getBoundingClientRect().bottom)) }));
+    if (metrics.scrollWidth > width + 1 || metrics.scrollHeight > height + 2 || metrics.bottom > height + 2)
+      throw new Error(`Display gameplay does not fit ${width}x${height}: ${JSON.stringify(metrics)}`);
+    await page.close();
+  }
+  console.log('Display viewport/overflow PASS (1024x640, 1280x720, 1920x1080, 2560x1440)');
 } finally {
   await browser.close();
 }

@@ -42,6 +42,36 @@ public sealed class FinalRoundLifecycleTests
         Assert.Equal(GameStage.GameSummary, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow));
     }
 
+    [Fact]
+    public async Task FinalSelfieTimeout_KeepsStageActionableUntilEverySelfieIsPersisted()
+    {
+        await using var harness = new PhotoAnswerTestHarness();
+        var room = await harness.CreateRoomAsync(GameStage.RoundSummary, QuestionType.PlayerSelection, playerCount: 3, eligibleCount: 0, stageEndsAtUtc: DateTimeOffset.UtcNow.AddSeconds(-1));
+        await using (var setup = harness.Factory.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+            var session = await db.GameSessions.Include(candidate => candidate.Room).ThenInclude(candidate => candidate.Settings).SingleAsync(candidate => candidate.Id == room.GameSessionId);
+            session.Room.Settings.FinalRoundEnabled = true;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(GameStage.CollectingFinalSelfies, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow));
+        DateTimeOffset firstDeadline;
+        await using (var beforeTimeout = harness.Factory.Services.CreateAsyncScope())
+        {
+            firstDeadline = (await beforeTimeout.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions
+                .Where(candidate => candidate.Id == room.GameSessionId).Select(candidate => candidate.StageEndsAtUtc).SingleAsync())!.Value;
+        }
+
+        Assert.Equal(GameStage.CollectingFinalSelfies, await harness.ProcessAtAsync(room, firstDeadline.AddSeconds(1)));
+        await using var verification = harness.Factory.Services.CreateAsyncScope();
+        var renewed = await verification.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions
+            .AsNoTracking().SingleAsync(candidate => candidate.Id == room.GameSessionId);
+        Assert.Equal(GameStage.CollectingFinalSelfies, renewed.Stage);
+        Assert.True(renewed.StageEndsAtUtc > firstDeadline);
+        Assert.All(FinalRoundState.Read(renewed.FinalRoundStateJson)!.Artifacts, artifact => Assert.Null(artifact.OriginalMediaAssetId));
+    }
+
     [Theory]
     [InlineData(3)]
     [InlineData(4)]

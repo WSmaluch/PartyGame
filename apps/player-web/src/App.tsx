@@ -375,6 +375,7 @@ export default function App() {
         status={connectionStatus}
         t={t}
         onSnapshot={applySnapshot}
+        onPrivateState={setPrivateState}
         onRecoverFinalEdit={() =>
           void recoverFinalEditAssignment(screen.session)
         }

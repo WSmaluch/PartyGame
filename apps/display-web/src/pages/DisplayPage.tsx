@@ -120,7 +120,7 @@ export function DisplayPage() {
       <div className="confetti confetti--one" aria-hidden="true" />
       <div className="confetti confetti--two" aria-hidden="true" />
       <section
-        className="hero-card"
+        className={`hero-card ${view === 'started' ? 'hero-card--started' : ''}`}
         data-testid="display-state-version"
         data-state-version={snapshot?.stateVersion ?? ''}
       >

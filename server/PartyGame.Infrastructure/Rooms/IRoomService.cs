@@ -34,4 +34,4 @@ public sealed record PlayerAuthorizationResult(GameRoom Room, Player Player);
 public sealed record RoomMutationResult(GameRoom Room, bool PublicStateChanged, bool StartedNow);
 public sealed record PhotoAnswerUploadResult(GameRoom Room, Guid PhotoAnswerId, bool Created);
 public sealed record DrawingAnswerUploadResult(GameRoom Room, Guid DrawingAnswerId, bool Created);
-public sealed record FinalRoundUploadResult(GameRoom Room, Guid ArtifactId, bool Created);
+public sealed record FinalRoundUploadResult(GameRoom Room, Guid ArtifactId, bool Created, Guid? MediaAssetId = null);

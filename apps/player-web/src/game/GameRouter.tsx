@@ -39,7 +39,7 @@ import { StageTransition } from './StageTransition';
 import { privateActionType, type PrivateActionType } from './privateAction';
 
 type Translate = (key: TranslationKey) => string;
-type SubmissionState = 'idle' | 'submitting' | 'submitted' | 'failed';
+type SubmissionState = 'idle' | 'preparing' | 'submitting' | 'submitted' | 'failed';
 
 type GameRouterProps = {
   session: PlayerSession;
@@ -49,6 +49,7 @@ type GameRouterProps = {
   status: ConnectionStatus;
   t: Translate;
   onSnapshot: (snapshot: RoomSnapshot) => void;
+  onPrivateState?: (privateState: PlayerPrivateGameState) => void;
   onRecoverFinalEdit?: () => void;
   finalEditRecoveryFailed?: boolean;
   onRecoverPrivateAction?: () => void;
@@ -72,6 +73,7 @@ function GameRouteContent({
   status,
   t,
   onSnapshot,
+  onPrivateState,
   onRecoverFinalEdit,
   finalEditRecoveryFailed = false,
   onRecoverPrivateAction,
@@ -243,6 +245,7 @@ function GameRouteContent({
         status={status}
         t={t}
         onSnapshot={onSnapshot}
+        onPrivateState={onPrivateState}
       />
     );
   if (game.stage === 'CollectingFinalEdits') {
@@ -648,8 +651,11 @@ function TextVoting({
   );
   const inFlight = useRef(false);
   const options = useMemo(
-    () => game.textResults?.votingOptions ?? [],
-    [game.textResults?.votingOptions],
+    () =>
+      (game.textResults?.votingOptions ?? []).filter(
+        (option) => option.answerId !== privateState?.ownTextAnswerId,
+      ),
+    [game.textResults?.votingOptions, privateState?.ownTextAnswerId],
   );
   async function submit(): Promise<void> {
     if (!selectedId || !questionId || inFlight.current) return;
@@ -1117,6 +1123,7 @@ function FinalSelfie({
   status,
   t,
   onSnapshot,
+  onPrivateState,
 }: {
   session: PlayerSession;
   game: GameSnapshot;
@@ -1125,26 +1132,39 @@ function FinalSelfie({
   status: ConnectionStatus;
   t: Translate;
   onSnapshot: (snapshot: RoomSnapshot) => void;
+  onPrivateState?: (privateState: PlayerPrivateGameState) => void;
 }) {
   const final = privateState?.finalRound;
   const [file, setFile] = useState<Blob>();
+  const [preview, setPreview] = useState<string>();
   const [state, setState] = useState<SubmissionState>(
     final?.hasSubmittedSelfie ? 'submitted' : 'idle',
   );
+  const inFlight = useRef(false);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   async function select(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const selected = event.target.files?.[0];
     event.target.value = '';
     if (!selected) return;
     try {
-      setFile(await preparePhotoAnswer(selected));
+      setState('preparing');
+      reportFinalSelfie('capture-start');
+      const prepared = await preparePhotoAnswer(selected);
+      setFile(prepared);
+      setPreview(URL.createObjectURL(prepared));
+      reportFinalSelfie('capture-ready', { bytes: prepared.size, type: prepared.type });
       setState('idle');
     } catch {
+      reportFinalSelfie('capture-failed');
       setState('failed');
     }
   }
   async function submit(): Promise<void> {
-    if (!file) return;
+    if (!file || inFlight.current) return;
+    inFlight.current = true;
     setState('submitting');
+    const startedAt = performance.now();
+    reportFinalSelfie('upload-start', { bytes: file.size, type: file.type });
     try {
       const result = await uploadFinalSelfie(
         session,
@@ -1156,10 +1176,17 @@ function FinalSelfie({
           'final-selfie',
         ),
       );
+      if (result.playerPrivateGameState.finalRound?.hasSubmittedSelfie !== true)
+        throw new Error('final-selfie-not-acknowledged');
+      onPrivateState?.(result.playerPrivateGameState);
       onSnapshot(result.roomSnapshot);
+      reportFinalSelfie('upload-acknowledged', { durationMs: Math.round(performance.now() - startedAt), mediaId: result.mediaId ?? 'absent' });
       setState('submitted');
     } catch {
+      reportFinalSelfie('upload-failed', { durationMs: Math.round(performance.now() - startedAt) });
       setState('failed');
+    } finally {
+      inFlight.current = false;
     }
   }
   if (
@@ -1169,7 +1196,14 @@ function FinalSelfie({
   )
     return (
       <GameShell game={game} status={status} t={t}>
-        <WaitingState label={t('waitingForOthers')} t={t} />
+        <WaitingState
+          label={
+            final?.hasSubmittedSelfie || state === 'submitted'
+              ? t('photoSubmitted')
+              : t('waitingForOthers')
+          }
+          t={t}
+        />
       </GameShell>
     );
   return (
@@ -1187,13 +1221,15 @@ function FinalSelfie({
         capture="user"
         onChange={select}
       />
-      {file && (
+      {preview && <img className="media-preview" src={preview} alt={t('photoPreview')} />}
+      {state === 'preparing' && <p role="status">{t('processingPhoto')}</p>}
+      {file && state !== 'preparing' && (
         <button
           type="button"
           onClick={() => void submit()}
           disabled={status !== 'connected' || state === 'submitting'}
         >
-          {state === 'submitting' ? t('submitting') : t('submitPhoto')}
+          {state === 'submitting' ? t('uploadingPhoto') : t('submitPhoto')}
         </button>
       )}
       {state === 'failed' && (
@@ -1205,6 +1241,12 @@ function FinalSelfie({
       )}
     </GameShell>
   );
+}
+
+function reportFinalSelfie(event: string, details: Record<string, string | number> = {}): void {
+  // Keep diagnostics useful for mobile Safari investigations without exposing
+  // reconnect credentials or image contents.
+  console.info('[PartyGame final-selfie]', JSON.stringify({ event, ...details }));
 }
 
 function FinalEdit({

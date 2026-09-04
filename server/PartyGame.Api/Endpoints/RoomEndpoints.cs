@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using PartyGame.Api.Contracts;
 using PartyGame.Api.Hubs;
 using PartyGame.Domain.Rooms;
@@ -162,6 +163,8 @@ public static class RoomEndpoints
             [FromForm] string reconnectToken,
             [FromForm] Guid clientSubmissionId,
             IFormFile? photo,
+            HttpRequest request,
+            HttpResponse response,
             IRoomService roomService,
             RoomNotifier notifier,
             IRoomConnectionRegistry connections,
@@ -169,15 +172,30 @@ public static class RoomEndpoints
             CancellationToken cancellationToken) =>
         {
             if (photo is null) throw new PhotoAnswerException("photo_answer_file_missing", "A photo file is required.");
+            var benchmark = string.Equals(request.Headers["X-PartyGame-Benchmark"], "photo-upload", StringComparison.Ordinal);
+            var startedAt = benchmark ? Stopwatch.GetTimestamp() : 0;
             await using var content = photo.OpenReadStream();
             var result = await roomService.SubmitPhotoAnswerAsync(roomCode, playerId, reconnectToken, questionInstanceId, clientSubmissionId, content, photo.Length, photo.ContentType, cancellationToken);
+            var serviceMs = benchmark ? Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds : 0;
+            var notifyStartedAt = benchmark ? Stopwatch.GetTimestamp() : 0;
             var mutation = new RoomMutationResult(result.Room, result.Created, false);
             await notifier.NotifyAsync(mutation, cancellationToken);
+            var notifyMs = benchmark ? Stopwatch.GetElapsedTime(notifyStartedAt).TotalMilliseconds : 0;
+            var privateStartedAt = benchmark ? Stopwatch.GetTimestamp() : 0;
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken);
             var connectionId = connections.GetActivePlayerConnection(playerId);
             if (connectionId != null)
                 await hubContext.Clients.Client(connectionId).SendAsync("PlayerPrivateGameStateUpdated", privateState, cancellationToken);
-            return Results.Ok(new PhotoAnswerUploadResponse(result.PhotoAnswerId, privateState, result.Room.ToSnapshot()));
+            var privateMs = benchmark ? Stopwatch.GetElapsedTime(privateStartedAt).TotalMilliseconds : 0;
+            var snapshotStartedAt = benchmark ? Stopwatch.GetTimestamp() : 0;
+            var snapshot = result.Room.ToSnapshot();
+            var snapshotMs = benchmark ? Stopwatch.GetElapsedTime(snapshotStartedAt).TotalMilliseconds : 0;
+            // Deliberately opt-in and response-only: the deterministic local
+            // benchmark can distinguish endpoint time from client request time
+            // without adding logs or timing overhead to normal uploads.
+            if (benchmark)
+                response.Headers.Append("Server-Timing", $"partygame;dur={Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds:F2}, service;dur={serviceMs:F2}, notify;dur={notifyMs:F2}, private;dur={privateMs:F2}, snapshot;dur={snapshotMs:F2}");
+            return Results.Ok(new PhotoAnswerUploadResponse(result.PhotoAnswerId, privateState, snapshot));
         }).DisableAntiforgery().RequireRateLimiting("uploads");
 
         rooms.MapPost("/{roomCode}/questions/{questionInstanceId:guid}/drawing-answers", async (string roomCode, Guid questionInstanceId, [FromForm] Guid playerId, [FromForm] string reconnectToken, [FromForm] Guid clientSubmissionId, IFormFile? drawing, IRoomService roomService, RoomNotifier notifier, IRoomConnectionRegistry connections, IHubContext<GameHub> hubContext, CancellationToken cancellationToken) =>
@@ -198,7 +216,7 @@ public static class RoomEndpoints
             var result = await roomService.SubmitFinalSelfieAsync(roomCode, playerId, reconnectToken, clientSubmissionId, content, photo.Length, photo.ContentType, cancellationToken);
             await notifier.NotifyAsync(new RoomMutationResult(result.Room, result.Created, false), cancellationToken);
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken);
-            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, privateState, result.Room.ToSnapshot()));
+            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, result.MediaAssetId, privateState, result.Room.ToSnapshot()));
         }).DisableAntiforgery().RequireRateLimiting("uploads");
 
         rooms.MapPost("/{roomCode}/final-round/artifacts/{artifactId:guid}/edits", async (string roomCode, Guid artifactId, [FromForm] Guid playerId, [FromForm] string reconnectToken, [FromForm] Guid clientSubmissionId, IFormFile? drawing, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
@@ -208,7 +226,7 @@ public static class RoomEndpoints
             var result = await roomService.SubmitFinalEditAsync(roomCode, playerId, reconnectToken, artifactId, clientSubmissionId, content, drawing.Length, drawing.ContentType, cancellationToken);
             await notifier.NotifyAsync(new RoomMutationResult(result.Room, result.Created, false), cancellationToken);
             var privateState = await roomService.GetPlayerPrivateGameStateAsync(roomCode, playerId, cancellationToken);
-            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, privateState, result.Room.ToSnapshot()));
+            return Results.Ok(new FinalRoundUploadResponse(result.ArtifactId, result.MediaAssetId, privateState, result.Room.ToSnapshot()));
         }).DisableAntiforgery().RequireRateLimiting("uploads");
 
         rooms.MapPost("/{roomCode}/final-round/votes", async (string roomCode, FinalRoundVoteRequest request, IRoomService roomService, RoomNotifier notifier, CancellationToken cancellationToken) =>
@@ -227,5 +245,5 @@ public static class RoomEndpoints
 
 public sealed record PhotoAnswerUploadResponse(Guid PhotoAnswerId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
 public sealed record DrawingAnswerUploadResponse(Guid DrawingAnswerId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
-public sealed record FinalRoundUploadResponse(Guid ArtifactId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
+public sealed record FinalRoundUploadResponse(Guid ArtifactId, Guid? MediaId, PlayerPrivateGameState PlayerPrivateGameState, RoomSnapshot RoomSnapshot);
 public sealed record FinalRoundVoteRequest(Guid PlayerId, string ReconnectToken, Guid ArtifactId, Guid? ClientSubmissionId = null);

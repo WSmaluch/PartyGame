@@ -12,7 +12,7 @@ namespace PartyGame.Tests.Api;
 public sealed class TargetedTextAnswerFlowTests
 {
     [Fact]
-    public async Task PersistedTarget_RendersPrompt_AndAllEligibleAnswersAdvanceToVotingWithoutDuplicates()
+    public async Task TargetedQuestion_PersistsEveryConnectedPlayersAnswer_AndExcludesOnlyOwnCandidateFromEachVote()
     {
         await using var harness = new PhotoAnswerTestHarness();
         var room = await harness.CreateRoomAsync(
@@ -45,7 +45,7 @@ public sealed class TargetedTextAnswerFlowTests
                     TextEn = {"What will {player} definitely forget to pack?"}
                 WHERE Id = {instance.QuestionId}
                 """);
-            foreach (var player in players.Skip(1))
+            foreach (var player in players)
             {
                 db.TextAnswerEligiblePlayers.Add(new TextAnswerEligiblePlayer
                 {
@@ -55,7 +55,7 @@ public sealed class TargetedTextAnswerFlowTests
                 });
             }
             await db.SaveChangesAsync();
-            eligiblePlayers = room.Players.Where(player => player.PlayerId != targetId).ToList();
+            eligiblePlayers = room.Players.ToList();
         }
 
         var collectingJson = await harness.Client.GetStringAsync($"/api/rooms/{room.RoomCode}");
@@ -87,15 +87,20 @@ public sealed class TargetedTextAnswerFlowTests
                 .Include(candidate => candidate.TextAnswerSubmissions)
                 .Include(candidate => candidate.TextAnswerVoteEligiblePlayers)
                 .SingleAsync(candidate => candidate.Id == room.QuestionInstanceId);
-            Assert.Equal(2, instance.TextAnswerSubmissions.Count);
+            Assert.Equal(3, instance.TextAnswerSubmissions.Count);
             Assert.Equal(3, instance.TextAnswerVoteEligiblePlayers.Count);
 
             var snapshot = (await scope.ServiceProvider.GetRequiredService<IRoomService>().GetAsync(room.RoomCode)).ToSnapshot();
-            Assert.Equal(2, snapshot.Game!.TextResults!.VotingOptions!.Count);
+            Assert.Equal(3, snapshot.Game!.TextResults!.VotingOptions!.Count);
 
             var rooms = scope.ServiceProvider.GetRequiredService<IRoomService>();
             foreach (var player in room.Players)
             {
+                var own = instance.TextAnswerSubmissions.Single(answer => answer.AuthorPlayerId == player.PlayerId);
+                // The backend remains the authority: an own answer is never a
+                // valid vote target, even though it stays public-anonymous for
+                // the other two voters.
+                Assert.False((await rooms.SubmitTextAnswerVoteAsync(room.RoomCode, player.PlayerId, player.Token, own.Id, room.QuestionInstanceId, Guid.NewGuid())).PublicStateChanged);
                 var selected = instance.TextAnswerSubmissions.First(answer => answer.AuthorPlayerId != player.PlayerId);
                 await rooms.SubmitTextAnswerVoteAsync(room.RoomCode, player.PlayerId, player.Token, selected.Id, room.QuestionInstanceId, Guid.NewGuid());
             }
@@ -107,7 +112,7 @@ public sealed class TargetedTextAnswerFlowTests
             .Where(session => session.Id == room.GameSessionId)
             .Select(session => session.Stage)
             .SingleAsync());
-        Assert.Equal(2, await verificationDb.TextAnswerSubmissions.CountAsync(answer => answer.QuestionInstanceId == room.QuestionInstanceId));
+        Assert.Equal(3, await verificationDb.TextAnswerSubmissions.CountAsync(answer => answer.QuestionInstanceId == room.QuestionInstanceId));
         Assert.Equal(3, await verificationDb.TextAnswerVotes.CountAsync(vote => vote.QuestionInstanceId == room.QuestionInstanceId));
     }
 }

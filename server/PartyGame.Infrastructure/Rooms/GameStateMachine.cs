@@ -262,7 +262,12 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
         currentInstance.Stage = GameStage.CollectingTextAnswers;
         currentInstance.AnsweringStartedAtUtc = now;
 
-        foreach (var player in session.Room.Players.Where(p => p.IsConnected && currentInstance.SubjectPlayerId != p.Id))
+        // A targeted prompt names its subject, but does not make their answer
+        // invalid.  The player client presents the same text-answer action to
+        // every connected participant, so the persisted eligibility contract
+        // must match that UI.  Self-vote prevention is enforced later, at both
+        // candidate presentation and submission time.
+        foreach (var player in session.Room.Players.Where(p => p.IsConnected))
         {
             dbContext.Database.ExecuteSqlInterpolated($"""
                 INSERT OR IGNORE INTO TextAnswerEligiblePlayers (Id, QuestionInstanceId, PlayerId)
@@ -558,7 +563,17 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
     private void TransitionFromFinalSelfies(GameSession session, DateTimeOffset now)
     {
         var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
-        if (state.TotalPasses == 0 || state.Artifacts.All(artifact => artifact.OriginalMediaAssetId is null))
+        // A local camera preview is not a submitted Final Selfie.  Never
+        // advance on the timer while the authoritative persisted-media count
+        // is incomplete; keep the same actionable stage and give retries a
+        // fresh bounded window instead.
+        if (state.Artifacts.Any(artifact => artifact.OriginalMediaAssetId is null))
+        {
+            session.StageStartedAtUtc = now;
+            session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.PhotoSeconds);
+            return;
+        }
+        if (state.TotalPasses == 0)
         {
             TransitionToFinalPresentation(session, state, now);
             return;
