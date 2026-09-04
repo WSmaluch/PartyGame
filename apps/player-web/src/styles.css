@@ -67,6 +67,10 @@
   .game-header { align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
   .connection { margin-left: auto; }
   .game-card h2 { margin: 14px 0 18px; font-size: clamp(21px, 6.8vw, 28px); }
+  .drawing-canvas { width: min(100%, 520px, calc(100dvh - 350px)); min-width: 168px; }
+  .drawing-tools--colors { display: grid; grid-template-columns: repeat(5, 36px); gap: 6px; }
+  .drawing-color, .drawing-width { width: 36px; min-height: 36px !important; }
+  .drawing-color span { width: 22px; height: 22px; }
   .option-list { max-height: min(44dvh, 410px); }
   .ranking-row { grid-template-columns: 40px 42px minmax(0, 1fr); }
   .ranking-score { grid-column: 3; justify-self: start; }

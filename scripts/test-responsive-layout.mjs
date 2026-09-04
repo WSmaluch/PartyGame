@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireFromDisplay = createRequire(path.join(repo, 'apps/display-web/package.json'));
-const { chromium } = requireFromDisplay('@playwright/test');
+const { chromium, webkit } = requireFromDisplay('@playwright/test');
 const viewports = [
   [320, 568], [375, 667], [390, 844], [430, 932],
   [768, 1024], [1366, 768], [1920, 1080],
@@ -44,4 +44,26 @@ try {
   console.log(`Responsive layout tests PASS (${viewports.length} viewports + reduced motion)`);
 } finally {
   await browser.close();
+}
+
+const mobileWebKit = await webkit.launch({ headless: true });
+try {
+  for (const [width, height] of viewports.slice(0, 4)) {
+    const page = await mobileWebKit.newPage({ viewport: { width, height }, isMobile: true, hasTouch: true });
+    await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1.0"><main class="page-shell"><section class="card game-card"><header class="game-header"><p class="eyebrow">PYTANIE 4/5</p><p class="connection connection--connected">Połączono</p></header><div class="stage-content"><h2>Narysuj odpowiedź</h2><section class="drawing-editor"><canvas class="drawing-canvas" role="img" aria-label="Obszar rysowania" width="1024" height="1024"></canvas><div class="drawing-tools drawing-tools--colors">${Array.from({ length: 10 }, (_, index) => `<button type="button" aria-label="Kolor ${index + 1}"></button>`).join('')}</div><div class="drawing-tools">${[4, 10, 22].map((line) => `<button type="button">${line}</button>`).join('')}<button type="button">Gumka</button></div><div class="drawing-tools"><button type="button">Cofnij ruch</button><button type="button">Ponów ruch</button><button type="button">Wyczyść rysunek</button></div></section><button id="drawing-submit" type="button">Wyślij rysunek</button></div><p class="countdown">Pozostały czas: <span>9.8s</span></p></section></main>`);
+    await page.addStyleTag({ path: path.join(repo, 'apps/player-web/src/styles.css') });
+    const metrics = await page.evaluate(() => {
+      const canvas = document.querySelector('.drawing-canvas').getBoundingClientRect();
+      const toolbar = document.querySelector('.drawing-tools--colors').getBoundingClientRect();
+      const submit = document.querySelector('#drawing-submit').getBoundingClientRect();
+      return { canvasWidth: canvas.width, canvasHeight: canvas.height, toolbarWidth: toolbar.width, toolbarHeight: toolbar.height, submitWidth: submit.width, submitHeight: submit.height, scrollWidth: document.documentElement.scrollWidth };
+    });
+    if (!metrics.canvasWidth || !metrics.canvasHeight || !metrics.toolbarWidth || !metrics.toolbarHeight || !metrics.submitWidth || !metrics.submitHeight)
+      throw new Error(`WebKit Drawing control has zero geometry at ${width}x${height}: ${JSON.stringify(metrics)}`);
+    if (metrics.scrollWidth > width) throw new Error(`WebKit Drawing scrolls horizontally at ${width}x${height}: ${metrics.scrollWidth}`);
+    await page.close();
+  }
+  console.log('WebKit mobile Drawing layout PASS (320x568, 375x667, 390x844, 430x932)');
+} finally {
+  await mobileWebKit.close();
 }

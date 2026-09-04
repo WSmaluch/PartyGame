@@ -22,10 +22,13 @@ var players = new List<PlayerAccess> { Access(created, "Host") };
 players.Add(Access(await PostJson($"/api/rooms/{roomCode}/players", new { nickname = "Wojtek" }), "Wojtek"));
 players.Add(Access(await PostJson($"/api/rooms/{roomCode}/players", new { nickname = "Kasia" }), "Kasia"));
 var externalPlayerFile = Environment.GetEnvironmentVariable("PARTYGAME_EXTERNAL_PLAYER_FILE");
-var externalHost = !string.IsNullOrWhiteSpace(externalPlayerFile);
-if (externalHost)
+var externalPlayerIndex = int.TryParse(Environment.GetEnvironmentVariable("PARTYGAME_EXTERNAL_PLAYER_INDEX"), out var configuredExternalPlayerIndex) ? configuredExternalPlayerIndex : 0;
+var externalPlayer = !string.IsNullOrWhiteSpace(externalPlayerFile);
+if (externalPlayer && (externalPlayerIndex < 0 || externalPlayerIndex >= players.Count)) Fail("External player index is invalid.");
+if (externalPlayer)
 {
-    var access = JsonSerializer.Serialize(new { roomCode, playerId = players[0].Id, reconnectToken = players[0].Token, nickname = players[0].Name });
+    var selected = players[externalPlayerIndex];
+    var access = JsonSerializer.Serialize(new { roomCode, playerId = selected.Id, reconnectToken = selected.Token, nickname = selected.Name });
     await File.WriteAllTextAsync(externalPlayerFile!, access);
 }
 
@@ -56,12 +59,12 @@ for (var questionNumber = 1; questionNumber <= 4; questionNumber++)
     AssertPublicSafety(collecting, collecting: true);
     await Observe();
 
-    var blank = await Upload(externalHost ? players[1] : players[0], questionId, Guid.NewGuid(), blankDrawing);
+    var blank = await Upload(externalPlayer ? players.First(player => player.Id != players[externalPlayerIndex].Id) : players[0], questionId, Guid.NewGuid(), blankDrawing);
     if (blank.IsSuccessStatusCode || !await HasErrorCode(blank, "drawing_answer_blank")) Fail("Blank canvas was accepted.");
 
     var submitted = new List<(Guid ClientId, Guid AnswerId)>();
-    if (externalHost) await WaitForDrawingProgress("submittedPlayers", 1, TimeSpan.FromSeconds(180));
-    foreach (var player in players.Skip(externalHost ? 1 : 0))
+    if (externalPlayer) await WaitForDrawingProgress("submittedPlayers", 1, TimeSpan.FromSeconds(180));
+    foreach (var player in players.Where((_, index) => !externalPlayer || index != externalPlayerIndex))
     {
         var clientId = Guid.NewGuid();
         var response = await Upload(player, questionId, clientId, validDrawing);
@@ -99,9 +102,12 @@ for (var questionNumber = 1; questionNumber <= 4; questionNumber++)
     if (!revealOrder.Order().SequenceEqual(votingOrder)) Fail("RevealOrder changed before voting.");
     await Observe();
     var hostDrawing = submitted[0].AnswerId;
-    if (externalHost) await WaitForDrawingProgress("votedPlayers", 1, TimeSpan.FromSeconds(180));
-    for (var index = externalHost ? 1 : 0; index < players.Count; index++)
+    if (externalPlayer) await WaitForDrawingProgress("votedPlayers", 1, TimeSpan.FromSeconds(180));
+    for (var index = 0; index < players.Count; index++)
+    {
+        if (externalPlayer && index == externalPlayerIndex) continue;
         await connections[index].InvokeAsync("SubmitDrawingAnswerVote", roomCode, players[index].Id, players[index].Token, questionId, hostDrawing);
+    }
 
     var results = await WaitForStage("ShowingDrawingAnswerResults", TimeSpan.FromSeconds(10));
     var options = results.GetProperty("game").GetProperty("drawingAnswerResults").GetProperty("options").EnumerateArray().ToList();

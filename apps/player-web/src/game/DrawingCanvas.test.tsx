@@ -27,4 +27,11 @@ describe('DrawingCanvas', () => {
     expect(['Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple', 'Pink', 'Brown'].map((name) => screen.getByRole('button', { name }))).toHaveLength(10);
     expect(['Thin line', 'Medium line', 'Thick line'].map((name) => screen.getByRole('button', { name }))).toHaveLength(3); expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Redo stroke' })).toBeDisabled();
   });
+
+  it('does not require queueMicrotask or pointer capture before mounting the drawing tools', () => {
+    const originalQueueMicrotask = globalThis.queueMicrotask; Object.defineProperty(globalThis, 'queueMicrotask', { configurable: true, value: undefined });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(canvasContext()); render(<DrawingCanvas disabled={false} onCanvas={vi.fn()} onInkChange={vi.fn()} labels={labels} />);
+    expect(screen.getByRole('img', { name: 'Drawing area' })).toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Eraser' })).toBeInTheDocument();
+    Object.defineProperty(globalThis, 'queueMicrotask', { configurable: true, value: originalQueueMicrotask });
+  });
 });

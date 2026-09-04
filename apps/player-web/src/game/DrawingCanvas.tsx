@@ -22,10 +22,10 @@ export function DrawingCanvas({ disabled, onCanvas, onInkChange, labels, backgro
   const canvasRef = useRef<HTMLCanvasElement>(null); const active = useRef<Stroke | undefined>(undefined);
   const [strokes, setStrokes] = useState<Stroke[]>([]); const [redoStack, setRedoStack] = useState<Stroke[]>([]); const [tool, setTool] = useState<Tool>('brush'); const [color, setColor] = useState<ColorName>('black'); const [width, setWidth] = useState<4 | 10 | 22>(10); const [confirmingClear, setConfirmingClear] = useState(false); const [background, setBackground] = useState<HTMLImageElement>();
   useEffect(() => { onCanvas(canvasRef.current ?? undefined); return () => onCanvas(undefined); }, [onCanvas]);
-  useEffect(() => { let live = true; if (!backgroundImage) { queueMicrotask(() => { if (live) setBackground(undefined); }); return () => { live = false; }; } const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => { if (live) setBackground(image); }; image.onerror = () => { if (live) setBackground(undefined); }; image.src = backgroundImage; return () => { live = false; }; }, [backgroundImage]);
+  useEffect(() => { let live = true; if (!backgroundImage) { defer(() => { if (live) setBackground(undefined); }); return () => { live = false; }; } const image = new Image(); image.crossOrigin = 'anonymous'; image.onload = () => { if (live) setBackground(image); }; image.onerror = () => { if (live) setBackground(undefined); }; image.src = backgroundImage; return () => { live = false; }; }, [backgroundImage]);
   useEffect(() => { onInkChange(strokes.length > 0); redraw(canvasRef.current, strokes, active.current, background); }, [strokes, onInkChange, background]);
   function point(event: React.PointerEvent<HTMLCanvasElement>): Point { const rect = event.currentTarget.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)) }; }
-  function start(event: React.PointerEvent<HTMLCanvasElement>): void { if (disabled) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); active.current = { points: [point(event)], color, width, tool }; renderActive(); }
+  function start(event: React.PointerEvent<HTMLCanvasElement>): void { if (disabled) return; event.preventDefault(); event.currentTarget.setPointerCapture?.(event.pointerId); active.current = { points: [point(event)], color, width, tool }; renderActive(); }
   function move(event: React.PointerEvent<HTMLCanvasElement>): void { if (!active.current || disabled) return; event.preventDefault(); active.current.points.push(point(event)); renderActive(); }
   function finish(event: React.PointerEvent<HTMLCanvasElement>): void { if (!active.current || disabled) return; event.preventDefault(); const stroke = active.current; active.current = undefined; setStrokes((current) => [...current, stroke]); setRedoStack([]); }
   function renderActive(): void { redraw(canvasRef.current, strokes, active.current, background); }
@@ -39,6 +39,11 @@ export function DrawingCanvas({ disabled, onCanvas, onInkChange, labels, backgro
     <div className="drawing-tools"><button type="button" onClick={undo} disabled={disabled || !strokes.length}>{labels.undo}</button><button type="button" onClick={redo} disabled={disabled || !redoStack.length}>{labels.redo}</button><button type="button" onClick={() => setConfirmingClear(true)} disabled={disabled || !strokes.length}>{labels.clear}</button></div>
     {confirmingClear && <div className="drawing-clear-confirmation" role="alertdialog" aria-label={labels.clearConfirm}><p>{labels.clearConfirm}</p><button type="button" onClick={() => setConfirmingClear(false)}>{labels.cancel}</button><button type="button" onClick={clear}>{labels.clear}</button></div>}
   </section>;
+}
+
+function defer(callback: () => void): void {
+  if (typeof queueMicrotask === 'function') queueMicrotask(callback);
+  else window.setTimeout(callback, 0);
 }
 
 function redraw(canvas: HTMLCanvasElement | null, strokes: Stroke[], activeStroke: Stroke | undefined, background: HTMLImageElement | undefined): void {
