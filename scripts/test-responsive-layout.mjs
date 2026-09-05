@@ -44,6 +44,21 @@ try {
   console.log(`Responsive layout tests PASS (${viewports.length} viewports + reduced motion)`);
 
   const displayViewports = [[1024, 640], [1280, 720], [1920, 1080], [2560, 1440]];
+  const avatar = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  const lobbyMarkup = (playerCount) => `<main class="display-shell"><section class="hero-card hero-card--stage hero-card--lobby"><p class="eyebrow">Ekran gry</p><h1 data-viewport-required>PartyGame</h1><div class="lobby"><div class="room-heading" data-viewport-required><span>Kod pokoju</span><strong>ABCD</strong></div><div class="player-join-qr" data-viewport-required><img src="${avatar}" alt="Kod QR" /><div><strong>Dołącz do gry</strong><a>partygame.local/play/ABCD</a></div></div><p class="lobby-count" data-viewport-required>Gracze: ${playerCount}/10</p><div class="player-grid">${Array.from({ length: playerCount }, (_, index) => `<article class="player-card ${index % 2 ? '' : 'player-card--ready'}" data-viewport-required><img src="${avatar}" alt="Avatar gracza ${index + 1}" /><h3>${['Anna', 'Bardzo długi pseudonim gracza', 'Ola', 'Michał', 'Zosia', 'Krzysztof', 'Maja', 'Jan', 'Natalia', 'Piotr'][index]}</h3><div class="badges"><span class="${index === 0 ? 'host-badge' : 'connected'}">${index === 0 ? 'Host' : 'Online'}</span><span class="${index % 2 ? 'waiting' : 'ready'}">${index % 2 ? 'Czeka' : 'Gotowy/a'}</span></div></article>`).join('')}</div><p class="lobby-hint" data-viewport-required>Dołącz telefonem, zrób zdjęcie profilowe i oznacz gotowość.</p><button class="secondary-action" type="button" data-viewport-required>Zmień pokój</button></div></section></main>`;
+  const viewportMetrics = () => {
+    const required = [...document.querySelectorAll('[data-viewport-required]')];
+    const outside = required.map((element) => ({
+      label: element.textContent?.trim().slice(0, 48),
+      rect: element.getBoundingClientRect(),
+    })).filter(({ rect }) => rect.width <= 0 || rect.height <= 0 || rect.left < -1 || rect.top < -1 || rect.right > window.innerWidth + 1 || rect.bottom > window.innerHeight + 1);
+    return {
+      scrollHeight: document.documentElement.scrollHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      viewportHeight: window.innerHeight,
+      outside: outside.map(({ label, rect }) => ({ label, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height })),
+    };
+  };
   const displayCases = [
     `<section class="collecting-text-votes"><h2>Pytanie 4 / 5</h2><h1>Bardzo długie pytanie o wspólną podróż, które musi zawinąć się bez wypchnięcia anonimowych odpowiedzi poza ekran telewizora</h1><div class="timer-container"><strong class="timer">24</strong></div><div class="answers-grid">${Array.from({ length: 6 }, (_, i) => `<article class="answer-card"><p>Odpowiedź ${i + 1}: dłuższa anonimowa propozycja widoczna w całości</p></article>`).join('')}</div></section>`,
     `<section class="photo-results"><h1>Prezentacja finałowa</h1><div class="photo-grid">${Array.from({ length: 3 }, (_, i) => `<article class="final-artifact"><div class="photo-placeholder">${i + 1}</div><h3>Gracz ${i + 1} jako kosmiczny pirat</h3></article>`).join('')}</div></section>`,
@@ -51,14 +66,23 @@ try {
   ];
   for (const [width, height] of displayViewports) for (const content of displayCases) {
     const page = await browser.newPage({ viewport: { width, height } });
-    await page.setContent(`<main class="display-shell"><section class="hero-card hero-card--started"><p class="eyebrow">Ekran gry</p><h1>PartyGame</h1><div class="game-screen-container">${content}</div></section></main>`);
+    await page.setContent(`<main class="display-shell"><section class="hero-card hero-card--stage hero-card--started"><p class="eyebrow">Ekran gry</p><h1>PartyGame</h1><div class="game-screen-container">${content}</div></section></main>`);
     await page.addStyleTag({ path: path.join(repo, 'apps/display-web/src/styles/global.css') });
-    const metrics = await page.evaluate(() => ({ scrollHeight: document.documentElement.scrollHeight, scrollWidth: document.documentElement.scrollWidth, viewportHeight: window.innerHeight, bottom: Math.max(...[...document.querySelectorAll('.answer-card, .final-artifact, .ranking-entry')].map((element) => element.getBoundingClientRect().bottom)) }));
-    if (metrics.scrollWidth > width + 1 || metrics.scrollHeight > height + 2 || metrics.bottom > height + 2)
+    const metrics = await page.evaluate(viewportMetrics);
+    if (metrics.scrollWidth > width + 1 || metrics.scrollHeight > height + 2 || metrics.outside.length)
       throw new Error(`Display gameplay does not fit ${width}x${height}: ${JSON.stringify(metrics)}`);
     await page.close();
   }
-  console.log('Display viewport/overflow PASS (1024x640, 1280x720, 1920x1080, 2560x1440)');
+  for (const [width, height] of displayViewports) for (const playerCount of [1, 3, 6, 10]) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    await page.setContent(lobbyMarkup(playerCount));
+    await page.addStyleTag({ path: path.join(repo, 'apps/display-web/src/styles/global.css') });
+    const metrics = await page.evaluate(viewportMetrics);
+    if (metrics.scrollWidth > width + 1 || metrics.scrollHeight > height + 2 || metrics.outside.length)
+      throw new Error(`Display lobby (${playerCount} players) does not fit ${width}x${height}: ${JSON.stringify(metrics)}`);
+    await page.close();
+  }
+  console.log('Display stage viewport/overflow PASS (gameplay + lobby 1/3/6/10 at 1024x640, 1280x720, 1920x1080, 2560x1440)');
 } finally {
   await browser.close();
 }

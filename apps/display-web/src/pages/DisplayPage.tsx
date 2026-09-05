@@ -114,13 +114,14 @@ export function DisplayPage() {
     latestVersion.current = -1;
     setSnapshot(undefined); setError(undefined); setRoomCode(''); setView('code');
   };
+  const stageView = view === 'lobby' || view === 'started';
 
   return (
     <main className="display-shell">
       <div className="confetti confetti--one" aria-hidden="true" />
       <div className="confetti confetti--two" aria-hidden="true" />
       <section
-        className={`hero-card ${view === 'started' ? 'hero-card--started' : ''}`}
+        className={`hero-card ${stageView ? 'hero-card--stage' : ''} ${view === 'lobby' ? 'hero-card--lobby' : ''} ${view === 'started' ? 'hero-card--started' : ''}`}
         data-testid="display-state-version"
         data-state-version={snapshot?.stateVersion ?? ''}
       >
@@ -141,7 +142,7 @@ export function DisplayPage() {
           </div>
         )}
 
-        <details className="diagnostics">
+        {!stageView && <details className="diagnostics">
           <summary>Diagnostyka połączenia</summary>
           <div className="diagnostics-grid">
             <article><span>SignalR</span><StatusPill label={hubLabels[hubStatus]} state={hubStatus === 'connected' ? 'good' : hubStatus === 'error' ? 'bad' : 'pending'} /></article>
@@ -157,7 +158,7 @@ export function DisplayPage() {
           </div>
           <div className="server-address"><span>Serwer</span><code>{apiConfig.baseUrl}</code></div>
           <button type="button" onClick={() => void checkDiagnostics()} disabled={diagnosticsLoading}>Sprawdź ponownie</button>
-        </details>
+        </details>}
       </section>
     </main>
   );
@@ -184,11 +185,11 @@ function Connecting({ retry }: { retry: () => void }) {
 }
 
 function Lobby({ snapshot, changeRoom }: { snapshot: RoomSnapshot; changeRoom: () => void }) {
-  return <div className="lobby">
+  return <div className="lobby" data-testid="display-lobby">
     <div className="room-heading"><span>Kod pokoju</span><strong>{snapshot.roomCode}</strong></div>
     <PlayerJoinQrCode roomCode={snapshot.roomCode} />
     <p className="lobby-count">Gracze: {snapshot.players.length}/{snapshot.maximumPlayers}</p>
-    <div className="player-grid">
+    <div className="player-grid" data-testid="display-player-grid">
       {snapshot.players.map((player) => <PlayerCard key={player.id} player={player} version={snapshot.stateVersion} />)}
     </div>
     <p className="lobby-hint">Dołącz telefonem, zrób zdjęcie profilowe i oznacz gotowość.</p>
@@ -198,7 +199,7 @@ function Lobby({ snapshot, changeRoom }: { snapshot: RoomSnapshot; changeRoom: (
 
 function PlayerCard({ player, version }: { player: RoomPlayer; version: number }) {
   const photo = profilePhotoUrl(player.profilePhotoUrl);
-  return <article className={`player-card ${player.isReady ? 'player-card--ready' : ''}`}>
+  return <article className={`player-card ${player.isReady ? 'player-card--ready' : ''}`} data-testid="display-player-card">
     {photo ? <img src={`${photo}${photo.includes('?') ? '&' : '?'}v=${version}`} alt={`Zdjęcie profilowe: ${player.nickname}`} />
       : <div className="photo-placeholder" aria-label="Brak zdjęcia profilowego">?</div>}
     <h3>{player.nickname}</h3>
