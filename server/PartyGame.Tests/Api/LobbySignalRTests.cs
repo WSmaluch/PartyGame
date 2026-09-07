@@ -150,6 +150,28 @@ public sealed class LobbySignalRTests : IAsyncLifetime
         Assert.True((await second.InvokeAsync<RoomSnapshot>("GetRoomSnapshot", host.RoomCode)).Players.Single().IsConnected);
     }
 
+    [Fact]
+    public async Task LeaveLobby_RemovesTheAuthorisedPlayerAndAllowsANameToRejoin()
+    {
+        var host = await CreateRoomAsync("LeaveHost");
+        var leaving = await JoinAsync(host.RoomCode, "Leaving");
+        await using var hostConnection = CreateConnection();
+        await using var leavingConnection = CreateConnection();
+        await Task.WhenAll(hostConnection.StartAsync(), leavingConnection.StartAsync());
+        await AttachPlayerAsync(hostConnection, host);
+        await AttachPlayerAsync(leavingConnection, leaving);
+
+        var afterLeave = await leavingConnection.InvokeAsync<RoomSnapshot>("LeaveLobby", leaving.RoomCode, leaving.PlayerId, leaving.ReconnectToken);
+        Assert.DoesNotContain(afterLeave.Players, player => player.Id == leaving.PlayerId);
+        var current = await hostConnection.InvokeAsync<RoomSnapshot>("GetRoomSnapshot", host.RoomCode);
+        Assert.DoesNotContain(current.Players, player => player.Id == leaving.PlayerId);
+        await Assert.ThrowsAsync<HubException>(() =>
+            leavingConnection.InvokeAsync<RoomSnapshot>("AttachPlayer", leaving.RoomCode, leaving.PlayerId, leaving.ReconnectToken));
+
+        var rejoined = await JoinAsync(host.RoomCode, "Leaving");
+        Assert.NotEqual(leaving.PlayerId, rejoined.PlayerId);
+    }
+
     private HubConnection CreateConnection() => new HubConnectionBuilder()
         .WithUrl("http://localhost/hubs/game", options =>
         {

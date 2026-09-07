@@ -260,6 +260,26 @@ public sealed class RoomService(
             return changed;
         }, cancellationToken);
 
+    public Task<RoomMutationResult> LeaveLobbyAsync(string roomCode, Guid playerId, string? token, CancellationToken cancellationToken = default) =>
+        MutateAuthorizedAsync(roomCode, playerId, token, (room, player, _) =>
+        {
+            // This check shares the room lock with Ready/start evaluation. A
+            // leave and a start therefore cannot interleave into a game with a
+            // removed participant.
+            if (room.Phase != RoomPhase.Lobby || room.Session is not null)
+                throw new RoomConflictException("Players can leave only while the room is in the lobby.");
+
+            room.Players.Remove(player);
+            dbContext.Players.Remove(player);
+            if (room.HostPlayerId == player.Id && room.Players.Count > 0)
+            {
+                var nextHost = room.Players.OrderBy(candidate => candidate.JoinedAtUtc).ThenBy(candidate => candidate.Id).First();
+                nextHost.IsHost = true;
+                room.HostPlayerId = nextHost.Id;
+            }
+            return true;
+        }, cancellationToken);
+
     public async Task<RoomMutationResult> PlayAgainAsync(string roomCode, Guid playerId, string? token, CancellationToken cancellationToken = default)
     {
         var obsoleteStorageKeys = new List<string>();

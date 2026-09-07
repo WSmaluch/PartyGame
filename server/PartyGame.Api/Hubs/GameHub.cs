@@ -136,6 +136,27 @@ public sealed class GameHub : Hub
         }
     }
 
+    public async Task<RoomSnapshot> LeaveLobby(string roomCode, Guid playerId, string reconnectToken)
+    {
+        try
+        {
+            var code = roomCode.Trim().ToUpperInvariant();
+            if (!connectionRegistry.IsActivePlayer(Context.ConnectionId, code, playerId))
+                throw new RoomConflictException("AttachPlayer must establish the active player connection before leaving.");
+
+            var result = await roomService.LeaveLobbyAsync(code, playerId, reconnectToken, Context.ConnectionAborted);
+            connectionRegistry.RemoveIfActive(Context.ConnectionId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomNotifier.GroupName(code), Context.ConnectionAborted);
+            logger.LogInformation("SignalR command accepted {EventName} {ConnectionId} {ConnectionRole} {RoomCode} {PlayerId} {CorrelationId}", "LeaveLobby", Context.ConnectionId, "player", code, playerId, CorrelationId.ForHub(Context));
+            await NotifyAsync(result);
+            return result.Room.ToSnapshot();
+        }
+        catch (RoomException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+    }
+
     public async Task<RoomSnapshot> PlayAgain(string roomCode, Guid playerId, string reconnectToken)
     {
         try

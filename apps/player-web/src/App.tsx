@@ -398,6 +398,15 @@ export default function App() {
         onSnapshot={applySnapshot}
         onError={setError}
         onReconnect={() => void restore(screen.session)}
+        onLeave={async () => {
+          await gameHubConnection.leaveLobby(screen.session);
+          clearPlayerSession();
+          setPrivateState(undefined);
+          setError(undefined);
+          setRoomCode('');
+          setNickname('');
+          setScreen({ kind: 'join' });
+        }}
       />
     );
   if (entryMode === 'host')
@@ -482,6 +491,7 @@ function Lobby({
   onSnapshot,
   onError,
   onReconnect,
+  onLeave,
 }: {
   session: PlayerSession;
   snapshot?: RoomSnapshot;
@@ -491,10 +501,13 @@ function Lobby({
   onSnapshot: (snapshot: RoomSnapshot) => void;
   onError: (key: TranslationKey | undefined) => void;
   onReconnect: () => void;
+  onLeave: () => Promise<void>;
 }) {
   const [pendingPhoto, setPendingPhoto] = useState<Blob>();
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [uploading, setUploading] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const ownPlayer = snapshot?.players.find(
     (player) => player.id === session.playerId,
   );
@@ -547,6 +560,16 @@ function Lobby({
       onSnapshot(await gameHubConnection.setReady(session, !ownPlayer.isReady));
     } catch {
       onError('network');
+    }
+  }
+  async function leave(): Promise<void> {
+    setLeaving(true);
+    try {
+      await onLeave();
+    } catch {
+      setLeaving(false);
+      setConfirmingLeave(false);
+      onError('leaveFailed');
     }
   }
   return (
@@ -639,6 +662,37 @@ function Lobby({
         >
           {ownPlayer?.isReady ? t('notReady') : t('ready')}
         </button>
+        <div className="leave-room">
+          {confirmingLeave ? (
+            <div role="alertdialog" aria-label={t('leaveRoomConfirm')}>
+              <p>{t('leaveRoomConfirm')}</p>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setConfirmingLeave(false)}
+                disabled={leaving}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void leave()}
+                disabled={leaving}
+              >
+                {leaving ? t('leavingRoom') : t('leaveRoom')}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => setConfirmingLeave(true)}
+              disabled={leaving}
+            >
+              {t('leaveRoom')}
+            </button>
+          )}
+        </div>
       </section>
     </main>
   );

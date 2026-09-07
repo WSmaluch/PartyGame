@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,6 +28,7 @@ import {
 const realtime = vi.hoisted(() => ({
   attach: vi.fn(),
   setReady: vi.fn(),
+  leaveLobby: vi.fn(),
   snapshotListener: undefined as ((snapshot: RoomSnapshot) => void) | undefined,
   startedListener: undefined as ((snapshot: RoomSnapshot) => void) | undefined,
   privateListener: undefined as ((state: unknown) => void) | undefined,
@@ -75,6 +77,7 @@ vi.mock('./realtime/gameHubConnection', () => ({
     },
     attach: realtime.attach,
     setReady: realtime.setReady,
+    leaveLobby: realtime.leaveLobby,
     serverNow: () => Date.now(),
     getRoomSnapshot: vi.fn(),
     submitPlayerSelection: vi.fn(),
@@ -158,15 +161,14 @@ describe('Web Player lobby', () => {
     vi.mocked(uploadProfilePhoto).mockReset();
     vi.mocked(prepareProfilePhoto).mockReset();
     realtime.attach.mockReset().mockResolvedValue(snapshot);
-    realtime.setReady
-      .mockReset()
-      .mockResolvedValue({
-        ...snapshot,
-        players: [
-          { ...snapshot.players[0], isReady: true },
-          ...snapshot.players.slice(1),
-        ],
-      });
+    realtime.setReady.mockReset().mockResolvedValue({
+      ...snapshot,
+      players: [
+        { ...snapshot.players[0], isReady: true },
+        ...snapshot.players.slice(1),
+      ],
+    });
+    realtime.leaveLobby.mockReset().mockResolvedValue(snapshot);
     realtime.snapshotListener = undefined;
     realtime.startedListener = undefined;
     window.history.replaceState({}, '', '/play/?room=ab12');
@@ -247,6 +249,31 @@ describe('Web Player lobby', () => {
     expect(screen.getAllByText('Oczekuje')).toHaveLength(2);
     expect(joinRoom).toHaveBeenCalledWith('AB12', 'Wojtek');
     expect(loadPlayerSession()).toEqual(session);
+  });
+  it('leaves only after confirmation and clears the persisted player session after server acknowledgement', async () => {
+    vi.mocked(joinRoom).mockResolvedValue(joined);
+    render(<App />);
+    await userEvent.type(screen.getByLabelText('Twój nick'), 'Wojtek');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Dołącz do gry' }),
+    );
+    await screen.findByText('Ania');
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Wyjdź z pokoju' }),
+    );
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'Na pewno chcesz wyjść',
+    );
+    await userEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Wyjdź z pokoju',
+      }),
+    );
+    await waitFor(() =>
+      expect(realtime.leaveLobby).toHaveBeenCalledWith(session),
+    );
+    expect(loadPlayerSession()).toBeUndefined();
+    expect(screen.getByLabelText('Kod pokoju')).toHaveValue('');
   });
   it('uses the existing SetReady contract and accepts authoritative snapshots', async () => {
     savePlayerSession(session);
@@ -420,6 +447,7 @@ describe('Web Player lobby', () => {
         { timeout: 2_000 },
       ),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Wybierz kolor' }));
     expect(
       screen.getAllByRole('button', {
         name: /Czarny|Biały|Czerwony|Niebieski|Zielony|Żółty|Pomarańczowy|Fioletowy|Różowy|Brązowy/,

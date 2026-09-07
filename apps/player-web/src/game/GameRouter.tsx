@@ -38,7 +38,8 @@ import { StageTransition } from './StageTransition';
 import { privateActionType, type PrivateActionType } from './privateAction';
 
 type Translate = (key: TranslationKey) => string;
-type SubmissionState = 'idle' | 'preparing' | 'submitting' | 'submitted' | 'failed';
+type SubmissionState =
+  'idle' | 'preparing' | 'submitting' | 'submitted' | 'failed';
 
 type GameRouterProps = {
   session: PlayerSession;
@@ -335,15 +336,22 @@ function GameShell({
   status,
   t,
   children,
+  className,
 }: {
   game?: GameSnapshot;
   status: ConnectionStatus;
   t: Translate;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <main className="page-shell">
-      <section className="card game-card" aria-live="polite">
+    <main
+      className={`page-shell game-page-shell ${className ? 'page-shell--wide-game' : ''}`}
+    >
+      <section
+        className={`card game-card ${className ?? ''}`}
+        aria-live="polite"
+      >
         <header className="game-header" data-testid="game-header">
           {game ? <GameHeader game={game} t={t} /> : <span />}
           <p className={`connection connection--${status}`} aria-live="polite">
@@ -411,17 +419,21 @@ function reportRouterDecision(
     !new URLSearchParams(window.location.search).has('diagnostics')
   )
     return;
-  console.info('[PartyGame player router]', JSON.stringify({
-    decision,
-    publicStage: game.stage,
-    questionType: questionType ?? 'public-stage',
-    questionInstanceId:
-      gameQuestion(game)?.instanceId ?? gameQuestion(game)?.id ?? null,
-    privateQuestionInstanceId: privateState?.questionInstanceId ?? null,
-    isEligibleForDrawingAnswer:
-      privateState?.isEligibleForDrawingAnswer ?? null,
-    hasSubmittedDrawingAnswer: privateState?.hasSubmittedDrawingAnswer ?? null,
-  }));
+  console.info(
+    '[PartyGame player router]',
+    JSON.stringify({
+      decision,
+      publicStage: game.stage,
+      questionType: questionType ?? 'public-stage',
+      questionInstanceId:
+        gameQuestion(game)?.instanceId ?? gameQuestion(game)?.id ?? null,
+      privateQuestionInstanceId: privateState?.questionInstanceId ?? null,
+      isEligibleForDrawingAnswer:
+        privateState?.isEligibleForDrawingAnswer ?? null,
+      hasSubmittedDrawingAnswer:
+        privateState?.hasSubmittedDrawingAnswer ?? null,
+    }),
+  );
 }
 
 function GameHeader({ game, t }: { game: GameSnapshot; t: Translate }) {
@@ -919,7 +931,7 @@ function DrawingAnswer({
     }
   }
   return (
-    <GameShell game={game} status={status} t={t}>
+    <GameShell game={game} status={status} t={t} className="game-card--drawing">
       <h2>{localizedText(question?.text, locale)}</h2>
       {state === 'submitted' || authoritativeSubmitted || !eligible ? (
         <WaitingState
@@ -1113,7 +1125,12 @@ function FinalSelfie({
     final?.hasSubmittedSelfie ? 'submitted' : 'idle',
   );
   const inFlight = useRef(false);
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
   async function select(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const selected = event.target.files?.[0];
     event.target.value = '';
@@ -1124,7 +1141,10 @@ function FinalSelfie({
       const prepared = await preparePhotoAnswer(selected);
       setFile(prepared);
       setPreview(URL.createObjectURL(prepared));
-      reportFinalSelfie('capture-ready', { bytes: prepared.size, type: prepared.type });
+      reportFinalSelfie('capture-ready', {
+        bytes: prepared.size,
+        type: prepared.type,
+      });
       setState('idle');
     } catch {
       reportFinalSelfie('capture-failed');
@@ -1152,10 +1172,15 @@ function FinalSelfie({
         throw new Error('final-selfie-not-acknowledged');
       onPrivateState?.(result.playerPrivateGameState);
       onSnapshot(result.roomSnapshot);
-      reportFinalSelfie('upload-acknowledged', { durationMs: Math.round(performance.now() - startedAt), mediaId: result.mediaId ?? 'absent' });
+      reportFinalSelfie('upload-acknowledged', {
+        durationMs: Math.round(performance.now() - startedAt),
+        mediaId: result.mediaId ?? 'absent',
+      });
       setState('submitted');
     } catch {
-      reportFinalSelfie('upload-failed', { durationMs: Math.round(performance.now() - startedAt) });
+      reportFinalSelfie('upload-failed', {
+        durationMs: Math.round(performance.now() - startedAt),
+      });
       setState('failed');
     } finally {
       inFlight.current = false;
@@ -1193,7 +1218,9 @@ function FinalSelfie({
         capture="user"
         onChange={select}
       />
-      {preview && <img className="media-preview" src={preview} alt={t('photoPreview')} />}
+      {preview && (
+        <img className="media-preview" src={preview} alt={t('photoPreview')} />
+      )}
       {state === 'preparing' && <p role="status">{t('processingPhoto')}</p>}
       {file && state !== 'preparing' && (
         <button
@@ -1215,10 +1242,16 @@ function FinalSelfie({
   );
 }
 
-function reportFinalSelfie(event: string, details: Record<string, string | number> = {}): void {
+function reportFinalSelfie(
+  event: string,
+  details: Record<string, string | number> = {},
+): void {
   // Keep diagnostics useful for mobile Safari investigations without exposing
   // reconnect credentials or image contents.
-  console.info('[PartyGame final-selfie]', JSON.stringify({ event, ...details }));
+  console.info(
+    '[PartyGame final-selfie]',
+    JSON.stringify({ event, ...details }),
+  );
 }
 
 function FinalEdit({
@@ -1354,6 +1387,10 @@ function drawingLabels(t: Translate) {
     clearConfirm: t('clearDrawingConfirm'),
     cancel: t('cancel'),
     eraser: t('eraserDrawing'),
+    colorControl: t('drawingColorControl'),
+    widthControl: t('drawingWidthControl'),
+    toolControl: t('drawingToolControl'),
+    moreControl: t('drawingMoreControl'),
     colors: {
       black: t('drawingColorBlack'),
       white: t('drawingColorWhite'),
@@ -1397,28 +1434,35 @@ function FinalPresentation({
   t: Translate;
 }) {
   return (
-    <GameShell game={game} status={status} t={t}>
+    <GameShell
+      game={game}
+      status={status}
+      t={t}
+      className="game-card--final-presentation"
+    >
       <section className="results-stage final-presentation">
         <h1>{t('finalPresentation')}</h1>
-        {(game.finalRound?.artifacts ?? []).map((artifact, index) => (
-          <article
-            className="result-card final-artifact"
-            style={{ '--motion-index': Math.min(index, 8) } as CSSProperties}
-            key={artifact.artifactId}
-          >
-            {artifact.displayMediaUrl && (
-              <img
-                className="result-media"
-                src={artifact.displayMediaUrl}
-                alt={artifact.subjectNickname}
-              />
-            )}
-            <h2>
-              {artifact.subjectNickname} {t('asRole')}{' '}
-              {localizedText(artifact.targetRole, locale)}
-            </h2>
-          </article>
-        ))}
+        <div className="final-presentation-grid">
+          {(game.finalRound?.artifacts ?? []).map((artifact, index) => (
+            <article
+              className="result-card final-artifact"
+              style={{ '--motion-index': Math.min(index, 8) } as CSSProperties}
+              key={artifact.artifactId}
+            >
+              {artifact.displayMediaUrl && (
+                <img
+                  className="result-media"
+                  src={artifact.displayMediaUrl}
+                  alt={artifact.subjectNickname}
+                />
+              )}
+              <h2>
+                {artifact.subjectNickname} {t('asRole')}{' '}
+                {localizedText(artifact.targetRole, locale)}
+              </h2>
+            </article>
+          ))}
+        </div>
       </section>
     </GameShell>
   );
