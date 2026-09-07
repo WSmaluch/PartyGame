@@ -211,10 +211,6 @@ struct PhotoAnswerVotingView: View {
                     }
                 }.padding(4)
             }
-            Button("photoAnswer.vote") { Task { await store.submitSelectedPhotoAnswerVote() } }
-                .buttonStyle(.borderedProminent)
-                .disabled((localSelection ?? store.selectedPhotoAnswerVoteId) == nil || store.isWorking)
-                .accessibilityIdentifier("photoAnswer.vote")
         }
         .sheet(item: $fullScreenOption) { option in
             PhotoAnswerRemoteImage(url: store.mediaURL(option.displayPhotoUrl), accessibilityLabel: "photoAnswer.fullPhoto")
@@ -234,6 +230,7 @@ struct PhotoAnswerVotingView: View {
         else {
             localSelection = option.photoAnswerId
             store.selectPhotoAnswerVote(option.photoAnswerId)
+            Task { await store.submitSelectedPhotoAnswerVote() }
         }
     }
 }

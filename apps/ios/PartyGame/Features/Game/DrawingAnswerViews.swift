@@ -112,14 +112,11 @@ struct DrawingVotingView: View {
                         DrawingVoteCard(option: option, imageURL: store.mediaURL(option.thumbnailDrawingUrl), selected: option.drawingAnswerId == selectedVoteId, own: option.drawingAnswerId == store.privateGameState?.ownDrawingAnswerId) {
                             selection = option.drawingAnswerId
                             store.selectDrawingAnswerVote(option.drawingAnswerId)
+                            Task { await store.submitSelectedDrawingAnswerVote() }
                         }
                     }
                 }
             }
-            Button("drawing.vote") { Task { await store.submitSelectedDrawingAnswerVote() } }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedVoteId == nil || store.isWorking)
-                .accessibilityIdentifier("drawing.vote")
         }
     }
 

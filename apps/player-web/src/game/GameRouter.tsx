@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -460,14 +459,14 @@ function PlayerSelection({
   );
   const inFlight = useRef(false);
   const candidates = snapshot.players;
-  async function submit(): Promise<void> {
-    if (!selectedId || !questionId || inFlight.current) return;
+  async function submit(choiceId = selectedId): Promise<void> {
+    if (!choiceId || !questionId || inFlight.current) return;
     inFlight.current = true;
     setSubmission('submitting');
     try {
       await gameHubConnection.submitPlayerSelection(
         session,
-        selectedId,
+        choiceId,
         questionId,
         submissionIdentity(
           session.roomCode,
@@ -500,21 +499,13 @@ function PlayerSelection({
                 selected={selectedId === player.id}
                 stateVersion={snapshot.stateVersion}
                 motionIndex={index}
-                onSelect={() => setSelectedId(player.id)}
+                onSelect={() => {
+                  setSelectedId(player.id);
+                  void submit(player.id);
+                }}
               />
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={
-              !selectedId ||
-              submission === 'submitting' ||
-              status !== 'connected'
-            }
-          >
-            {submission === 'submitting' ? t('submitting') : t('submitAnswer')}
-          </button>
           {submission === 'failed' && (
             <Retry
               onRetry={() => void submit()}
@@ -650,21 +641,15 @@ function TextVoting({
     authoritativeVoted ? 'submitted' : 'idle',
   );
   const inFlight = useRef(false);
-  const options = useMemo(
-    () =>
-      (game.textResults?.votingOptions ?? []).filter(
-        (option) => option.answerId !== privateState?.ownTextAnswerId,
-      ),
-    [game.textResults?.votingOptions, privateState?.ownTextAnswerId],
-  );
-  async function submit(): Promise<void> {
-    if (!selectedId || !questionId || inFlight.current) return;
+  const options = game.textResults?.votingOptions ?? [];
+  async function submit(choiceId = selectedId): Promise<void> {
+    if (!choiceId || !questionId || inFlight.current) return;
     inFlight.current = true;
     setSubmission('submitting');
     try {
       await gameHubConnection.submitTextAnswerVote(
         session,
-        selectedId,
+        choiceId,
         questionId,
         submissionIdentity(
           session.roomCode,
@@ -707,23 +692,15 @@ function TextVoting({
                   name="text-vote"
                   value={option.answerId}
                   checked={selectedId === option.answerId}
-                  onChange={() => setSelectedId(option.answerId)}
+                  onChange={() => {
+                    setSelectedId(option.answerId);
+                    void submit(option.answerId);
+                  }}
                 />
                 {option.text}
               </label>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={
-              !selectedId ||
-              submission === 'submitting' ||
-              status !== 'connected'
-            }
-          >
-            {submission === 'submitting' ? t('submitting') : t('submitVote')}
-          </button>
           {submission === 'failed' && (
             <Retry
               onRetry={() => void submit()}
@@ -1029,15 +1006,15 @@ function MediaVoting({
     submitted ? 'submitted' : 'idle',
   );
   const inFlight = useRef(false);
-  async function submit(): Promise<void> {
-    if (!selected || !questionId || inFlight.current) return;
+  async function submit(choiceId = selected): Promise<void> {
+    if (!choiceId || !questionId || inFlight.current) return;
     inFlight.current = true;
     setState('submitting');
     try {
       if (kind === 'photo')
         await gameHubConnection.submitPhotoAnswerVote(
           session,
-          selected,
+          choiceId,
           questionId,
           submissionIdentity(
             session.roomCode,
@@ -1049,7 +1026,7 @@ function MediaVoting({
       else
         await gameHubConnection.submitDrawingAnswerVote(
           session,
-          selected,
+          choiceId,
           questionId,
           submissionIdentity(
             session.roomCode,
@@ -1082,7 +1059,11 @@ function MediaVoting({
                 key={option.id}
                 aria-pressed={selected === option.id}
                 aria-label={option.label}
-                onClick={() => setSelected(option.id)}
+                onClick={() => {
+                  setSelected(option.id);
+                  void submit(option.id);
+                }}
+                disabled={state === 'submitting' || status !== 'connected'}
               >
                 <RemoteMedia
                   src={option.url}
@@ -1093,15 +1074,6 @@ function MediaVoting({
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={
-              !selected || state === 'submitting' || status !== 'connected'
-            }
-          >
-            {state === 'submitting' ? t('submitting') : t('submitVote')}
-          </button>
           {state === 'failed' && (
             <Retry
               onRetry={() => void submit()}
@@ -1473,18 +1445,20 @@ function FinalVoting({
   const [state, setState] = useState<SubmissionState>(
     privateState?.finalRound?.hasSubmittedVote ? 'submitted' : 'idle',
   );
-  async function submit(): Promise<void> {
-    if (!selected) return;
+  const inFlight = useRef(false);
+  async function submit(choiceId = selected): Promise<void> {
+    if (!choiceId || inFlight.current) return;
+    inFlight.current = true;
     setState('submitting');
     try {
       onSnapshot(
         await submitFinalVote(
           session,
-          selected,
+          choiceId,
           submissionIdentity(
             session.roomCode,
             session.playerId,
-            selected,
+            choiceId,
             'final-vote',
           ),
         ),
@@ -1492,6 +1466,8 @@ function FinalVoting({
       setState('submitted');
     } catch {
       setState('failed');
+    } finally {
+      inFlight.current = false;
     }
   }
   if (state === 'submitted' || privateState?.finalRound?.hasSubmittedVote)
@@ -1509,7 +1485,11 @@ function FinalVoting({
             className={`media-option ${selected === artifact.artifactId ? 'is-selected' : ''}`}
             type="button"
             key={artifact.artifactId}
-            onClick={() => setSelected(artifact.artifactId)}
+            onClick={() => {
+              setSelected(artifact.artifactId);
+              void submit(artifact.artifactId);
+            }}
+            disabled={state === 'submitting' || status !== 'connected'}
           >
             {artifact.thumbnailMediaUrl && (
               <img
@@ -1521,13 +1501,9 @@ function FinalVoting({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        disabled={!selected || status !== 'connected'}
-        onClick={() => void submit()}
-      >
-        {t('submitVote')}
-      </button>
+      {state === 'failed' && (
+        <Retry onRetry={() => void submit()} t={t} message={t('voteFailed')} />
+      )}
     </GameShell>
   );
 }

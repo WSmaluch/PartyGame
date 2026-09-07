@@ -534,7 +534,6 @@ public sealed class RoomService(
 
             var targetSubmission = currentInstance.TextAnswerSubmissions.FirstOrDefault(s => s.Id == selectedAnswerId);
             if (targetSubmission == null) return false;
-            if (targetSubmission.AuthorPlayerId == player.Id) return false; // Can't vote for your own text answer!
 
             if (HasStableId(clientSubmissionId) && RecordSubmission(room, player, currentInstance.Id, SubmissionActionType.TextAnswerVote, clientSubmissionId.Value, Fingerprint(selectedAnswerId)) != SubmissionDecision.Accepted) return false;
 

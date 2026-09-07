@@ -97,12 +97,7 @@ public sealed class TargetedTextAnswerFlowTests
             foreach (var player in room.Players)
             {
                 var own = instance.TextAnswerSubmissions.Single(answer => answer.AuthorPlayerId == player.PlayerId);
-                // The backend remains the authority: an own answer is never a
-                // valid vote target, even though it stays public-anonymous for
-                // the other two voters.
-                Assert.False((await rooms.SubmitTextAnswerVoteAsync(room.RoomCode, player.PlayerId, player.Token, own.Id, room.QuestionInstanceId, Guid.NewGuid())).PublicStateChanged);
-                var selected = instance.TextAnswerSubmissions.First(answer => answer.AuthorPlayerId != player.PlayerId);
-                await rooms.SubmitTextAnswerVoteAsync(room.RoomCode, player.PlayerId, player.Token, selected.Id, room.QuestionInstanceId, Guid.NewGuid());
+                Assert.True((await rooms.SubmitTextAnswerVoteAsync(room.RoomCode, player.PlayerId, player.Token, own.Id, room.QuestionInstanceId, Guid.NewGuid())).PublicStateChanged);
             }
         }
 
@@ -114,5 +109,8 @@ public sealed class TargetedTextAnswerFlowTests
             .SingleAsync());
         Assert.Equal(3, await verificationDb.TextAnswerSubmissions.CountAsync(answer => answer.QuestionInstanceId == room.QuestionInstanceId));
         Assert.Equal(3, await verificationDb.TextAnswerVotes.CountAsync(vote => vote.QuestionInstanceId == room.QuestionInstanceId));
+        var votes = await verificationDb.TextAnswerVotes.Where(vote => vote.QuestionInstanceId == room.QuestionInstanceId).ToListAsync();
+        var answers = await verificationDb.TextAnswerSubmissions.Where(answer => answer.QuestionInstanceId == room.QuestionInstanceId).ToListAsync();
+        Assert.All(votes, vote => Assert.Equal(vote.VoterPlayerId, answers.Single(answer => answer.Id == vote.SelectedTextAnswerId).AuthorPlayerId));
     }
 }

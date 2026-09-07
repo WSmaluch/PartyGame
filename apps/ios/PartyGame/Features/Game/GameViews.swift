@@ -334,8 +334,6 @@ struct CollectingTextAnswerVotesView: View {
                     VStack(spacing: 12) {
                         if let options = results?.votingOptions {
                             ForEach(options) { option in
-                                let isOwn = store.privateGameState?.ownTextAnswerId == option.answerId
-                                
                                 Button(action: {
                                     Task {
                                         await store.submitTextAnswerVote(selectedAnswerId: option.answerId)
@@ -345,16 +343,11 @@ struct CollectingTextAnswerVotesView: View {
                                         Text(option.text)
                                             .multilineTextAlignment(.leading)
                                         Spacer()
-                                        if isOwn {
-                                            Text("textanswer.own_answer_marker")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                        }
                                     }
                                     .padding()
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
-                                .disabled(store.isWorking || isOwn)
+                                .disabled(store.isWorking)
                                 .buttonStyle(.bordered)
                                 .accessibilityIdentifier("textanswer.vote_option")
                             }

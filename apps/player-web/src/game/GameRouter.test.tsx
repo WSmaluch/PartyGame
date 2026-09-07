@@ -173,9 +173,7 @@ describe('GameRouter', () => {
   it('renders eligible player choices and submits a selection exactly once', async () => {
     renderGame({ ...baseSnapshot, game: game('CollectingPlayerSelections') });
     fireEvent.click(screen.getByRole('button', { name: 'Ania' }));
-    const submit = screen.getByRole('button', { name: 'Wyślij odpowiedź' });
-    fireEvent.click(submit);
-    fireEvent.click(submit);
+    fireEvent.click(screen.getByRole('button', { name: 'Ania' }));
     await waitFor(() =>
       expect(hub.submitPlayerSelection).toHaveBeenCalledTimes(1),
     );
@@ -191,7 +189,6 @@ describe('GameRouter', () => {
   it('keeps the current player as a valid PlayerSelection voting option', async () => {
     renderGame({ ...baseSnapshot, game: game('CollectingPlayerSelections') });
     fireEvent.click(screen.getByRole('button', { name: 'Wojtek' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Wyślij odpowiedź' }));
     await waitFor(() =>
       expect(hub.submitPlayerSelection).toHaveBeenCalledWith(
         session,
@@ -240,7 +237,6 @@ describe('GameRouter', () => {
     });
     expect(screen.getByText('Opcja pierwsza')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Opcja druga'));
-    fireEvent.click(screen.getByRole('button', { name: 'Oddaj głos' }));
     await waitFor(() =>
       expect(hub.submitTextAnswerVote).toHaveBeenCalledWith(
         session,
@@ -413,7 +409,6 @@ describe('GameRouter', () => {
     const option = screen.getByRole('button', { name: 'Głosowanie 1' });
     fireEvent.click(option);
     fireEvent.click(option);
-    fireEvent.click(screen.getByRole('button', { name: 'Oddaj głos' }));
     await waitFor(() =>
       expect(hub.submitPhotoAnswerVote).toHaveBeenCalledTimes(1),
     );
@@ -446,7 +441,6 @@ describe('GameRouter', () => {
       },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Głosowanie 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Oddaj głos' }));
     await waitFor(() =>
       expect(hub.submitDrawingAnswerVote).toHaveBeenCalledWith(
         session,

@@ -119,7 +119,6 @@ struct FinalRoundVotingView: View {
                     FinalRoundVoteCard(store: store, artifact: artifact)
                 }
             } }
-            Button("finalRound.vote") { Task { await store.submitSelectedFinalRoundVote() } }.buttonStyle(.borderedProminent).disabled(store.selectedFinalRoundVoteId == nil || store.isWorking).accessibilityIdentifier("final-round-vote-send")
         }.padding().accessibilityElement(children: .contain).accessibilityIdentifier("final-round-voting-view")
     }
 }
@@ -129,7 +128,10 @@ private struct FinalRoundVoteCard: View {
     let artifact: FinalRoundArtifact
     private var selected: Bool { store.selectedFinalRoundVoteId == artifact.artifactId }
     var body: some View {
-        Button { store.selectFinalRoundVote(artifact.artifactId) } label: {
+        Button {
+            store.selectFinalRoundVote(artifact.artifactId)
+            Task { await store.submitSelectedFinalRoundVote() }
+        } label: {
             VStack {
                 AsyncImage(url: store.mediaURL(artifact.thumbnailMediaUrl)) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }
                 Text(artifact.targetRole.local)
