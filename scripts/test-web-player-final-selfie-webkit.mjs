@@ -180,9 +180,8 @@ async function driveNormalGame(players, roomCode, timeline) {
     await waitForStage(roomCode, 'CollectingPlayerSelections', 40_000);
     await Promise.all(players.map(async (player) => {
       await player.page.getByRole('button', { name: player.nickname, exact: true }).click();
-      await player.page.getByRole('button', { name: 'Wyślij odpowiedź' }).click();
     }));
-    timeline.push(`normal question ${question}: three production player selections submitted`);
+    timeline.push(`normal question ${question}: three production player selections submitted on first tap`);
     if (question < 4) await waitForStageChange(roomCode, 'CollectingPlayerSelections', 20_000);
   }
 }
