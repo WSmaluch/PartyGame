@@ -42,7 +42,9 @@ try {
   } catch (error) {
     throw new Error(`WebKit did not mount Drawing: text=${JSON.stringify((await page.locator('body').innerText()).slice(0, 1_000))}; pageErrors=${pageErrors.join(' | ')}; console=${consoleEntries.join(' | ')}`, { cause: error });
   }
+  await page.getByRole('button', { name: 'Wybierz kolor' }).click();
   await page.getByRole('button', { name: 'Czarny' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Wybierz narzędzie' }).click();
   await page.getByRole('button', { name: 'Gumka' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Wyślij rysunek' }).waitFor({ state: 'visible' });
   if (await page.getByText('Ładowanie gry…').count()) throw new Error('WebKit rendered permanent game-loading fallback instead of normal Drawing.');
