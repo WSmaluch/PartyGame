@@ -217,9 +217,8 @@ final class MixedGameClientE2ETests: XCTestCase {
             } else if let current = try? snapshot(from: app, event: "final-vote-detected"),
                       current.phase == "collectingFinalVotes",
                       firstEnabledButton(prefix: "final-round-vote-") != nil {
-                try submitFirstAcceptedVote(
+                try submitFirstAcceptedInstantVote(
                     optionPrefix: "final-round-vote-",
-                    voteButtonIdentifier: "final-round-vote-send",
                     description: "głos finałowy"
                 )
                 performedAction = true
@@ -268,18 +267,16 @@ final class MixedGameClientE2ETests: XCTestCase {
                 performedAction = true
                 mark("ios-text-vote-not-required")
             } else if !voted.contains("photoanswer"), firstEnabledButton(prefix: "photoAnswer.option.") != nil {
-                try submitFirstAcceptedVote(
+                try submitFirstAcceptedInstantVote(
                     optionPrefix: "photoAnswer.option.",
-                    voteButtonIdentifier: "photoAnswer.vote",
                     description: "głos na zdjęcie"
                 )
                 voted.insert("photoanswer")
                 performedAction = true
                 mark("ios-photo-voted")
             } else if !voted.contains("drawinganswer"), firstEnabledButton(prefix: "drawing-voting-option-") != nil {
-                try submitFirstAcceptedVote(
+                try submitFirstAcceptedInstantVote(
                     optionPrefix: "drawing-voting-option-",
-                    voteButtonIdentifier: "drawing.vote",
                     description: "głos na rysunek"
                 )
                 voted.insert("drawinganswer")
@@ -337,9 +334,8 @@ final class MixedGameClientE2ETests: XCTestCase {
         return candidates.first(where: { $0.exists && $0.isEnabled })
     }
 
-    private func submitFirstAcceptedVote(
+    private func submitFirstAcceptedInstantVote(
         optionPrefix: String,
-        voteButtonIdentifier: String,
         description: String
     ) throws {
         let options = app.buttons
@@ -347,10 +343,7 @@ final class MixedGameClientE2ETests: XCTestCase {
             .allElementsBoundByIndex
         for option in options where option.exists && option.isEnabled {
             option.tap()
-            let voteButton = app.buttons[voteButtonIdentifier]
-            guard voteButton.waitForExistence(timeout: 2), voteButton.isEnabled else { continue }
-            voteButton.tap()
-            if waitUntilResult(timeout: 5, predicate: { !voteButton.exists }) { return }
+            if waitUntilResult(timeout: 5, predicate: { !option.exists }) { return }
         }
         XCTFail("Nie udało się zapisać \(description) na żadną dozwoloną opcję.\n\(app.debugDescription)")
         throw NSError(domain: "MixedGameClientE2E", code: 5)
