@@ -244,6 +244,10 @@ async function drawAndSubmit(player) {
   // animation. The most recently mounted canvas is the current pass.
   const canvas = player.page.locator('canvas.drawing-canvas').last();
   await canvas.waitFor({ state: 'visible', timeout: 15_000 });
+  // RC14 intentionally permits vertical page scrolling outside the drawing
+  // surface. Ensure a WebKit mouse gesture targets the actionable canvas,
+  // rather than an off-viewport coordinate in the long Final Edit page.
+  await canvas.scrollIntoViewIfNeeded();
   const box = await canvas.boundingBox();
   if (!box || box.width < 100 || box.height < 100) throw new Error(`${player.nickname}: Final Edit canvas is not actionable.`);
   await player.page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
