@@ -26,7 +26,7 @@ public static class RoomContractMapper
             room.Settings.FinalRoundEnabled,
             room.Settings.FinalDrawingPasses,
             room.Settings.QuestionVoiceEnabled),
-        room.Players.OrderBy(player => player.JoinedAtUtc).Select(player => player.ToPublic(room.Code)).ToArray(),
+        room.Players.Where(player => player.IsActive).OrderBy(player => player.JoinedAtUtc).Select(player => player.ToPublic(room.Code)).ToArray(),
         room.CreatedAtUtc,
         room.StartedAtUtc,
         room.Session?.ToSnapshot(mediaUrls),

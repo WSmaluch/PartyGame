@@ -173,13 +173,13 @@ public sealed class RoomService(
             {
                 throw new RoomConflictException("Players cannot join after the room has started.");
             }
-            if (room.Players.Count >= GameRoom.MaximumPlayers)
+            if (room.Players.Count(player => player.IsActive) >= GameRoom.MaximumPlayers)
             {
                 throw new RoomConflictException("The room already contains the maximum number of players.");
             }
 
             var normalizedNickname = Nickname.Normalize(validNickname);
-            if (room.Players.Any(player => player.NormalizedNickname == normalizedNickname))
+            if (room.Players.Any(player => player.IsActive && player.NormalizedNickname == normalizedNickname))
             {
                 throw new RoomConflictException("This nickname is already in use in the room.");
             }
@@ -269,11 +269,19 @@ public sealed class RoomService(
             if (room.Phase != RoomPhase.Lobby || room.Session is not null)
                 throw new RoomConflictException("Players can leave only while the room is in the lobby.");
 
-            room.Players.Remove(player);
-            dbContext.Players.Remove(player);
-            if (room.HostPlayerId == player.Id && room.Players.Count > 0)
+            // Player is retained because durable MediaAssets and historical
+            // records refer to it with restrictive foreign keys.  Its session
+            // is removed so the old reconnect token can never re-enter.
+            player.IsActive = false;
+            player.IsConnected = false;
+            player.IsReady = false;
+            player.IsHost = false;
+            dbContext.PlayerSessions.Remove(player.Session);
+
+            var activePlayers = room.Players.Where(candidate => candidate.IsActive).ToList();
+            if (room.HostPlayerId == player.Id && activePlayers.Count > 0)
             {
-                var nextHost = room.Players.OrderBy(candidate => candidate.JoinedAtUtc).ThenBy(candidate => candidate.Id).First();
+                var nextHost = activePlayers.OrderBy(candidate => candidate.JoinedAtUtc).ThenBy(candidate => candidate.Id).First();
                 nextHost.IsHost = true;
                 room.HostPlayerId = nextHost.Id;
             }
@@ -1124,7 +1132,7 @@ public sealed class RoomService(
 
     private Player Authorize(GameRoom room, Guid playerId, string? token)
     {
-        var player = room.Players.SingleOrDefault(candidate => candidate.Id == playerId)
+        var player = room.Players.SingleOrDefault(candidate => candidate.Id == playerId && candidate.IsActive)
             ?? throw new PlayerNotFoundException();
         if (player.Session.ExpiresAtUtc <= clock.UtcNow || !playerSessionService.VerifyToken(token ?? string.Empty, player.Session.ReconnectTokenHash))
         {
@@ -1136,7 +1144,7 @@ public sealed class RoomService(
     private async Task<GameRoom> LoadAsync(string code, CancellationToken cancellationToken) =>
         await dbContext.GameRooms
             .Include(room => room.Settings)
-            .Include(room => room.Players)
+            .Include(room => room.Players.Where(player => player.IsActive))
                 .ThenInclude(player => player.Session)
             .Include(room => room.Session)
                 .ThenInclude(s => s!.Rounds)

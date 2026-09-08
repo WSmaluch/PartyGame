@@ -975,6 +975,9 @@ namespace PartyGame.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsHost")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsReady")
                         .HasColumnType("INTEGER");
 
@@ -1017,7 +1020,8 @@ namespace PartyGame.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProfilePhotoMediaAssetId");
 
                     b.HasIndex("RoomId", "NormalizedNickname")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = 1");
 
                     b.ToTable("Players", (string)null);
                 });

@@ -7,6 +7,10 @@ public sealed class Player
     public string Nickname { get; set; } = string.Empty;
     public string NormalizedNickname { get; set; } = string.Empty;
     public bool IsHost { get; set; }
+    // A lobby leave must not delete this durable identity: profile media and
+    // historical game records can still refer to it. Only active players are
+    // participants in the current lobby/game aggregate.
+    public bool IsActive { get; set; } = true;
     public bool IsReady { get; set; }
     public bool IsConnected { get; set; }
     public bool HasProfilePhoto { get; set; }
