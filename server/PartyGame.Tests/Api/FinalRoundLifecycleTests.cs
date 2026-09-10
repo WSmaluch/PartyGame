@@ -120,7 +120,7 @@ public sealed class FinalRoundLifecycleTests
             var service = scope.ServiceProvider.GetRequiredService<IRoomService>();
             var player = room.Players[2];
             await service.DisconnectPlayerAsync(room.RoomCode, player.PlayerId);
-            await service.AttachPlayerAsync(room.RoomCode, player.PlayerId, player.ReconnectToken);
+            await service.AttachPlayerAsync(room.RoomCode, player.PlayerId, player.Token);
         }
         await MarkSelfiesPersistedAsync(harness, room, 3);
 
