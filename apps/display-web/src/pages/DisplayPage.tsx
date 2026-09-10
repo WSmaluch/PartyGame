@@ -10,6 +10,8 @@ import { GameScreens } from '../components/gameStages/GameScreens';
 import { gameHubConnection } from '../realtime/gameHubConnection';
 import type { GameHubStatus, HubPingResponse } from '../realtime/types';
 import { questionVoiceSupported } from '../speech/questionVoice';
+import { gameCategory } from '../api/types';
+import { packageThemeFor } from '../theme/packageTheme';
 
 const roomStorageKey = 'partygame.display.roomCode';
 const allowedCodeCharacters = /[^A-HJ-NP-Z2-9]/g;
@@ -115,9 +117,10 @@ export function DisplayPage() {
     setSnapshot(undefined); setError(undefined); setRoomCode(''); setView('code');
   };
   const stageView = view === 'lobby' || view === 'started';
+  const activeTheme = packageThemeFor(snapshot?.game ? gameCategory(snapshot.game)?.packageTheme ?? gameCategory(snapshot.game)?.packageKey : undefined);
 
   return (
-    <main className="display-shell">
+    <main className="display-shell" data-package-theme={activeTheme}>
       <div className="confetti confetti--one" aria-hidden="true" />
       <div className="confetti confetti--two" aria-hidden="true" />
       <section

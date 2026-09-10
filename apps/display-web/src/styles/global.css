@@ -418,3 +418,37 @@ h1 {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .display-shell::before, .stage-swap__layer, .timer, .answer-card, .result-option, .final-artifact img, .final-artifact h3, .ranking-entry { animation: none !important; transform: none !important; }
 }
+
+/* PartyGame 1.1 reusable TV-stage tokens. Screens retain one hierarchy while
+   package metadata changes only the controlled atmosphere. */
+.display-shell {
+  --stage-bg: #07121f; --stage-bg-deep: #10182c; --surface: rgb(13 24 44 / 76%); --surface-elevated: rgb(23 39 69 / 88%);
+  --text-primary: #fbfcff; --text-secondary: #b7c5dc; --accent: #40e6f5; --accent-secondary: #9370ff; --glow: rgb(64 230 245 / 34%);
+  --success: #7cf6b3; --warning: #ffc75d; --timer-normal: #62edf5; --timer-urgent: #ff668e; --winner: #ffd86b; --avatar-ring: #a88cff;
+  --stage-radius: 28px; --stage-gap: clamp(10px, 1.4vw, 22px);
+  color: var(--text-primary);
+  background: radial-gradient(circle at 16% 15%, var(--glow), transparent 30%), radial-gradient(circle at 86% 82%, color-mix(in srgb, var(--accent-secondary) 26%, transparent), transparent 34%), linear-gradient(135deg, var(--stage-bg), var(--stage-bg-deep));
+  transition: background 420ms var(--motion-ease), color 220ms var(--motion-ease);
+}
+.display-shell[data-package-theme='friends'] { --accent: #bd79ff; --accent-secondary: #ff8a78; --glow: rgb(255 116 183 / 32%); --avatar-ring: #ff9a7c; }
+.display-shell[data-package-theme='student'] { --accent: #ff56c7; --accent-secondary: #b9ff54; --glow: rgb(255 86 199 / 31%); --avatar-ring: #c7ff64; }
+.display-shell[data-package-theme='adult'] { --accent: #c58aff; --accent-secondary: #ff4f87; --stage-bg: #130819; --stage-bg-deep: #24102d; --glow: rgb(221 65 145 / 28%); --avatar-ring: #f26ba0; }
+.display-shell .hero-card { border-color: color-mix(in srgb, var(--accent) 28%, white 12%); background: var(--surface); box-shadow: 0 30px 100px rgb(0 0 0 / 42%), 0 0 56px var(--glow); }
+.display-shell .hero-card--stage { background: transparent; box-shadow: none; }
+.display-shell .eyebrow, .display-shell .game-screen-container h2, .display-shell .photo-progress { color: var(--accent); }
+.display-shell .voice-status { color: #07121f; background: var(--accent); }
+.display-shell .player-card, .display-shell .answer-card, .display-shell .result-option, .display-shell .photo-card, .display-shell .photo-result-card, .display-shell .photo-ranking { border-color: color-mix(in srgb, var(--accent) 24%, white 12%); background: var(--surface-elevated); box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%); }
+.display-shell .player-card--ready { border-color: var(--success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 15%, transparent), 0 0 28px color-mix(in srgb, var(--success) 28%, transparent); }
+.display-shell .player-card img, .display-shell .photo-placeholder, .display-shell .player-avatar img { border: 3px solid var(--avatar-ring); box-shadow: 0 0 18px color-mix(in srgb, var(--avatar-ring) 35%, transparent); }
+.display-shell .timer-container { position: relative; isolation: isolate; }
+.display-shell .timer-container::before { content: ''; position: absolute; z-index: -1; width: clamp(76px, 11vw, 128px); aspect-ratio: 1; border: 2px solid color-mix(in srgb, var(--timer-normal) 64%, transparent); border-radius: 50%; box-shadow: inset 0 0 28px color-mix(in srgb, var(--timer-normal) 22%, transparent), 0 0 30px color-mix(in srgb, var(--timer-normal) 25%, transparent); }
+.display-shell .timer { color: var(--timer-normal); text-shadow: 0 0 18px color-mix(in srgb, var(--timer-normal) 55%, transparent); }
+.display-shell .timer--warning { color: var(--warning); }
+.display-shell .timer--urgent { color: var(--timer-urgent); text-shadow: 0 0 22px color-mix(in srgb, var(--timer-urgent) 62%, transparent); }
+.display-shell .result-option.top-result, .display-shell .photo-result-card.top-result { border-color: var(--winner); box-shadow: 0 0 36px color-mix(in srgb, var(--winner) 28%, transparent), inset 0 1px 0 rgb(255 255 255 / 16%); }
+.display-shell .winner-badge, .display-shell .host-badge { color: #1b1720; background: var(--winner); }
+.display-shell .voter-badge .points, .display-shell .ready { color: var(--success); }
+@media (prefers-reduced-motion: no-preference) { .display-shell { background-size: 130% 130%; animation: stage-atmosphere 20s ease-in-out infinite alternate; } .display-shell .player-card--ready { animation: ready-ring 1.8s ease-in-out infinite; } .display-shell .question-intro h1, .display-shell .collecting-selections > h1 { animation: question-entrance var(--motion-normal) var(--motion-ease) both; } }
+@keyframes stage-atmosphere { to { background-position: 100% 40%; } }
+@keyframes ready-ring { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--success) 0%, transparent), 0 0 34px color-mix(in srgb, var(--success) 36%, transparent); } }
+@keyframes question-entrance { from { opacity: 0; transform: translateY(18px) scale(.985); filter: brightness(.85); } }

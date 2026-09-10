@@ -1149,6 +1149,7 @@ public sealed class RoomService(
             .Include(room => room.Session)
                 .ThenInclude(s => s!.Rounds)
                     .ThenInclude(r => r.Category)
+                        .ThenInclude(category => category.Package)
             .Include(room => room.Session)
                 .ThenInclude(s => s!.Rounds)
                     .ThenInclude(r => r.Questions)
