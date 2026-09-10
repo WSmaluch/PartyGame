@@ -146,6 +146,7 @@ public sealed class FinalRoundLifecycleTests
         await using var harness = new PhotoAnswerTestHarness();
         var room = await CreateFinalSelfieRoomAsync(harness);
         await MarkSelfiesPersistedAsync(harness, room, 1);
+        var submittedSubjectPlayerId = Assert.Single((await ReadFinalStateAsync(harness, room)).Artifacts.Where(artifact => artifact.OriginalMediaAssetId is not null)).SubjectPlayerId;
         await using (var scope = harness.Factory.Services.CreateAsyncScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<IRoomService>();
@@ -157,7 +158,7 @@ public sealed class FinalRoundLifecycleTests
         Assert.Equal(GameStage.ShowingFinalPresentation, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
         var state = await ReadFinalStateAsync(harness, room);
         var artifact = Assert.Single(state.Artifacts);
-        Assert.Equal(room.Players[0].PlayerId, artifact.SubjectPlayerId);
+        Assert.Equal(submittedSubjectPlayerId, artifact.SubjectPlayerId);
         Assert.NotNull(artifact.OriginalMediaAssetId);
     }
 
