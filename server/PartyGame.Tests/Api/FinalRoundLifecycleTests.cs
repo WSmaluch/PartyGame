@@ -104,6 +104,16 @@ public sealed class FinalRoundLifecycleTests
         }
 
         Assert.Equal(GameStage.CollectingFinalEdits, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await using (var reconnected = harness.Factory.Services.CreateAsyncScope())
+        {
+            var service = reconnected.ServiceProvider.GetRequiredService<IRoomService>();
+            var player = room.Players[2];
+            await service.AttachPlayerAsync(room.RoomCode, player.PlayerId, player.Token);
+
+            var privateState = await service.GetPlayerPrivateGameStateAsync(room.RoomCode, player.PlayerId);
+            Assert.False(privateState.FinalRound!.CanSubmitSelfie);
+        }
+
         await using var verification = harness.Factory.Services.CreateAsyncScope();
         var state = FinalRoundState.Read((await verification.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions.AsNoTracking().SingleAsync(candidate => candidate.Id == room.GameSessionId)).FinalRoundStateJson)!;
         Assert.Equal(2, state.Artifacts.Count);
