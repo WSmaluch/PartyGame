@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PartyGame.Domain.Game;
 using PartyGame.Domain.Rooms;
 using PartyGame.GameEngine;
@@ -6,7 +7,7 @@ using PartyGame.Infrastructure.Persistence;
 
 namespace PartyGame.Infrastructure.Rooms;
 
-public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculator scoreCalculator, Microsoft.Extensions.Options.IOptions<GameFlowOptions> options, IRandomProvider randomProvider)
+public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculator scoreCalculator, Microsoft.Extensions.Options.IOptions<GameFlowOptions> options, IRandomProvider randomProvider, ILogger<GameStateMachine> logger)
 {
     private static readonly TimeSpan CategoryIntroDuration = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan QuestionIntroDuration = TimeSpan.FromSeconds(5);
@@ -563,15 +564,29 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
     private void TransitionFromFinalSelfies(GameSession session, DateTimeOffset now)
     {
         var state = FinalRoundState.Read(session.FinalRoundStateJson) ?? throw new InvalidOperationException("Final round state is missing.");
-        // A local camera preview is not a submitted Final Selfie.  Never
-        // advance on the timer while the authoritative persisted-media count
-        // is incomplete; keep the same actionable stage and give retries a
-        // fresh bounded window instead.
-        if (state.Artifacts.Any(artifact => artifact.OriginalMediaAssetId is null))
+        var missing = state.Artifacts.Where(artifact => artifact.OriginalMediaAssetId is null).ToList();
+        var disconnectedMissing = missing
+            .Where(artifact => session.Room.Players.FirstOrDefault(player => player.Id == artifact.SubjectPlayerId)?.IsConnected != true)
+            .ToList();
+        if (missing.Count > 0)
         {
-            session.StageStartedAtUtc = now;
-            session.StageEndsAtUtc = now.AddSeconds(session.Room.Settings.PhotoSeconds);
-            return;
+            logger.LogWarning(
+                "Final selfie deadline reached for session {SessionId} in room {RoomCode}: {SubmittedCount}/{RequiredCount} persisted, {DisconnectedMissingCount} disconnected missing; excluding {MissingPlayerIds} and advancing",
+                session.Id,
+                session.Room.Code,
+                state.Artifacts.Count - missing.Count,
+                state.Artifacts.Count,
+                disconnectedMissing.Count,
+                missing.Select(artifact => artifact.SubjectPlayerId).ToArray());
+
+            var removedIds = missing.Select(artifact => artifact.Id).ToHashSet();
+            state.Artifacts.RemoveAll(artifact => removedIds.Contains(artifact.Id));
+            state.Edits.RemoveAll(edit => removedIds.Contains(edit.ArtifactId));
+            state.Votes.RemoveAll(vote => removedIds.Contains(vote.ArtifactId));
+            // The editor rotation is defined only over valid selfie owners.
+            // Recompute it after pruning so no editor receives their own or a
+            // missing participant's artifact.
+            state.TotalPasses = Math.Max(0, state.Artifacts.Count - 1);
         }
         if (state.TotalPasses == 0)
         {

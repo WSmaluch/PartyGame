@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Game;
 using PartyGame.Infrastructure.Persistence;
+using PartyGame.Infrastructure.Rooms;
 
 namespace PartyGame.Tests.Api;
 
@@ -43,7 +44,7 @@ public sealed class FinalRoundLifecycleTests
     }
 
     [Fact]
-    public async Task FinalSelfieTimeout_KeepsStageActionableUntilEverySelfieIsPersisted()
+    public async Task FinalSelfieDeadline_WithNoPersistedSelfies_SkipsDirectlyToPresentation()
     {
         await using var harness = new PhotoAnswerTestHarness();
         var room = await harness.CreateRoomAsync(GameStage.RoundSummary, QuestionType.PlayerSelection, playerCount: 3, eligibleCount: 0, stageEndsAtUtc: DateTimeOffset.UtcNow.AddSeconds(-1));
@@ -63,13 +64,140 @@ public sealed class FinalRoundLifecycleTests
                 .Where(candidate => candidate.Id == room.GameSessionId).Select(candidate => candidate.StageEndsAtUtc).SingleAsync())!.Value;
         }
 
-        Assert.Equal(GameStage.CollectingFinalSelfies, await harness.ProcessAtAsync(room, firstDeadline.AddSeconds(1)));
+        Assert.Equal(GameStage.ShowingFinalPresentation, await harness.ProcessAtAsync(room, firstDeadline.AddSeconds(1)));
         await using var verification = harness.Factory.Services.CreateAsyncScope();
         var renewed = await verification.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions
             .AsNoTracking().SingleAsync(candidate => candidate.Id == room.GameSessionId);
-        Assert.Equal(GameStage.CollectingFinalSelfies, renewed.Stage);
+        Assert.Equal(GameStage.ShowingFinalPresentation, renewed.Stage);
         Assert.True(renewed.StageEndsAtUtc > firstDeadline);
-        Assert.All(FinalRoundState.Read(renewed.FinalRoundStateJson)!.Artifacts, artifact => Assert.Null(artifact.OriginalMediaAssetId));
+        Assert.Empty(FinalRoundState.Read(renewed.FinalRoundStateJson)!.Artifacts);
+    }
+
+    [Fact]
+    public async Task FinalSelfieDeadline_DropsMissingDisconnectedOwnerAndAdvances()
+    {
+        await using var harness = new PhotoAnswerTestHarness();
+        var room = await harness.CreateRoomAsync(GameStage.RoundSummary, QuestionType.PlayerSelection, playerCount: 3, eligibleCount: 0, stageEndsAtUtc: DateTimeOffset.UtcNow.AddSeconds(-1));
+        await using (var setup = harness.Factory.Services.CreateAsyncScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+            var session = await db.GameSessions.Include(candidate => candidate.Room).ThenInclude(candidate => candidate.Settings).SingleAsync(candidate => candidate.Id == room.GameSessionId);
+            session.Room.Settings.FinalRoundEnabled = true;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(GameStage.CollectingFinalSelfies, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow));
+        await using (var seeded = harness.Factory.Services.CreateAsyncScope())
+        {
+            var services = seeded.ServiceProvider;
+            await services.GetRequiredService<IRoomService>().DisconnectPlayerAsync(room.RoomCode, room.Players[2].PlayerId);
+            var db = services.GetRequiredService<PartyGameDbContext>();
+            var session = await db.GameSessions.SingleAsync(candidate => candidate.Id == room.GameSessionId);
+            var final = FinalRoundState.Read(session.FinalRoundStateJson)!;
+            foreach (var artifact in final.Artifacts.Take(2))
+            {
+                artifact.OriginalMediaAssetId = Guid.NewGuid();
+                artifact.FinalMediaAssetId = artifact.OriginalMediaAssetId;
+            }
+            session.FinalRoundStateJson = final.Write();
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(GameStage.CollectingFinalEdits, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
+        await using var verification = harness.Factory.Services.CreateAsyncScope();
+        var state = FinalRoundState.Read((await verification.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions.AsNoTracking().SingleAsync(candidate => candidate.Id == room.GameSessionId)).FinalRoundStateJson)!;
+        Assert.Equal(2, state.Artifacts.Count);
+        Assert.Equal(1, state.TotalPasses);
+    }
+
+    [Fact]
+    public async Task FinalSelfieDeadline_ReconnectedBeforeDeadlineRetainsEveryParticipant()
+    {
+        await using var harness = new PhotoAnswerTestHarness();
+        var room = await CreateFinalSelfieRoomAsync(harness);
+        await using (var scope = harness.Factory.Services.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<IRoomService>();
+            var player = room.Players[2];
+            await service.DisconnectPlayerAsync(room.RoomCode, player.PlayerId);
+            await service.AttachPlayerAsync(room.RoomCode, player.PlayerId, player.ReconnectToken);
+        }
+        await MarkSelfiesPersistedAsync(harness, room, 3);
+
+        Assert.Equal(GameStage.CollectingFinalEdits, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
+        var state = await ReadFinalStateAsync(harness, room);
+        Assert.Equal(3, state.Artifacts.Count);
+        Assert.Equal(2, state.TotalPasses);
+    }
+
+    [Fact]
+    public async Task FinalSelfieDeadline_PreservesSubmittedSelfieAfterItsOwnerDisconnects()
+    {
+        await using var harness = new PhotoAnswerTestHarness();
+        var room = await CreateFinalSelfieRoomAsync(harness);
+        await MarkSelfiesPersistedAsync(harness, room, 1);
+        await using (var scope = harness.Factory.Services.CreateAsyncScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<IRoomService>();
+            await service.DisconnectPlayerAsync(room.RoomCode, room.Players[0].PlayerId);
+            await service.DisconnectPlayerAsync(room.RoomCode, room.Players[1].PlayerId);
+            await service.DisconnectPlayerAsync(room.RoomCode, room.Players[2].PlayerId);
+        }
+
+        Assert.Equal(GameStage.ShowingFinalPresentation, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow.AddMinutes(1)));
+        var state = await ReadFinalStateAsync(harness, room);
+        var artifact = Assert.Single(state.Artifacts);
+        Assert.Equal(room.Players[0].PlayerId, artifact.SubjectPlayerId);
+        Assert.NotNull(artifact.OriginalMediaAssetId);
+    }
+
+    [Fact]
+    public async Task FinalSelfieDeadline_DuplicateTimerDeliveryDoesNotAdvanceTwice()
+    {
+        await using var harness = new PhotoAnswerTestHarness();
+        var room = await CreateFinalSelfieRoomAsync(harness);
+        await MarkSelfiesPersistedAsync(harness, room, 2);
+        var deadline = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        Assert.Equal(GameStage.CollectingFinalEdits, await harness.ProcessAtAsync(room, deadline));
+        Assert.Equal(GameStage.CollectingFinalEdits, await harness.ProcessAtAsync(room, deadline));
+        var state = await ReadFinalStateAsync(harness, room);
+        Assert.Equal(1, state.CurrentPass);
+        Assert.Equal(2, state.Artifacts.Count);
+    }
+
+    private static async Task<PhotoRoomAccess> CreateFinalSelfieRoomAsync(PhotoAnswerTestHarness harness)
+    {
+        var room = await harness.CreateRoomAsync(GameStage.RoundSummary, QuestionType.PlayerSelection, playerCount: 3, eligibleCount: 0, stageEndsAtUtc: DateTimeOffset.UtcNow.AddSeconds(-1));
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+        var session = await db.GameSessions.Include(candidate => candidate.Room).ThenInclude(candidate => candidate.Settings).SingleAsync(candidate => candidate.Id == room.GameSessionId);
+        session.Room.Settings.FinalRoundEnabled = true;
+        await db.SaveChangesAsync();
+        Assert.Equal(GameStage.CollectingFinalSelfies, await harness.ProcessAtAsync(room, DateTimeOffset.UtcNow));
+        return room;
+    }
+
+    private static async Task MarkSelfiesPersistedAsync(PhotoAnswerTestHarness harness, PhotoRoomAccess room, int count)
+    {
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+        var session = await db.GameSessions.SingleAsync(candidate => candidate.Id == room.GameSessionId);
+        var state = FinalRoundState.Read(session.FinalRoundStateJson)!;
+        foreach (var artifact in state.Artifacts.Take(count))
+        {
+            artifact.OriginalMediaAssetId = Guid.NewGuid();
+            artifact.FinalMediaAssetId = artifact.OriginalMediaAssetId;
+        }
+        session.FinalRoundStateJson = state.Write();
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<FinalRoundState> ReadFinalStateAsync(PhotoAnswerTestHarness harness, PhotoRoomAccess room)
+    {
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var session = await scope.ServiceProvider.GetRequiredService<PartyGameDbContext>().GameSessions.AsNoTracking().SingleAsync(candidate => candidate.Id == room.GameSessionId);
+        return FinalRoundState.Read(session.FinalRoundStateJson)!;
     }
 
     [Theory]
