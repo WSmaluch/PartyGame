@@ -146,7 +146,7 @@ public sealed class FinalRoundLifecycleTests
         await using var harness = new PhotoAnswerTestHarness();
         var room = await CreateFinalSelfieRoomAsync(harness);
         await MarkSelfiesPersistedAsync(harness, room, 1);
-        var submittedSubjectPlayerId = Assert.Single((await ReadFinalStateAsync(harness, room)).Artifacts.Where(artifact => artifact.OriginalMediaAssetId is not null)).SubjectPlayerId;
+        var submittedSubjectPlayerId = Assert.Single((await ReadFinalStateAsync(harness, room)).Artifacts, artifact => artifact.OriginalMediaAssetId is not null).SubjectPlayerId;
         await using (var scope = harness.Factory.Services.CreateAsyncScope())
         {
             var service = scope.ServiceProvider.GetRequiredService<IRoomService>();
