@@ -21,6 +21,7 @@ input {
   font: inherit;
 }
 .page-shell {
+  min-height: 100svh;
   min-height: 100dvh;
   display: grid;
   place-items: center;
@@ -35,6 +36,15 @@ input {
 .host-setup-card {
   max-width: 600px;
 }
+.lobby-card {
+  display: grid;
+  gap: 18px;
+  margin-block: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom));
+}
+.lobby-card > h1,
+.lobby-card > .connection,
+.lobby-card > .profile,
+.lobby-card > .players { margin-block: 0; }
 .connection {
   display: inline-flex;
   align-items: center;
@@ -493,6 +503,22 @@ dd {
 .players {
   margin-top: 22px;
 }
+.lobby-actions {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+.lobby-actions > button,
+.lobby-actions .secondary-action,
+.lobby-actions [role='alertdialog'] > button {
+  width: 100%;
+  margin-top: 0;
+}
+.leave-room,
+.leave-room [role='alertdialog'] { min-width: 0; }
+.leave-room [role='alertdialog'] { display: grid; gap: 12px; padding: 14px; border: 1px solid rgb(255 255 255 / 18%); border-radius: 14px; background: rgb(255 255 255 / 7%); }
+.leave-room [role='alertdialog'] p { margin: 0; }
 h2 {
   font-size: 18px;
 }
@@ -938,6 +964,9 @@ ul {
     padding: 22px 18px;
     border-radius: 22px;
   }
+  .lobby-card { gap: 16px; }
+  .players ul { gap: 8px; margin-block: 0; }
+  .players li { min-width: 0; padding: 10px; }
   .game-header {
     align-items: flex-start;
     flex-wrap: wrap;

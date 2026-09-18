@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const artifactDir = path.join(repo, "artifacts/1.1-responsive-review");
+await mkdir(artifactDir, { recursive: true });
 const requireFromDisplay = createRequire(
   path.join(repo, "apps/display-web/package.json"),
 );
@@ -12,6 +15,7 @@ const viewports = [
   [320, 568],
   [375, 667],
   [390, 844],
+  [393, 852],
   [430, 932],
   [768, 1024],
   [1366, 768],
@@ -20,6 +24,30 @@ const viewports = [
 
 const browser = await chromium.launch({ headless: true });
 try {
+  const displayQuestionMarkup = (question, urgent = false) =>
+    `<main class="display-shell"><section class="hero-card hero-card--stage hero-card--started"><p class="eyebrow">Ekran gry</p><h1>PartyGame</h1><div class="game-screen-container"><section class="collecting-selections question-stage"><header class="question-stage__header"><h2>Pytanie</h2></header><div class="question-stage__prompt"><h1>${question}</h1></div><div class="question-stage__timer"><div class="timer-container"><strong class="timer ${urgent ? "timer--urgent" : ""}">${urgent ? "5" : "24"}</strong></div></div><div class="answered-status question-stage__status"><p>Czekamy na odpowiedzi</p><p>Odpowiedziało: 2 z 3 graczy</p></div></section></div></section></main>`;
+  const screenshotCases = [
+    ["01-display-question-short.png", 1366, 768, "Kto pierwszy zacznie tańczyć?", false],
+    ["02-display-question-long.png", 1024, 768, "Jak aaaaa zareagowałby(aby) na zdradę podczas bardzo długiej, pełnej zwrotów akcji wspólnej podróży?", false],
+    ["03-display-question-compact-height.png", 1024, 640, "Który z graczy najprawdopodobniej zapomni najważniejszej rzeczy podczas wspólnego wyjazdu?", false],
+    ["04-display-timer-urgent.png", 1280, 720, "Kto najgłośniej śmieje się z własnych żartów?", true],
+  ];
+  for (const [file, width, height, question, urgent] of screenshotCases) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    await page.setContent(displayQuestionMarkup(question, urgent));
+    await page.addStyleTag({ path: path.join(repo, "apps/display-web/src/styles/global.css") });
+    const metrics = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      timer: document.querySelector(".question-stage__timer").getBoundingClientRect(),
+      prompt: document.querySelector(".question-stage__prompt").getBoundingClientRect(),
+      status: document.querySelector(".question-stage__status").getBoundingClientRect(),
+    }));
+    if (metrics.scrollWidth > width + 1 || metrics.scrollHeight > height + 2 || metrics.prompt.bottom > metrics.timer.top || metrics.timer.bottom > metrics.status.top)
+      throw new Error(`Display question regions overlap at ${width}x${height}: ${JSON.stringify(metrics)}`);
+    await page.screenshot({ path: path.join(artifactDir, file) });
+    await page.close();
+  }
   for (const [width, height] of viewports) {
     const page = await browser.newPage({ viewport: { width, height } });
     await page.setContent(
@@ -227,13 +255,31 @@ try {
   console.log(
     "Display stage viewport/overflow PASS (gameplay + lobby 1/3/6/10 at 1024x640, 1280x720, 1920x1080, 2560x1440)",
   );
+
+  const playerLobbyMarkup = (count) => `<main class="page-shell"><section class="card lobby-card"><p class="eyebrow">Lobby</p><h1>Pokój ABCD</h1><p class="connection">Połączono</p><section class="profile"><span class="avatar avatar--placeholder">?</span><div><strong>Gracz z wyjątkowo długim pseudonimem</strong><label class="file-button">Wybierz zdjęcie</label></div></section><section class="players"><h2>Gracze</h2><ul>${Array.from({ length: count }, (_, index) => `<li><span class="avatar avatar--placeholder">?</span><span>${index === 0 ? "Gracz z wyjątkowo długim pseudonimem" : `Gracz ${index + 1}`}</span><span class="${index % 2 ? "waiting" : "ready"}">${index % 2 ? "Czeka" : "Gotowy"}</span></li>`).join("")}</ul></section><div class="lobby-actions"><button>Gotowy</button><div class="leave-room"><button class="secondary-action">Wyjdź z pokoju</button></div></div></section></main>`;
+  for (const [file, width, height, count] of [["05-player-lobby-390x844.png", 390, 844, 3], ["06-player-lobby-430x932.png", 430, 932, 6], ["07-player-lobby-long-roster.png", 390, 844, 10], ["08-player-lobby-393x852.png", 393, 852, 6], ["09-player-lobby-desktop.png", 1366, 768, 10]]) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    await page.setContent(playerLobbyMarkup(count));
+    await page.addStyleTag({ path: path.join(repo, "apps/player-web/src/styles.css") });
+    const metrics = await page.evaluate(() => {
+      const ready = document.querySelector(".lobby-actions > button").getBoundingClientRect();
+      const leave = document.querySelector(".leave-room button").getBoundingClientRect();
+      const roster = document.querySelector(".players").getBoundingClientRect();
+      return { scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight, ready, leave, roster };
+    });
+    if (metrics.scrollWidth > width + 1 || metrics.ready.bottom > metrics.leave.top || metrics.roster.bottom > metrics.ready.top)
+      throw new Error(`Player lobby actions overlap at ${width}x${height}: ${JSON.stringify(metrics)}`);
+    await page.screenshot({ path: path.join(artifactDir, file), fullPage: true });
+    await page.close();
+  }
+  console.log("Player lobby responsive PASS (3/6/10 players, long nickname, safe flowing actions)");
 } finally {
   await browser.close();
 }
 
 const mobileWebKit = await webkit.launch({ headless: true });
 try {
-  for (const [width, height] of viewports.slice(0, 4)) {
+  for (const [width, height] of viewports.slice(0, 5)) {
     const page = await mobileWebKit.newPage({
       viewport: { width, height },
       isMobile: true,
@@ -288,9 +334,30 @@ try {
       );
     await page.close();
   }
+  for (const [width, height] of viewports.slice(0, 5)) {
+    const page = await mobileWebKit.newPage({
+      viewport: { width, height },
+      isMobile: true,
+      hasTouch: true,
+    });
+    await page.setContent(
+      `<meta name="viewport" content="width=device-width, initial-scale=1.0"><main class="page-shell"><section class="card lobby-card"><p class="eyebrow">Lobby</p><h1>Pokój ABCD</h1><p class="connection">Połączono</p><section class="profile"><span class="avatar avatar--placeholder">?</span><div><strong>Gracz z wyjątkowo długim pseudonimem</strong><label class="file-button">Wybierz zdjęcie</label></div></section><section class="players"><h2>Gracze</h2><ul>${Array.from({ length: 10 }, (_, index) => `<li><span class="avatar avatar--placeholder">?</span><span>${index === 0 ? "Gracz z wyjątkowo długim pseudonimem" : `Gracz ${index + 1}`}</span><span class="waiting">Czeka</span></li>`).join("")}</ul></section><div class="lobby-actions"><button>Gotowy</button><div class="leave-room"><button class="secondary-action">Wyjdź z pokoju</button></div></div></section></main>`,
+    );
+    await page.addStyleTag({ path: path.join(repo, "apps/player-web/src/styles.css") });
+    const metrics = await page.evaluate(() => {
+      const ready = document.querySelector(".lobby-actions > button").getBoundingClientRect();
+      const leave = document.querySelector(".leave-room button").getBoundingClientRect();
+      const roster = document.querySelector(".players").getBoundingClientRect();
+      return { scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight, ready, leave, roster };
+    });
+    if (metrics.scrollWidth > width + 1 || metrics.ready.bottom > metrics.leave.top || metrics.roster.bottom > metrics.ready.top)
+      throw new Error(`WebKit lobby actions overlap at ${width}x${height}: ${JSON.stringify(metrics)}`);
+    await page.close();
+  }
   console.log(
-    "WebKit mobile Drawing layout PASS (320x568, 375x667, 390x844, 430x932)",
+    "WebKit mobile Drawing layout PASS (320x568, 375x667, 390x844, 393x852, 430x932)",
   );
+  console.log("WebKit mobile Lobby layout PASS (320x568, 375x667, 390x844, 393x852, 430x932)");
 } finally {
   await mobileWebKit.close();
 }

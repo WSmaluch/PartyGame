@@ -92,8 +92,8 @@ input {
   grid-template-rows: auto auto minmax(0, 1fr);
   align-content: start;
 }
-.hero-card--started .game-screen-container { min-height: 0; overflow: hidden; }
-.hero-card--started .stage-swap, .hero-card--started .stage-swap__layer { min-height: 0; }
+.hero-card--started .game-screen-container { min-height: 0; height: 100%; overflow: hidden; }
+.hero-card--started .stage-swap, .hero-card--started .stage-swap__layer { min-height: 0; height: 100%; }
 
 .eyebrow {
   margin: 0;
@@ -347,6 +347,27 @@ h1 {
 .game-screen-container h1 { margin: clamp(4px, .7vh, 10px) auto clamp(8px, 1.6vh, 18px); max-width: min(1100px, 94vw); font-size: clamp(24px, 4.2vw, 64px); line-height: 1.08; overflow-wrap: anywhere; text-wrap: balance; }
 .game-screen-container h2 { margin: 0 0 12px; color: #7ff7e8; font-size: clamp(22px, 2.5vw, 38px); }
 .category-intro, .question-intro, .collecting-selections, .collecting-text-answers, .collecting-text-votes, .revealing-answers, .showing-results, .showing-text-results, .round-summary, .game-completed, .photo-results { min-width: 0; }
+.question-stage {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto minmax(0, auto);
+  align-content: center;
+  gap: clamp(6px, 1.2vh, 16px);
+}
+.question-stage__header { min-width: 0; }
+.question-stage__header h2 { margin: 0; font-size: clamp(17px, min(2.3vw, 3.1vh), 34px); }
+.question-stage__prompt { min-width: 0; display: grid; place-items: center; }
+.question-stage__prompt h1 {
+  max-width: min(1100px, 88vw);
+  margin: 0;
+  font-size: clamp(25px, min(4.2vw, 7.2vh), 64px);
+  line-height: 1.08;
+}
+.question-stage__timer { min-height: clamp(82px, 13vh, 148px); display: grid; place-items: center; }
+.question-stage__timer .timer-container { min-height: 100%; margin: 0; }
+.question-stage__status { margin: 0; }
+.question-stage__status p { margin: 0; }
+.question-stage__players { min-height: 0; align-self: start; margin: 0 auto; }
 .timer-container { display: grid; min-height: clamp(42px, 7vh, 72px); margin: clamp(5px, 1vh, 12px) 0; place-items: center; }
 .timer { display: inline-grid; min-width: 3.5ch; place-items: center; color: #7ff7e8; font: 900 clamp(32px, 4.5vw, 68px)/1 ui-monospace, monospace; transform-origin: center; }
 .timer--warning { color: #ffd35c; }
@@ -368,6 +389,14 @@ h1 {
   .hero-card--started > .eyebrow { display: none; }
   .hero-card--started > h1 { font-size: 26px; margin: 0 0 5px; }
   .game-screen-container h1 { font-size: clamp(21px, 3.5vw, 40px); }
+  .question-stage { gap: 4px; }
+  .question-stage__header h2 { font-size: clamp(15px, 2.1vw, 24px); }
+  .question-stage__prompt h1 { font-size: clamp(21px, min(3.5vw, 6vh), 40px); }
+  .question-stage__timer { min-height: clamp(68px, 11vh, 96px); }
+  .question-stage__timer .timer { font-size: clamp(28px, min(4vw, 7vh), 48px); }
+  .question-stage__timer .timer-container::before { width: clamp(68px, 9vh, 96px); }
+  .question-stage__players { gap: clamp(5px, 1vh, 10px); }
+  .question-stage__players .player-avatar img, .question-stage__players .player-avatar .photo-placeholder { width: clamp(42px, 8vh, 72px); height: clamp(42px, 8vh, 72px); }
   .answered-status { font-size: clamp(15px, 1.7vw, 21px); }
   .photo-answer-image { height: min(31vh, 300px); }
   .hero-card--lobby { padding-top: 2px; padding-bottom: 2px; }
