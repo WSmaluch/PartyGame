@@ -16,7 +16,9 @@ Creates a lobby and its host. Body: `{ "nickname": string, "settings"?: RoomSett
 
 ## `POST /api/rooms/{roomCode}/players`
 
-Body: `{ "nickname": string }`. Returns `201` with the same access DTO as room creation. Returns `400` for an invalid nickname, `404` for an unknown code, and `409` for a duplicate nickname, a full room, or a room outside `Lobby`. Codes are case-insensitive.
+Body: `{ "nickname": string }`. Returns `201` with the same access DTO as room creation. Returns `400` for an invalid nickname, `404` for an unknown code, and `409` for a duplicate nickname, a full room, or a room outside `Lobby`. Room codes are case-insensitive.
+
+Each `409` carries a stable `code` (also `errorCode`) in the ProblemDetails body: `NICKNAME_TAKEN` (an active player already uses the nickname, compared case-insensitively after trimming), `ROOM_FULL` (the room has the maximum number of active players) or `ROOM_NOT_JOINABLE` (the room is no longer in `Lobby`). Clients must branch on `code`, not on the human-readable `title`.
 
 ## `GET /api/rooms/{roomCode}`
 

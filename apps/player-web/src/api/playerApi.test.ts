@@ -47,6 +47,15 @@ describe('join conflicts', () => {
     await expect(joinRoom('AB12', 'Wojtek')).rejects.toMatchObject({ kind });
   });
 
+  it.each([
+    ['NICKNAME_TAKEN', 'nickname-taken'],
+    ['ROOM_FULL', 'room-full'],
+    ['ROOM_NOT_JOINABLE', 'started'],
+  ])('prefers the stable 409 code %s over the title', async (code, kind) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 409, code, title: 'Unrelated text' }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } })));
+    await expect(joinRoom('AB12', 'Wojtek')).rejects.toMatchObject({ kind });
+  });
+
   it('falls back to started when the 409 body is unreadable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 409 })));
     await expect(joinRoom('AB12', 'Wojtek')).rejects.toMatchObject({ kind: 'started' });

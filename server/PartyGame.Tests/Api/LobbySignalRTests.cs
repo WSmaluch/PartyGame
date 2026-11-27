@@ -93,6 +93,8 @@ public sealed class LobbySignalRTests : IAsyncLifetime
 
         var lateJoin = await _httpClient.PostAsJsonAsync($"/api/rooms/{host.RoomCode}/players", new JoinRoomRequest("Late"));
         Assert.Equal(HttpStatusCode.Conflict, lateJoin.StatusCode);
+        using (var lateJoinProblem = JsonDocument.Parse(await lateJoin.Content.ReadAsStringAsync()))
+            Assert.Equal("ROOM_NOT_JOINABLE", lateJoinProblem.RootElement.GetProperty("code").GetString());
 
         await kasiaConnection.StopAsync();
         await WaitForAsync(async () => !(await GetSnapshotAsync(host.RoomCode)).Players.Single(player => player.Id == kasia.PlayerId).IsConnected);
