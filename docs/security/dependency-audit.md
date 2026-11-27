@@ -5,3 +5,7 @@
 Mitigation and accepted residual risk: production artifacts contain no server-side React Router execution; package upgrades remain a tracked maintenance item; `npm audit` is repeated for releases. No critical advisory was reported.
 
 NuGet vulnerability and outdated-package reports are generated per project because this repository has no `server/PartyGame.sln`. Only security fixes with a compatible minimal update may be applied; routine outdated packages are not upgraded blindly.
+
+## Aktualizacja po RC15
+
+React Router wydał poprawkę GHSA-qwww-vcr4-c8h2 w linii 7.x, więc Admin przeszedł na `react-router-dom` 7.18.7 bez zmiany wersji głównej. Zależności deweloperskie Admina, Display i Web Playera (m.in. `vitest`, `brace-expansion`, `baseline-browser-mapping`) zaktualizowano przez `npm audit fix` bez `--force`. Po tej zmianie `npm audit` nie raportuje żadnych podatności w trzech aplikacjach webowych.

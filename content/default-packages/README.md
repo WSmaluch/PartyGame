@@ -1,3 +1,3 @@
 # Default content packages
 
-Domyślne pakiety treści zostaną dodane w późniejszym etapie.
+Katalog jest nieużywany. Domyślny pakiet „Starter Pack” (`starter`) tworzy przy starcie serwera `ContentSeeder` (`server/PartyGame.Infrastructure/Persistence/Seed/ContentSeeder.cs`); kolejne pakiety dodaje się przez panel Admin.

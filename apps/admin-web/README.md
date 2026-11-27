@@ -1,6 +1,6 @@
 # PartyGame Admin
 
-Techniczny panel diagnostyczny zbudowany w React, TypeScript i Vite. Moduły zarządzania są wyłącznie bezpiecznymi placeholderami.
+Panel operatora zbudowany w React, TypeScript i Vite. Zawiera edytor pakietów treści (wersje Draft/Published/Archived, kategorie, pytania, walidacja i publikacja — zob. [Etap 6A](../../docs/stage-06a-admin-content-editor.md)) oraz diagnostykę z support bundle. W Production wymaga tokenu operatora, przechowywanego wyłącznie w pamięci strony ([security hardening](../../docs/security/security-hardening.md)).
 
 ```bash
 npm install

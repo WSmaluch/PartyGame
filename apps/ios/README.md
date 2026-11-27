@@ -1,6 +1,6 @@
 # PartyGame iOS
 
-Aplikacja graczy w SwiftUI dla iOS 17+. Zawiera ekran startowy, bezpieczne placeholdery Host/Join, trwałą konfigurację adresu serwera oraz diagnostykę `GET /health` opartą na `URLSession` i async/await.
+Aplikacja graczy w SwiftUI dla iOS 17+. Pozwala założyć pokój (Host) albo do niego dołączyć (Join), ustawić zdjęcie profilowe i zagrać we wszystkie typy pytań oraz rundę finałową. Ma trwałą konfigurację adresu serwera i diagnostykę `GET /health`.
 
 ## Uruchomienie
 
