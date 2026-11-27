@@ -26,7 +26,7 @@ Warianty `display` i `thumbnail` mają osobne opaque keys. Endpoint odczytu najp
 
 ## Bezpieczeństwo uploadu
 
-Provider akceptuje wyłącznie JPEG/PNG dla zdjęć oraz PNG dla rysunków. Sprawdza limit rozmiaru, wymagane wymiary, magic bytes i rzeczywisty format odczytany przez ImageSharp. Usuwa EXIF/ICC/XMP/IPTC, normalizuje orientację oraz zapisuje własny JPEG albo PNG. Nazwy przesyłanych plików nie uczestniczą w budowaniu ścieżek. Resolver storage odrzuca klucze wychodzące poza root.
+Provider akceptuje wyłącznie JPEG/PNG dla zdjęć oraz PNG dla rysunków. Sprawdza limit rozmiaru, wymagane wymiary, magic bytes i rzeczywisty format odczytany przez SkiaSharp (od zmiany po RC15; wcześniej ImageSharp). Usuwa EXIF/ICC/XMP/IPTC, normalizuje orientację oraz zapisuje własny JPEG albo PNG. Nazwy przesyłanych plików nie uczestniczą w budowaniu ścieżek. Resolver storage odrzuca klucze wychodzące poza root.
 
 Zapisy odbywają się atomowo przez plik tymczasowy i przeniesienie do docelowej nazwy. Przy błędzie czyszczone są utworzone warianty. SHA-256 jest liczony ze zapisanego pliku strumieniowo.
 

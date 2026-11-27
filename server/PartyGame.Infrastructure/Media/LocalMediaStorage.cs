@@ -1,10 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace PartyGame.Infrastructure.Media;
 
@@ -44,40 +40,41 @@ public sealed class LocalMediaStorage : IMediaStorage
         if (request.ByteLength > drawingOptions.MaximumUploadBytes) throw new PhotoMediaException("drawing_answer_file_too_large", "The drawing exceeds the upload limit.");
         if (!string.Equals(request.ContentType, "image/png", StringComparison.OrdinalIgnoreCase)) throw new PhotoMediaException("drawing_answer_invalid_content_type", "Only PNG drawings are accepted.");
         await EnsureSignatureAsync(request.Content, request.ContentType, "drawing_answer", cancellationToken);
-        Image image;
-        try { image = await Image.LoadAsync(request.Content, cancellationToken); }
-        catch (Exception exception) when (exception is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
-        { throw new PhotoMediaException("drawing_answer_invalid_image", "The uploaded file is not a valid PNG image."); }
-        using (image)
+        using var processor = SkiaImageProcessor.Open(request.Content)
+            ?? throw new PhotoMediaException("drawing_answer_invalid_image", "The uploaded file is not a valid PNG image.");
+        var header = processor.Header;
+        if (!string.Equals(header.ContentType, "image/png", StringComparison.OrdinalIgnoreCase))
+            throw new PhotoMediaException("drawing_answer_invalid_image", "The uploaded file contents are not PNG.");
+        if (header.Width < drawingOptions.MinimumWidth || header.Height < drawingOptions.MinimumHeight) throw new PhotoMediaException("drawing_answer_dimensions_too_small", "The drawing dimensions are too small.");
+        if (header.Width > drawingOptions.MaximumWidth || header.Height > drawingOptions.MaximumHeight) throw new PhotoMediaException("drawing_answer_dimensions_too_large", "The drawing dimensions are too large.");
+        using var decoded = processor.DecodeOriented()
+            ?? throw new PhotoMediaException("drawing_answer_invalid_image", "The uploaded file is not a valid PNG image.");
+        if (DrawingInkDetector.CalculateInkPixelRatio(decoded, drawingOptions.BackgroundColor) < drawingOptions.MinimumInkPixelRatio)
+            throw new PhotoMediaException("drawing_answer_blank", "The drawing is blank.");
+        var display = SkiaImageProcessor.ResizeDown(decoded, drawingOptions.NormalizedMaximumLongEdge);
+        try
         {
-            if (!string.Equals(image.Metadata.DecodedImageFormat?.DefaultMimeType, "image/png", StringComparison.OrdinalIgnoreCase))
-                throw new PhotoMediaException("drawing_answer_invalid_image", "The uploaded file contents are not PNG.");
-            image.Mutate(context => context.AutoOrient());
-            if (image.Width < drawingOptions.MinimumWidth || image.Height < drawingOptions.MinimumHeight) throw new PhotoMediaException("drawing_answer_dimensions_too_small", "The drawing dimensions are too small.");
-            if (image.Width > drawingOptions.MaximumWidth || image.Height > drawingOptions.MaximumHeight) throw new PhotoMediaException("drawing_answer_dimensions_too_large", "The drawing dimensions are too large.");
-            using var pixels = image.CloneAs<Rgba32>();
-            if (DrawingInkDetector.CalculateInkPixelRatio(pixels, drawingOptions.BackgroundColor) < drawingOptions.MinimumInkPixelRatio)
-                throw new PhotoMediaException("drawing_answer_blank", "The drawing is blank.");
-            image.Metadata.ExifProfile = null;
-            image.Metadata.IccProfile = null;
-            image.Metadata.XmpProfile = null;
-            image.Metadata.IptcProfile = null;
-            ResizeDown(image, drawingOptions.NormalizedMaximumLongEdge);
-            var width = image.Width; var height = image.Height;
+            var width = display.Width; var height = display.Height;
             var directoryKey = $"drawing-answer/rooms/{request.RoomId:N}/questions/{request.QuestionInstanceId:N}/{request.DrawingAnswerId:N}";
             var displayKey = $"{directoryKey}/display.png"; var thumbnailKey = $"{directoryKey}/thumbnail.png";
             var displayPath = Resolve(displayKey); var thumbnailPath = Resolve(thumbnailKey); Directory.CreateDirectory(Path.GetDirectoryName(displayPath)!);
             try
             {
-                await SavePngAtomicAsync(image, displayPath, cancellationToken);
-                using var thumbnail = image.CloneAs<Rgba32>();
-                ResizeDown(thumbnail, drawingOptions.ThumbnailMaximumLongEdge);
-                await SavePngAtomicAsync(thumbnail, thumbnailPath, cancellationToken);
+                using (var encoded = SkiaImageProcessor.EncodePng(display))
+                    await SaveDataAtomicAsync(encoded, displayPath, cancellationToken);
+                var thumbnail = SkiaImageProcessor.ResizeDown(display, drawingOptions.ThumbnailMaximumLongEdge);
+                try
+                {
+                    using var encodedThumbnail = SkiaImageProcessor.EncodePng(thumbnail);
+                    await SaveDataAtomicAsync(encodedThumbnail, thumbnailPath, cancellationToken);
+                }
+                finally { if (!ReferenceEquals(thumbnail, display)) thumbnail.Dispose(); }
                 var (byteLength, sha256) = await CalculateHashAsync(displayPath, cancellationToken);
                 return new StoredMediaResult(displayKey, thumbnailKey, width, height, byteLength, sha256, "image/png");
             }
             catch { TryDelete(displayPath); TryDelete(thumbnailPath); throw; }
         }
+        finally { if (!ReferenceEquals(display, decoded)) display.Dispose(); }
     }
 
     public Task<StoredMediaResult> SavePhotoAsync(PhotoMediaWriteRequest request, CancellationToken cancellationToken = default) =>
@@ -104,36 +101,25 @@ public sealed class LocalMediaStorage : IMediaStorage
         if (contentType is not ("image/jpeg" or "image/png")) throw new PhotoMediaException($"{errorPrefix}_invalid_content_type", "Only JPEG and PNG images are accepted.");
         await EnsureSignatureAsync(content, contentType, errorPrefix, cancellationToken);
 
-        Image image;
+        using var processor = SkiaImageProcessor.Open(content)
+            ?? throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file is not a valid supported image.");
+        var header = processor.Header;
+        if (!string.Equals(header.ContentType, contentType, StringComparison.OrdinalIgnoreCase))
+            throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file contents do not match its declared image type.");
+        if (header.Width < options.MinimumImageWidth || header.Height < options.MinimumImageHeight)
+            throw new PhotoMediaException($"{errorPrefix}_dimensions_too_small", "The image dimensions are too small.");
+        if (header.Width > options.MaximumImageWidth || header.Height > options.MaximumImageHeight)
+            throw new PhotoMediaException($"{errorPrefix}_dimensions_too_large", "The image dimensions are too large.");
+
+        using var decoded = processor.DecodeOriented()
+            ?? throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file is not a valid supported image.");
+        // JPEG output has no alpha channel; transparent PNG areas become white.
+        using var opaque = SkiaImageProcessor.Flatten(decoded, SKColors.White);
+        var display = SkiaImageProcessor.ResizeDown(opaque, options.NormalizedMaximumLongEdge);
         try
         {
-            image = await Image.LoadAsync(content, cancellationToken);
-        }
-        catch (Exception exception) when (exception is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
-        {
-            throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file is not a valid supported image.");
-        }
-
-        using (image)
-        {
-            var decodedContentType = image.Metadata.DecodedImageFormat?.DefaultMimeType;
-            if (!string.Equals(decodedContentType, contentType, StringComparison.OrdinalIgnoreCase))
-                throw new PhotoMediaException($"{errorPrefix}_invalid_image", "The uploaded file contents do not match its declared image type.");
-
-            image.Mutate(context => context.AutoOrient());
-            if (image.Width < options.MinimumImageWidth || image.Height < options.MinimumImageHeight)
-                throw new PhotoMediaException($"{errorPrefix}_dimensions_too_small", "The image dimensions are too small.");
-            if (image.Width > options.MaximumImageWidth || image.Height > options.MaximumImageHeight)
-                throw new PhotoMediaException($"{errorPrefix}_dimensions_too_large", "The image dimensions are too large.");
-
-            image.Metadata.ExifProfile = null;
-            image.Metadata.IccProfile = null;
-            image.Metadata.XmpProfile = null;
-            image.Metadata.IptcProfile = null;
-
-            ResizeDown(image, options.NormalizedMaximumLongEdge);
-            var width = image.Width;
-            var height = image.Height;
+            var width = display.Width;
+            var height = display.Height;
             var displayKey = $"{directoryKey}/display.jpg";
             var thumbnailKey = $"{directoryKey}/thumbnail.jpg";
             var displayPath = Resolve(displayKey);
@@ -142,10 +128,15 @@ public sealed class LocalMediaStorage : IMediaStorage
 
             try
             {
-                await SaveJpegAtomicAsync(image, displayPath, options.JpegQuality, cancellationToken);
-                using var thumbnail = image.CloneAs<Rgba32>();
-                ResizeDown(thumbnail, options.ThumbnailMaximumLongEdge);
-                await SaveJpegAtomicAsync(thumbnail, thumbnailPath, options.ThumbnailJpegQuality, cancellationToken);
+                using (var encoded = SkiaImageProcessor.EncodeJpeg(display, options.JpegQuality))
+                    await SaveDataAtomicAsync(encoded, displayPath, cancellationToken);
+                var thumbnail = SkiaImageProcessor.ResizeDown(display, options.ThumbnailMaximumLongEdge);
+                try
+                {
+                    using var encodedThumbnail = SkiaImageProcessor.EncodeJpeg(thumbnail, options.ThumbnailJpegQuality);
+                    await SaveDataAtomicAsync(encodedThumbnail, thumbnailPath, cancellationToken);
+                }
+                finally { if (!ReferenceEquals(thumbnail, display)) thumbnail.Dispose(); }
                 var (storedLength, sha256) = await CalculateHashAsync(displayPath, cancellationToken);
                 return new StoredMediaResult(displayKey, thumbnailKey, width, height, storedLength, sha256);
             }
@@ -156,6 +147,7 @@ public sealed class LocalMediaStorage : IMediaStorage
                 throw;
             }
         }
+        finally { if (!ReferenceEquals(display, opaque)) display.Dispose(); }
     }
 
     public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default)
@@ -177,12 +169,6 @@ public sealed class LocalMediaStorage : IMediaStorage
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(File.Exists(Resolve(storageKey)));
-    }
-
-    private static void ResizeDown(Image image, int maximumLongEdge)
-    {
-        if (Math.Max(image.Width, image.Height) <= maximumLongEdge) return;
-        image.Mutate(context => context.Resize(new ResizeOptions { Mode = ResizeMode.Max, Size = new Size(maximumLongEdge, maximumLongEdge), Sampler = KnownResamplers.Lanczos3 }));
     }
 
     internal void CleanupTemporaryFiles()
@@ -207,13 +193,8 @@ public sealed class LocalMediaStorage : IMediaStorage
         }
     }
 
-    private Task SaveJpegAtomicAsync(Image image, string path, int quality, CancellationToken cancellationToken) =>
-        SaveAtomicAsync(path, async stream => await image.SaveAsJpegAsync(stream, new JpegEncoder { Quality = quality }, cancellationToken), cancellationToken);
-
-    private async Task SavePngAtomicAsync(Image image, string path, CancellationToken cancellationToken)
-    {
-        await SaveAtomicAsync(path, async stream => await image.SaveAsPngAsync(stream, new PngEncoder(), cancellationToken), cancellationToken);
-    }
+    private Task SaveDataAtomicAsync(SKData data, string path, CancellationToken cancellationToken) =>
+        SaveAtomicAsync(path, async stream => await stream.WriteAsync(data.AsSpan().ToArray(), cancellationToken), cancellationToken);
 
     private async Task SaveAtomicAsync(string path, Func<Stream, Task> writeAsync, CancellationToken cancellationToken)
     {
