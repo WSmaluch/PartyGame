@@ -1,6 +1,6 @@
 # PartyGame
 
-PartyGame to serwerowo sterowana gra imprezowa z klientem iOS, obowiązkowym ekranem TV i panelem administratora. Backend obsługuje równoległe pokoje, reconnect, pauzę Display, trwałe timery i cztery typy pytań: `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Etap 5B dodaje natywny canvas iOS, upload PNG, głosowanie oraz publiczne ekrany Display dla DrawingAnswer.
+PartyGame to serwerowo sterowana gra imprezowa z klientem iOS, obowiązkowym ekranem TV i panelem administratora. Backend obsługuje równoległe pokoje, reconnect, pauzę Display, trwałe timery i cztery typy pytań: `PlayerSelection`, `TextAnswer`, `PhotoAnswer` oraz `DrawingAnswer`. Gracze dołączają z aplikacji iOS albo z przeglądarki (Web Player pod `/play/`), a gra może kończyć się rundą finałową z selfie, wspólnym rysowaniem i głosowaniem.
 
 ## Technologie
 
@@ -22,7 +22,8 @@ Wybrano .NET 10, ponieważ jest aktualną stabilną wersją zainstalowaną w śr
 apps/
 ├── ios/                    # aplikacja SwiftUI i testy XCTest
 ├── display-web/            # ekran TV, port 5173
-└── admin-web/              # panel administracyjny, port 5174
+├── admin-web/              # panel administracyjny, port 5174
+└── player-web/             # Web Player w przeglądarce, port 5175, ścieżka /play/
 server/
 ├── PartyGame.Api/          # HTTP, SignalR, DI i start procesu
 ├── PartyGame.Domain/       # warstwa domenowa bez zależności technologicznych
@@ -155,7 +156,17 @@ npm run dev
 
 Otwórz `http://localhost:5174/admin`.
 
-W trybie deweloperskim obie aplikacje odczytują jawnie podane `VITE_API_BASE_URL` (np. z `.env.development`). Artefakty release pobierają konfigurację runtime z `/config.json`; brak konfiguracji nie powoduje fallbacku do `localhost`.
+Web Player:
+
+```bash
+cd apps/player-web
+npm install
+npm run dev
+```
+
+Otwórz `http://localhost:5175/play/`. Adres backendu wskazuje `.env.local` utworzony z `.env.example`; szczegóły w [docs/web-player.md](docs/web-player.md).
+
+W trybie deweloperskim aplikacje webowe odczytują jawnie podane `VITE_API_BASE_URL` (np. z `.env.development`). Artefakty release pobierają konfigurację runtime z `/config.json`; brak konfiguracji nie powoduje fallbacku do `localhost`.
 
 Aplikację iOS uruchom z [projektu Xcode](apps/ios/PartyGame.xcodeproj). W symulatorze `localhost` oznacza Maca i działa z lokalnym backendem. Na fizycznym iPhonie `localhost` oznacza telefon, dlatego w ekranie ustawień trzeba wpisać `http://ADRES_IP_MACA:5050`. Ustawienie waliduje URL, normalizuje końcowy `/`, jest zapisane lokalnie i przyciskiem połączenia sprawdza `/health` (w tym wersję API).
 
@@ -203,14 +214,14 @@ Trwałe dane produkcyjne obsługują jawny check/migrate schematu EF Core oraz z
 
 Pełna instrukcja kontraktu środowiska, konfiguracji webów i smoke testu znajduje się w [docs/deployment/local-release-build.md](docs/deployment/local-release-build.md). Gotowy artefakt można wdrożyć w LAN bez Node, Vite i IDE przez [instrukcję LAN](docs/deployment/lan-deployment.md), a backup, restore i retencję opisuje [instrukcja danych](docs/deployment/data-backup-and-restore.md). Logi, correlation ID i support bundle opisuje [diagnostyka](docs/diagnostics/logging-and-correlation.md).
 
-## Release Candidate 1.0.0-rc.1
+## Release Candidate 1.0
 
-Jedynym źródłem publicznej wersji RC jest [`release/VERSION`](release/VERSION). `scripts/build-release.sh` tworzy manifest z tą samą wersją dla API, Display, Admina i metadanych iOS, a `scripts/package-release.sh` tworzy przenośne `partygame-<version>.tar.gz`. Operator powinien najpierw sprawdzić archiwum, a następnie uruchomić instalator bez źródeł ani IDE:
+Jedynym źródłem publicznej wersji RC jest [`release/VERSION`](release/VERSION). `scripts/build-release.sh` tworzy manifest z tą samą wersją dla API, Display, Admina i metadanych iOS, a `scripts/package-release.sh` tworzy przenośne `partygame-<version>.tar.gz`, gdzie `<version>` to zawartość `release/VERSION`. Operator powinien najpierw sprawdzić archiwum, a następnie uruchomić instalator bez źródeł ani IDE:
 
 ```bash
-scripts/verify-release-package.sh --package partygame-1.0.0-rc.1.tar.gz
+scripts/verify-release-package.sh --package partygame-<version>.tar.gz
 PARTYGAME_OPERATOR_TOKEN='<32+ character secret>' scripts/install-release.sh \
-  --package partygame-1.0.0-rc.1.tar.gz --install-root /opt/partygame \
+  --package partygame-<version>.tar.gz --install-root /opt/partygame \
   --runtime-root /var/lib/partygame --host 192.168.1.20 --non-interactive
 ```
 
@@ -225,7 +236,7 @@ Walidacja 8.1 obejmuje Mixed Client E2E PASS (evidence: `/private/tmp/partygame-
 1. Uruchom backend: `dotnet run --project server/PartyGame.Api`.
 2. Uruchom Display na porcie `5173`.
 3. Uruchom Admin na porcie `5174`.
-4. Uruchom aplikację `PartyGame` w symulatorze lub na iPhonie.
+4. Uruchom aplikację `PartyGame` w symulatorze lub na iPhonie albo Web Player na porcie `5175`.
 5. Sprawdź, czy wszystkie klienty pokazują backend jako online; web powinien dodatkowo pokazać `SignalR: Połączony` oraz `pong`.
 
 ## Dokumentacja
@@ -238,6 +249,12 @@ Walidacja 8.1 obejmuje Mixed Client E2E PASS (evidence: `/private/tmp/partygame-
 - [Etap 4B — klienci PhotoAnswer](docs/stage-04b-photo-answer-clients.md)
 - [Etap 5A — backend DrawingAnswer](docs/stage-05a-drawing-answer-engine.md)
 - [Etap 5B — klienci DrawingAnswer](docs/stage-05b-drawing-answer-clients.md)
+- [Etap 6A — Admin Content Editor](docs/stage-06a-admin-content-editor.md)
+- [Etap 6B — trwały storage mediów](docs/stage-06b-media-storage.md)
+- [Etap 7 — Mixed Client E2E](docs/stage-07-mixed-client-e2e.md)
+- [Etap 8 — gotowość wydania](docs/stage-08-release-readiness.md)
+- [Web Player](docs/web-player.md)
+- [Checklista wydania i urządzeń fizycznych](docs/installation/release-checklist.md)
 - [Założenia REST](contracts/api/README.md)
 - [Kontrakt REST pokojów](contracts/api/rooms.md)
 - [Założenia SignalR](contracts/signalr/README.md)
@@ -245,7 +262,7 @@ Walidacja 8.1 obejmuje Mixed Client E2E PASS (evidence: `/private/tmp/partygame-
 
 ## Deferred E2E hardening
 
-Status: **Implemented partially — execution deferred**.
+Status: **zrealizowane w Etapie 7.** Pełny Mixed Client E2E przechodzi od Etapu 7.3A.4 — zob. [Etap 7](docs/stage-07-mixed-client-e2e.md). Poniższy opis zachowano jako historię decyzji z Etapu 6A.
 
 `MixedGameClientE2ETests` posiada prawdziwe interakcje iOS obejmujące Join, systemowy `PhotosPicker`, zapis profilu, Ready oraz pierwszą odpowiedź DrawingAnswer. Pełne uruchomienie mixed-client wymaga jeszcze deterministycznego setupu Published package, pokoju oraz skryptowanych klientów SignalR w orkiestratorze.
 

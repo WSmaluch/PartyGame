@@ -52,7 +52,7 @@ DrawingAnswer rozszerza tę samą granicę `IMediaStorage` o PNG. Detektor tuszu
 
 ## Deferred E2E hardening
 
-Status: **Implemented partially — execution deferred**.
+Status: **zrealizowane w Etapie 7.** Pełny Mixed Client E2E przechodzi od Etapu 7.3A.4 — zob. [Etap 7](stage-07-mixed-client-e2e.md). Poniższy opis zachowano jako historię decyzji z Etapu 6A.
 
 `MixedGameClientE2ETests` posiada prawdziwe interakcje iOS obejmujące Join, systemowy `PhotosPicker`, zapis profilu, Ready oraz pierwszą odpowiedź DrawingAnswer. Pełne uruchomienie mixed-client wymaga jeszcze deterministycznego setupu Published package, pokoju oraz skryptowanych klientów SignalR w orkiestratorze.
 
