@@ -56,6 +56,7 @@ export type GameSnapshot = {
   currentQuestionNumber: number;
   questionsInCurrentRound: number;
   stageEndsAtUtc?: string | null;
+  packageKey?: string | null;
   question?: GameQuestion | null;
   currentQuestion?: GameQuestion | null;
   answeredPlayerIds?: string[] | null;

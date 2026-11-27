@@ -21,6 +21,7 @@ input {
   font: inherit;
 }
 .page-shell {
+  min-height: 100svh;
   min-height: 100dvh;
   display: grid;
   place-items: center;
@@ -35,6 +36,15 @@ input {
 .host-setup-card {
   max-width: 600px;
 }
+.lobby-card {
+  display: grid;
+  gap: 18px;
+  margin-block: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom));
+}
+.lobby-card > h1,
+.lobby-card > .connection,
+.lobby-card > .profile,
+.lobby-card > .players { margin-block: 0; }
 .connection {
   display: inline-flex;
   align-items: center;
@@ -493,6 +503,22 @@ dd {
 .players {
   margin-top: 22px;
 }
+.lobby-actions {
+  display: grid;
+  gap: 14px;
+  margin-top: 6px;
+  padding-bottom: max(4px, env(safe-area-inset-bottom));
+}
+.lobby-actions > button,
+.lobby-actions .secondary-action,
+.lobby-actions [role='alertdialog'] > button {
+  width: 100%;
+  margin-top: 0;
+}
+.leave-room,
+.leave-room [role='alertdialog'] { min-width: 0; }
+.leave-room [role='alertdialog'] { display: grid; gap: 12px; padding: 14px; border: 1px solid rgb(255 255 255 / 18%); border-radius: 14px; background: rgb(255 255 255 / 7%); }
+.leave-room [role='alertdialog'] p { margin: 0; }
 h2 {
   font-size: 18px;
 }
@@ -938,6 +964,9 @@ ul {
     padding: 22px 18px;
     border-radius: 22px;
   }
+  .lobby-card { gap: 16px; }
+  .players ul { gap: 8px; margin-block: 0; }
+  .players li { min-width: 0; padding: 10px; }
   .game-header {
     align-items: flex-start;
     flex-wrap: wrap;
@@ -1020,3 +1049,19 @@ ul {
     transform: none !important;
   }
 }
+
+/* PartyGame 1.1 controller theme: same identity, deliberately quieter motion. */
+.page-shell { --stage-bg: #091222; --stage-bg-deep: #151c34; --surface: rgb(18 30 53 / 90%); --accent: #47e9f5; --accent-secondary: #9173ff; --glow: rgb(71 233 245 / 26%); --success: #7cf6b3; --avatar-ring: #a88cff; background: radial-gradient(circle at 10% 7%, var(--glow), transparent 34%), radial-gradient(circle at 95% 92%, color-mix(in srgb, var(--accent-secondary) 22%, transparent), transparent 38%), linear-gradient(135deg, var(--stage-bg), var(--stage-bg-deep)); transition: background 420ms var(--motion-ease); }
+.page-shell[data-package-theme='friends'] { --accent: #bd79ff; --accent-secondary: #ff8a78; --glow: rgb(255 116 183 / 25%); --avatar-ring: #ff9a7c; }
+.page-shell[data-package-theme='student'] { --accent: #ff56c7; --accent-secondary: #b9ff54; --glow: rgb(255 86 199 / 25%); --avatar-ring: #c7ff64; }
+.page-shell[data-package-theme='adult'] { --accent: #c58aff; --accent-secondary: #ff4f87; --stage-bg: #140918; --stage-bg-deep: #26112e; --glow: rgb(221 65 145 / 23%); --avatar-ring: #f26ba0; }
+.page-shell[data-package-theme='friends'], [data-package-theme='friends'] .page-shell { --accent: #bd79ff; --accent-secondary: #ff8a78; --glow: rgb(255 116 183 / 25%); --avatar-ring: #ff9a7c; }
+.page-shell[data-package-theme='student'], [data-package-theme='student'] .page-shell { --accent: #ff56c7; --accent-secondary: #b9ff54; --glow: rgb(255 86 199 / 25%); --avatar-ring: #c7ff64; }
+.page-shell[data-package-theme='adult'], [data-package-theme='adult'] .page-shell { --accent: #c58aff; --accent-secondary: #ff4f87; --stage-bg: #140918; --stage-bg-deep: #26112e; --glow: rgb(221 65 145 / 23%); --avatar-ring: #f26ba0; }
+.page-shell .card { background: var(--surface); border-color: color-mix(in srgb, var(--accent) 26%, white 12%); box-shadow: 0 20px 54px rgb(0 0 0 / 31%), 0 0 34px var(--glow); }
+.page-shell .eyebrow { color: var(--accent); }
+.page-shell .avatar { border-color: var(--avatar-ring); box-shadow: 0 0 13px color-mix(in srgb, var(--avatar-ring) 30%, transparent); }
+.page-shell .ready { color: var(--success); }
+.page-shell button:not(.secondary-action), .page-shell .file-button { background: var(--accent); color: #07121f; }
+@media (prefers-reduced-motion: no-preference) { .page-shell { background-size: 130% 130%; animation: controller-atmosphere 22s ease-in-out infinite alternate; } }
+@keyframes controller-atmosphere { to { background-position: 100% 30%; } }

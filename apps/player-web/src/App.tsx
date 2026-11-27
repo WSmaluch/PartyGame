@@ -653,16 +653,17 @@ function Lobby({
             ))}
           </ul>
         </section>
-        <button
-          type="button"
-          onClick={() => void toggleReady()}
-          disabled={
-            !ownPlayer || !ownPlayer.hasProfilePhoto || status !== 'connected'
-          }
-        >
-          {ownPlayer?.isReady ? t('notReady') : t('ready')}
-        </button>
-        <div className="leave-room">
+        <div className="lobby-actions">
+          <button
+            type="button"
+            onClick={() => void toggleReady()}
+            disabled={
+              !ownPlayer || !ownPlayer.hasProfilePhoto || status !== 'connected'
+            }
+          >
+            {ownPlayer?.isReady ? t('notReady') : t('ready')}
+          </button>
+          <div className="leave-room">
           {confirmingLeave ? (
             <div role="alertdialog" aria-label={t('leaveRoomConfirm')}>
               <p>{t('leaveRoomConfirm')}</p>
@@ -692,6 +693,7 @@ function Lobby({
               {t('leaveRoom')}
             </button>
           )}
+          </div>
         </div>
       </section>
     </main>

@@ -161,13 +161,17 @@ function CollectingPlayerSelections({
   const answered = game.answeredPlayerIds || [];
 
   return (
-    <div className="collecting-selections" aria-live="polite">
-      <h2>{t('question')}</h2>
-      <h1>{localizedText(gameQuestion(game)?.text)}</h1>
-
-      <StageTimer endsAtUtc={game.stageEndsAtUtc} />
-
-      <div className="answered-status">
+    <div className="collecting-selections question-stage" aria-live="polite">
+      <header className="question-stage__header">
+        <h2>{t('question')}</h2>
+      </header>
+      <div className="question-stage__prompt">
+        <h1>{localizedText(gameQuestion(game)?.text)}</h1>
+      </div>
+      <div className="question-stage__timer">
+        <StageTimer endsAtUtc={game.stageEndsAtUtc} />
+      </div>
+      <div className="answered-status question-stage__status">
         <p>{t('waitingForVotes')}</p>
         <p>
           {t('answered')}: {answered.length} {t('outOf')} {maxPlayers}{' '}
@@ -175,7 +179,7 @@ function CollectingPlayerSelections({
         </p>
       </div>
 
-      <div className="answered-players" data-testid="selection-player-grid">
+      <div className="answered-players question-stage__players" data-testid="selection-player-grid">
         {room.players.map((p) => {
           const hasAnswered = answered.includes(p.id);
           const photo = profilePhotoUrl(p.profilePhotoUrl);

@@ -67,11 +67,13 @@ public static class RoomContractMapper
         int? submittedDrawingAnswers = null;
         int? requiredDrawingAnswers = null;
         FinalRoundSnapshot? finalRound = null;
+        string? packageKey = null;
 
         var currentRound = session.Rounds.FirstOrDefault(r => r.RoundNumber == session.CurrentRoundNumber);
         if (currentRound != null && currentRound.Category != null)
         {
-            category = new GameCategorySnapshot(currentRound.Category.Id, new LocalizedText(currentRound.Category.NamePl, currentRound.Category.NameEn), new LocalizedText(currentRound.Category.DescriptionPl, currentRound.Category.DescriptionEn));
+            packageKey = currentRound.Category.Package?.Key;
+            category = new GameCategorySnapshot(currentRound.Category.Id, new LocalizedText(currentRound.Category.NamePl, currentRound.Category.NameEn), new LocalizedText(currentRound.Category.DescriptionPl, currentRound.Category.DescriptionEn), packageKey);
 
             var currentInstance = currentRound.Questions.FirstOrDefault(q => q.Id == session.CurrentQuestionInstanceId);
             if (currentInstance != null && currentInstance.Question != null)
@@ -342,7 +344,8 @@ public static class RoomContractMapper
             submittedDrawingAnswerPlayerIds,
             submittedDrawingAnswers,
             requiredDrawingAnswers,
-            finalRound
+            finalRound,
+            packageKey
         );
     }
 

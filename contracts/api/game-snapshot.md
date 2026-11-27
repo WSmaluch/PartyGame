@@ -15,9 +15,10 @@ Ten dokument dokumentuje kontrakt GameSnapshot, przesyłany z backendu w ramach 
 - `Scores` (Array of PlayerScoreSnapshot)
 - `CompletedAtUtc` (DateTimeOffset?)
 - `TotalPlayedQuestions` (int?)
+- `PackageKey` (string?): klucz pakietu treści bieżącej rundy (np. `starter`). Klienci używają go wyłącznie do wyboru motywu wizualnego; brak wartości oznacza motyw neutralny. Pole jest opcjonalne i addytywne — starsi klienci mogą je ignorować.
 
 ### Sekcje opcjonalne zależnie od Etapu:
-- `Category` (GameCategorySnapshot?)
+- `Category` (GameCategorySnapshot?): `Id`, `Name`, `Description` oraz opcjonalny `PackageKey` (string?) z tą samą wartością co `GameSnapshot.PackageKey`
 - `Question` (GameQuestionSnapshot?)
 - `Results` (PlayerSelectionResults?)
 - `RoundSummary` (RoundSummarySnapshot?)

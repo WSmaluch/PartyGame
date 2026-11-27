@@ -83,6 +83,8 @@ export interface GameCategorySnapshot {
   id: string;
   name: LocalizedText;
   description?: LocalizedText;
+  packageKey?: string | null;
+  packageTheme?: string | null;
 }
 
 export interface GameQuestionSnapshot {

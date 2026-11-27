@@ -18,6 +18,7 @@ import {
   type RoomSnapshot,
 } from '../api/types';
 import { submissionIdentity } from './submissionIdentity';
+import { packageThemeFor } from '../theme/packageTheme';
 import type { Locale, TranslationKey } from '../translations';
 import {
   submitFinalVote,
@@ -58,10 +59,13 @@ type GameRouterProps = {
 
 export function GameRouter(props: GameRouterProps) {
   const game = props.snapshot?.game;
+  const theme = packageThemeFor(game?.packageKey);
   return (
-    <StageTransition identity={game ? motionIdentity(game) : 'loading'}>
-      <GameRouteContent {...props} />
-    </StageTransition>
+    <div data-package-theme={theme}>
+      <StageTransition identity={game ? motionIdentity(game) : 'loading'}>
+        <GameRouteContent {...props} />
+      </StageTransition>
+    </div>
   );
 }
 

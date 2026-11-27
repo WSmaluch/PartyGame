@@ -77,10 +77,11 @@ public sealed record GameSnapshot(
     List<Guid>? SubmittedDrawingAnswerPlayerIds = null,
     int? SubmittedDrawingAnswers = null,
     int? RequiredDrawingAnswers = null,
-    FinalRoundSnapshot? FinalRound = null
+    FinalRoundSnapshot? FinalRound = null,
+    string? PackageKey = null
 );
 
-public sealed record GameCategorySnapshot(Guid Id, LocalizedText Name, LocalizedText Description);
+public sealed record GameCategorySnapshot(Guid Id, LocalizedText Name, LocalizedText Description, string? PackageKey = null);
 // `Id` remains the content-definition id for clients that identify a question
 // in a package.  Transport actions and player-private state use the distinct
 // persisted game-question instance id.
