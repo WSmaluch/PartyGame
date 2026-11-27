@@ -18,7 +18,7 @@ Formularz tworzy i edytuje wszystkie cztery typy pytań, korzystając z endpoint
 
 Pakiet przechodzi przez `Draft`, `Published` i `Archived`. Draft pozwala edytować metadane i publikować po walidacji domenowej. Published można zarchiwizować lub skopiować do kolejnego Draftu; Archived można wyłącznie otworzyć albo skopiować do Draftu. Pakiety są wersjami jednej rodziny (`logicalPackageId`) i pokoje przypinają konkretną opublikowaną wersję.
 
-Znane ograniczenie: Admin API nie ma jeszcze produkcyjnego uwierzytelniania i jest przeznaczone wyłącznie do zaufanego środowiska lokalnego.
+Znane ograniczenie (stan z Etapu 6A): Admin API nie miało produkcyjnego uwierzytelniania. Zostało to domknięte w Etapie 8.4 — w Production wymagany jest token operatora ([security hardening](security/security-hardening.md)).
 
 ## Concurrency guarantees and race behavior
 

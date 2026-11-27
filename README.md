@@ -4,7 +4,7 @@ PartyGame to serwerowo sterowana gra imprezowa z klientem iOS, obowiązkowym ekr
 
 ## Technologie
 
-- ASP.NET Core 10 i C# — API oraz przyszły silnik gry;
+- ASP.NET Core 10 i C# — API oraz silnik gry;
 - SignalR — komunikacja czasu rzeczywistego;
 - Entity Framework Core 10 i SQLite — początkowa trwałość danych;
 - Serilog — logowanie strukturalne;
@@ -27,14 +27,14 @@ apps/
 server/
 ├── PartyGame.Api/          # HTTP, SignalR, DI i start procesu
 ├── PartyGame.Domain/       # warstwa domenowa bez zależności technologicznych
-├── PartyGame.GameEngine/   # przyszłe reguły gry i abstrakcja zegara
+├── PartyGame.GameEngine/   # reguły startu gry i abstrakcja zegara
 ├── PartyGame.Infrastructure/ # EF Core, SQLite i migracje
 └── PartyGame.Tests/        # testy integracyjne i jednostkowe
 contracts/
 ├── api/
 ├── signalr/
 └── examples/
-content/default-packages/   # przyszłe domyślne pakiety treści
+content/default-packages/   # nieużywany; pakiet startowy tworzy ContentSeeder
 docs/                       # architektura i workflow
 PartyGame.sln
 ```
