@@ -65,7 +65,7 @@ W 8.2F potwierdzono pełny Backend Release 285/285 oraz clean release build z ma
 
 ## Znane ograniczenia i ostrzeżenia
 
-- Bieżące `npm ci` raportuje trzy podatności o poziomie high. Nie zastosowano automatycznego ani wymuszonego `npm audit fix`; analiza wpływu i bezpieczna aktualizacja zależności należą do etapu 8.4.
+- Stan z Etapu 8.1: `npm ci` raportował trzy podatności o poziomie high. Analizę wykonano w Etapie 8.4 ([dependency audit](../security/dependency-audit.md)); obecnie `npm audit` nie raportuje podatności w żadnej aplikacji webowej.
 - Build może wypisać istniejące ostrzeżenia MSBuild dotyczące powtórnych importów oraz ostrzeżenie Xcode o nieużytym wyniku `try?` w `PartyGameApp.swift`. Nie blokują one artefaktu 8.1 i nie są zmianami zakresu release readiness.
 
 ## Stan etapu

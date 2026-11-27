@@ -1,6 +1,6 @@
 # PartyGame iOS
 
-Aplikacja graczy w SwiftUI dla iOS 17+. Zawiera ekran startowy, bezpieczne placeholdery Host/Join, trwałą konfigurację adresu serwera oraz diagnostykę `GET /health` opartą na `URLSession` i async/await.
+Aplikacja graczy w SwiftUI dla iOS 17+. Pozwala założyć pokój (Host) albo do niego dołączyć (Join), ustawić zdjęcie profilowe i zagrać we wszystkie typy pytań oraz rundę finałową. Ma trwałą konfigurację adresu serwera i diagnostykę `GET /health`.
 
 ## Uruchomienie
 
@@ -46,7 +46,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 
 ## Deferred E2E hardening
 
-Status: **Implemented partially — execution deferred**.
+Status: **zrealizowane w Etapie 7.** Pełny Mixed Client E2E przechodzi od Etapu 7.3A.4 — zob. [Etap 7](../../docs/stage-07-mixed-client-e2e.md). Poniższy opis zachowano jako historię decyzji z Etapu 6A.
 
 `MixedGameClientE2ETests` posiada prawdziwe interakcje iOS obejmujące Join, systemowy `PhotosPicker`, zapis profilu, Ready oraz pierwszą odpowiedź DrawingAnswer. Pełne uruchomienie mixed-client wymaga jeszcze deterministycznego setupu Published package, pokoju oraz skryptowanych klientów SignalR w orkiestratorze.
 

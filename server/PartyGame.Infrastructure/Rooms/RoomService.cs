@@ -1,7 +1,7 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using PartyGame.Domain.Content;
 using PartyGame.Domain.Game;
 using PartyGame.Domain.Rooms;
@@ -872,11 +872,19 @@ public sealed class RoomService(
                 : await mediaStorage.SaveDrawingAsync(new DrawingMediaWriteRequest(room.Id, session.Id, mediaId, content, byteLength, contentType), cancellationToken);
             var asset = new MediaAsset
             {
-                Id = Guid.NewGuid(), MediaKind = isSelfie ? MediaKind.FinalSelfie : MediaKind.FinalEdit,
-                StorageProvider = "LocalFileSystem", RoomId = room.Id, PlayerId = player.Id,
-                DisplayStorageKey = stored.DisplayStorageKey, ThumbnailStorageKey = stored.ThumbnailStorageKey,
-                ContentType = stored.ContentType, Width = stored.Width, Height = stored.Height,
-                ByteLength = stored.ByteLength, Sha256 = stored.Sha256, CreatedAtUtc = clock.UtcNow
+                Id = Guid.NewGuid(),
+                MediaKind = isSelfie ? MediaKind.FinalSelfie : MediaKind.FinalEdit,
+                StorageProvider = "LocalFileSystem",
+                RoomId = room.Id,
+                PlayerId = player.Id,
+                DisplayStorageKey = stored.DisplayStorageKey,
+                ThumbnailStorageKey = stored.ThumbnailStorageKey,
+                ContentType = stored.ContentType,
+                Width = stored.Width,
+                Height = stored.Height,
+                ByteLength = stored.ByteLength,
+                Sha256 = stored.Sha256,
+                CreatedAtUtc = clock.UtcNow
             };
             dbContext.MediaAssets.Add(asset);
             if (isSelfie)
@@ -961,8 +969,14 @@ public sealed class RoomService(
 
         dbContext.SubmissionReceipts.Add(new SubmissionReceipt
         {
-            Id = Guid.NewGuid(), RoomId = room.Id, PlayerId = player.Id, QuestionInstanceId = questionInstanceId,
-            ActionType = actionType, ClientSubmissionId = clientSubmissionId, PayloadFingerprint = payloadFingerprint, CreatedAtUtc = now
+            Id = Guid.NewGuid(),
+            RoomId = room.Id,
+            PlayerId = player.Id,
+            QuestionInstanceId = questionInstanceId,
+            ActionType = actionType,
+            ClientSubmissionId = clientSubmissionId,
+            PayloadFingerprint = payloadFingerprint,
+            CreatedAtUtc = now
         });
         dbContext.SubmissionAuditEntries.Add(NewAudit(room.Id, player.Id, questionInstanceId, actionType, clientSubmissionId, payloadFingerprint, SubmissionAuditResult.Accepted, now));
         return SubmissionDecision.Accepted;
@@ -983,10 +997,17 @@ public sealed class RoomService(
 
     private static SubmissionAuditEntry NewAudit(Guid roomId, Guid playerId, Guid questionId, SubmissionActionType action,
         Guid submissionId, string fingerprint, SubmissionAuditResult result, DateTimeOffset now) => new()
-    {
-        Id = Guid.NewGuid(), RoomId = roomId, PlayerId = playerId, QuestionInstanceId = questionId, ActionType = action,
-        ClientSubmissionId = submissionId, PayloadFingerprint = fingerprint, Result = result, CreatedAtUtc = now
-    };
+        {
+            Id = Guid.NewGuid(),
+            RoomId = roomId,
+            PlayerId = playerId,
+            QuestionInstanceId = questionId,
+            ActionType = action,
+            ClientSubmissionId = submissionId,
+            PayloadFingerprint = fingerprint,
+            Result = result,
+            CreatedAtUtc = now
+        };
 
     private static string Fingerprint(Guid value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToString("N")))).ToLowerInvariant();
     private static string Fingerprint(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Normalize(NormalizationForm.FormC)))).ToLowerInvariant();

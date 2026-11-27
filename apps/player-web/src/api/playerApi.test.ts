@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createRoom, fetchPackages, uploadDrawingAnswer, uploadPhotoAnswer } from './playerApi';
+import { createRoom, fetchPackages, joinRoom, uploadDrawingAnswer, uploadPhotoAnswer } from './playerApi';
 
 const session = { roomCode: 'AB12', playerId: 'player-1', reconnectToken: 'reconnect-token', nickname: 'Wojtek' };
 
@@ -32,5 +32,23 @@ describe('room creation API', () => {
     const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(createUrl).toBe('http://test-api.local/api/rooms'); expect(createInit.method).toBe('POST'); expect(createInit.headers).not.toHaveProperty('Authorization'); expect(JSON.parse(createInit.body as string)).toMatchObject({ nickname: 'Host', selectedPackageKeys: ['starter'] });
     expect(fetchMock.mock.calls[1][0]).toBe('http://test-api.local/api/content/packages');
+  });
+});
+
+describe('join conflicts', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    ['This nickname is already in use in the room.', 'nickname-taken'],
+    ['The room already contains the maximum number of players.', 'room-full'],
+    ['Players cannot join after the room has started.', 'started'],
+  ])('maps 409 "%s" to %s', async (title, kind) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 409, title }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } })));
+    await expect(joinRoom('AB12', 'Wojtek')).rejects.toMatchObject({ kind });
+  });
+
+  it('falls back to started when the 409 body is unreadable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('not json', { status: 409 })));
+    await expect(joinRoom('AB12', 'Wojtek')).rejects.toMatchObject({ kind: 'started' });
   });
 });

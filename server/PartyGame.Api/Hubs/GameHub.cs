@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Contracts;
+using PartyGame.Api.Diagnostics;
 using PartyGame.Domain.Game;
 using PartyGame.GameEngine;
 using PartyGame.Infrastructure.Rooms;

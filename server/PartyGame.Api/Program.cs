@@ -1,12 +1,12 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using Microsoft.Data.Sqlite;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.AspNetCore.StaticFiles;
 using PartyGame.Api.Configuration;
 using PartyGame.Api.Diagnostics;
 using PartyGame.Api.Endpoints;

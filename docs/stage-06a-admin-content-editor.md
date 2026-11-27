@@ -18,7 +18,7 @@ Formularz tworzy i edytuje wszystkie cztery typy pytań, korzystając z endpoint
 
 Pakiet przechodzi przez `Draft`, `Published` i `Archived`. Draft pozwala edytować metadane i publikować po walidacji domenowej. Published można zarchiwizować lub skopiować do kolejnego Draftu; Archived można wyłącznie otworzyć albo skopiować do Draftu. Pakiety są wersjami jednej rodziny (`logicalPackageId`) i pokoje przypinają konkretną opublikowaną wersję.
 
-Znane ograniczenie: Admin API nie ma jeszcze produkcyjnego uwierzytelniania i jest przeznaczone wyłącznie do zaufanego środowiska lokalnego.
+Znane ograniczenie (stan z Etapu 6A): Admin API nie miało produkcyjnego uwierzytelniania. Zostało to domknięte w Etapie 8.4 — w Production wymagany jest token operatora ([security hardening](security/security-hardening.md)).
 
 ## Concurrency guarantees and race behavior
 
@@ -26,7 +26,7 @@ Testy integracyjne uruchamiają prawdziwe równoległe żądania `Task.WhenAll` 
 
 ## Deferred E2E hardening
 
-Status: **Implemented partially — execution deferred**.
+Status: **zrealizowane w Etapie 7.** Pełny Mixed Client E2E przechodzi od Etapu 7.3A.4 — zob. [Etap 7](stage-07-mixed-client-e2e.md). Poniższy opis zachowano jako historię decyzji z Etapu 6A.
 
 `MixedGameClientE2ETests` posiada prawdziwe interakcje iOS obejmujące Join, systemowy `PhotosPicker`, zapis profilu, Ready oraz pierwszą odpowiedź DrawingAnswer. Pełne uruchomienie mixed-client wymaga jeszcze deterministycznego setupu Published package, pokoju oraz skryptowanych klientów SignalR w orkiestratorze.
 

@@ -1,7 +1,7 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics;
 using PartyGame.Api.Contracts;
 using PartyGame.Api.Hubs;
 using PartyGame.Domain.Rooms;

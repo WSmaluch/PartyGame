@@ -21,6 +21,7 @@ type HubPingResponse = { utcTime: string };
 export class GameHubConnection {
   private connection?: ReturnType<HubConnectionBuilder['build']>;
   private attachment?: PlayerSession;
+  private startPromise?: Promise<void>;
   private status: ConnectionStatus = 'disconnected';
   private readonly statusListeners = new Set<StatusListener>();
   private readonly snapshotListeners = new Set<SnapshotListener>();
@@ -56,11 +57,7 @@ export class GameHubConnection {
   async attach(session: PlayerSession): Promise<RoomSnapshot> {
     const connection = this.ensureConnection();
     this.attachment = session;
-    if (connection.state !== HubConnectionState.Connected) {
-      this.setStatus('connecting');
-      await connection.start();
-      this.setStatus('connected');
-    }
+    await this.start(connection);
     const snapshot = await connection.invoke<RoomSnapshot>(
       'AttachPlayer',
       session.roomCode,
@@ -227,6 +224,34 @@ export class GameHubConnection {
       questionInstanceId,
       clientSubmissionId,
     );
+  }
+
+  private start(
+    connection: ReturnType<HubConnectionBuilder['build']>,
+  ): Promise<void> {
+    if (connection.state === HubConnectionState.Connected)
+      return Promise.resolve();
+    // While SignalR reconnects on its own, onreconnected re-attaches the
+    // player; a second start() would throw and mislabel the status.
+    if (connection.state === HubConnectionState.Reconnecting)
+      return Promise.reject(new Error('reconnecting'));
+    // Session restore, visibility changes and joins may attach concurrently;
+    // they share one start instead of racing start() on the same connection.
+    this.startPromise ??= (async () => {
+      this.setStatus('connecting');
+      try {
+        await connection.start();
+        this.setStatus('connected');
+      } catch (error) {
+        // A failed start never raises onclose. Report it so the lobby offers
+        // its retry action instead of showing "connecting" indefinitely.
+        this.setStatus('disconnected');
+        throw error;
+      } finally {
+        this.startPromise = undefined;
+      }
+    })();
+    return this.startPromise;
   }
 
   private ensureConnection() {

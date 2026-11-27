@@ -1,6 +1,6 @@
 # PartyGame Display
 
-Ekran TV zbudowany w React, TypeScript i Vite. Pokazuje diagnostykę REST oraz SignalR bez implementowania logiki gry.
+Ekran TV zbudowany w React, TypeScript i Vite. Pokazuje lobby z kodem QR do Web Playera, wszystkie etapy pytań, wyniki, rundę finałową i ranking. Renderuje wyłącznie stan z serwera i nie zawiera logiki gry.
 
 ```bash
 npm install

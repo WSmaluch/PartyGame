@@ -64,31 +64,31 @@ public sealed class GameEngineWorker(
                 await roomLock.WaitAsync(cancellationToken);
                 try
                 {
-                // Re-evaluate in a fresh scope under lock to ensure consistency
-                await using var scope = serviceProvider.CreateAsyncScope();
-                var stateMachine = scope.ServiceProvider.GetRequiredService<GameStateMachine>();
-                var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
-                var notifier = scope.ServiceProvider.GetRequiredService<RoomNotifier>();
+                    // Re-evaluate in a fresh scope under lock to ensure consistency
+                    await using var scope = serviceProvider.CreateAsyncScope();
+                    var stateMachine = scope.ServiceProvider.GetRequiredService<GameStateMachine>();
+                    var dbContext = scope.ServiceProvider.GetRequiredService<PartyGameDbContext>();
+                    var notifier = scope.ServiceProvider.GetRequiredService<RoomNotifier>();
 
-                var changed = await stateMachine.ProcessTransitionAsync(candidate.SessionId, clock.UtcNow, cancellationToken);
-                if (changed)
-                {
-                    var roomService = scope.ServiceProvider.GetRequiredService<IRoomService>();
-                    var room = await roomService.GetAsync(candidate.RoomCode, cancellationToken);
-
-                    if (room != null)
+                    var changed = await stateMachine.ProcessTransitionAsync(candidate.SessionId, clock.UtcNow, cancellationToken);
+                    if (changed)
                     {
-                        // The stage transition and its public state version must be persisted
-                        // together.  Persisting them separately can leave a newer game stage
-                        // behind an unchanged stateVersion when SQLite rejects the second write.
-                        // Realtime clients correctly ignore that stale-version snapshot and would
-                        // therefore never render the actionable next stage.
-                        room.PublicStateChanged(clock.UtcNow);
-                        await dbContext.SaveChangesAsync(cancellationToken);
-                        await notifier.NotifyAsync(new RoomMutationResult(room, true, false), cancellationToken);
-                        logger.LogDebug("Game timeout transition accepted for room {RoomCode}; state version {StateVersion}", room.Code, room.StateVersion);
+                        var roomService = scope.ServiceProvider.GetRequiredService<IRoomService>();
+                        var room = await roomService.GetAsync(candidate.RoomCode, cancellationToken);
+
+                        if (room != null)
+                        {
+                            // The stage transition and its public state version must be persisted
+                            // together.  Persisting them separately can leave a newer game stage
+                            // behind an unchanged stateVersion when SQLite rejects the second write.
+                            // Realtime clients correctly ignore that stale-version snapshot and would
+                            // therefore never render the actionable next stage.
+                            room.PublicStateChanged(clock.UtcNow);
+                            await dbContext.SaveChangesAsync(cancellationToken);
+                            await notifier.NotifyAsync(new RoomMutationResult(room, true, false), cancellationToken);
+                            logger.LogDebug("Game timeout transition accepted for room {RoomCode}; state version {StateVersion}", room.Code, room.StateVersion);
+                        }
                     }
-                }
                 }
                 finally { roomLock.Release(); }
             }
