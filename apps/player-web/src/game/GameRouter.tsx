@@ -855,9 +855,14 @@ function PhotoAnswer({
               </button>
             </>
           )}
-          {failure && (
-            <Retry onRetry={() => void submit()} t={t} message={t(failure)} />
-          )}
+          {failure &&
+            (failure === 'photoUploadFailed' && file ? (
+              <Retry onRetry={() => void submit()} t={t} message={t(failure)} />
+            ) : (
+              <p className="form-error" role="alert">
+                {t(failure)}
+              </p>
+            ))}
         </>
       )}
     </GameShell>
@@ -1124,6 +1129,7 @@ function FinalSelfie({
   const [state, setState] = useState<SubmissionState>(
     final?.hasSubmittedSelfie ? 'submitted' : 'idle',
   );
+  const [captureFailed, setCaptureFailed] = useState(false);
   const inFlight = useRef(false);
   useEffect(
     () => () => {
@@ -1136,6 +1142,7 @@ function FinalSelfie({
     event.target.value = '';
     if (!selected) return;
     try {
+      setCaptureFailed(false);
       setState('preparing');
       reportFinalSelfie('capture-start');
       const prepared = await preparePhotoAnswer(selected);
@@ -1148,7 +1155,9 @@ function FinalSelfie({
       setState('idle');
     } catch {
       reportFinalSelfie('capture-failed');
-      setState('failed');
+      // A previously prepared photo stays selectable; only the new one failed.
+      setCaptureFailed(true);
+      setState('idle');
     }
   }
   async function submit(): Promise<void> {
@@ -1231,7 +1240,12 @@ function FinalSelfie({
           {state === 'submitting' ? t('uploadingPhoto') : t('submitPhoto')}
         </button>
       )}
-      {state === 'failed' && (
+      {captureFailed && (
+        <p className="form-error" role="alert">
+          {t('photoProcessing')}
+        </p>
+      )}
+      {state === 'failed' && file && (
         <Retry
           onRetry={() => void submit()}
           t={t}

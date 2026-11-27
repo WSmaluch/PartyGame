@@ -1,10 +1,12 @@
 import { apiUrl } from './apiConfig';
 import type { ContentPackage, CreateRoomRequest, MediaUploadResponse, PlayerSession, ResumePlayerResponse, RoomAccessResponse, RoomSnapshot } from './types';
 
-export class PlayerApiError extends Error {
-  readonly kind: 'not-found' | 'started' | 'validation' | 'network' | 'server' | 'invalid-session';
+export type PlayerApiErrorKind = 'not-found' | 'started' | 'nickname-taken' | 'room-full' | 'validation' | 'network' | 'server' | 'invalid-session';
 
-  constructor(kind: 'not-found' | 'started' | 'validation' | 'network' | 'server' | 'invalid-session') {
+export class PlayerApiError extends Error {
+  readonly kind: PlayerApiErrorKind;
+
+  constructor(kind: PlayerApiErrorKind) {
     super(kind);
     this.kind = kind;
   }
@@ -82,7 +84,14 @@ async function requestJson<T>(path: string, init: RequestInit, sessionRequest: b
   } catch {
     throw new PlayerApiError('network');
   }
-  if (!response.ok) throw new PlayerApiError(sessionRequest && (response.status === 401 || response.status === 403 || response.status === 404) ? 'invalid-session' : errorKind(response.status));
+  if (!response.ok)
+    throw new PlayerApiError(
+      sessionRequest && (response.status === 401 || response.status === 403 || response.status === 404)
+        ? 'invalid-session'
+        : response.status === 409
+          ? conflictKind(await problemTitle(response))
+          : errorKind(response.status),
+    );
   try {
     return (await response.json()) as T;
   } catch {
@@ -92,7 +101,25 @@ async function requestJson<T>(path: string, init: RequestInit, sessionRequest: b
 
 function playerHeaders(token: string): HeadersInit { return { 'X-Player-Token': token, Accept: 'application/json' }; }
 
-function errorKind(status: number): PlayerApiError['kind'] {
+// The API reports a duplicate nickname, a full room and a started room with the
+// same 409 code; only the ProblemDetails title distinguishes them.
+function conflictKind(title: string): PlayerApiErrorKind {
+  const normalized = title.toLowerCase();
+  if (normalized.includes('nickname')) return 'nickname-taken';
+  if (normalized.includes('maximum number of players')) return 'room-full';
+  return 'started';
+}
+
+async function problemTitle(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { title?: unknown };
+    return typeof body.title === 'string' ? body.title : '';
+  } catch {
+    return '';
+  }
+}
+
+function errorKind(status: number): PlayerApiErrorKind {
   if (status === 404) return 'not-found';
   if (status === 400) return 'validation';
   if (status === 409 || status === 422) return 'started';

@@ -753,6 +753,10 @@ function errorMessage(error: PlayerApiError): TranslationKey {
       return 'roomNotFound';
     case 'started':
       return 'roomStarted';
+    case 'nickname-taken':
+      return 'nicknameTaken';
+    case 'room-full':
+      return 'roomFull';
     case 'validation':
       return 'invalid';
     case 'network':

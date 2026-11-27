@@ -27,7 +27,11 @@ const signalr = vi.hoisted(() => {
 });
 
 vi.mock('@microsoft/signalr', () => ({
-  HubConnectionState: { Connected: 'Connected', Disconnected: 'Disconnected' },
+  HubConnectionState: {
+    Connected: 'Connected',
+    Disconnected: 'Disconnected',
+    Reconnecting: 'Reconnecting',
+  },
   LogLevel: { Warning: 2 },
   HubConnectionBuilder: class HubConnectionBuilder {
     withUrl() {
@@ -46,6 +50,33 @@ vi.mock('@microsoft/signalr', () => ({
 }));
 
 describe('GameHubConnection', () => {
+  it('reports a failed initial start as disconnected and shares one start', async () => {
+    const hub = new GameHubConnection();
+    const states: string[] = [];
+    hub.subscribe((state) => states.push(state));
+    const session = {
+      roomCode: 'AB12',
+      playerId: 'player',
+      reconnectToken: 'token',
+      nickname: 'Wojtek',
+    };
+    signalr.connection.state = 'Disconnected';
+    signalr.connection.start.mockClear();
+    signalr.connection.start.mockRejectedValueOnce(new Error('offline'));
+    const results = await Promise.allSettled([
+      hub.attach(session),
+      hub.attach(session),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([
+      'rejected',
+      'rejected',
+    ]);
+    expect(signalr.connection.start).toHaveBeenCalledTimes(1);
+    expect(states.at(-1)).toBe('disconnected');
+    await hub.attach(session);
+    expect(states.at(-1)).toBe('connected');
+  });
+
   it('reattaches the same player after SignalR reconnects', async () => {
     const hub = new GameHubConnection();
     const states: string[] = [];
