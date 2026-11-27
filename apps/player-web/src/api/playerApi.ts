@@ -89,7 +89,7 @@ async function requestJson<T>(path: string, init: RequestInit, sessionRequest: b
       sessionRequest && (response.status === 401 || response.status === 403 || response.status === 404)
         ? 'invalid-session'
         : response.status === 409
-          ? conflictKind(await problemTitle(response))
+          ? conflictKind(await readProblem(response))
           : errorKind(response.status),
     );
   try {
@@ -101,21 +101,29 @@ async function requestJson<T>(path: string, init: RequestInit, sessionRequest: b
 
 function playerHeaders(token: string): HeadersInit { return { 'X-Player-Token': token, Accept: 'application/json' }; }
 
-// The API reports a duplicate nickname, a full room and a started room with the
-// same 409 code; only the ProblemDetails title distinguishes them.
-function conflictKind(title: string): PlayerApiErrorKind {
+type Problem = { code: string; title: string };
+
+// The API reports join conflicts with stable ProblemDetails codes. Servers
+// older than these codes used one generic code, so the title stays as a fallback.
+function conflictKind({ code, title }: Problem): PlayerApiErrorKind {
+  if (code === 'NICKNAME_TAKEN') return 'nickname-taken';
+  if (code === 'ROOM_FULL') return 'room-full';
+  if (code === 'ROOM_NOT_JOINABLE') return 'started';
   const normalized = title.toLowerCase();
   if (normalized.includes('nickname')) return 'nickname-taken';
   if (normalized.includes('maximum number of players')) return 'room-full';
   return 'started';
 }
 
-async function problemTitle(response: Response): Promise<string> {
+async function readProblem(response: Response): Promise<Problem> {
   try {
-    const body = (await response.json()) as { title?: unknown };
-    return typeof body.title === 'string' ? body.title : '';
+    const body = (await response.json()) as { code?: unknown; title?: unknown };
+    return {
+      code: typeof body.code === 'string' ? body.code : '',
+      title: typeof body.title === 'string' ? body.title : '',
+    };
   } catch {
-    return '';
+    return { code: '', title: '' };
   }
 }
 

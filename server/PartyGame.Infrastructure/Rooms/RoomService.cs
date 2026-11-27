@@ -171,17 +171,17 @@ public sealed class RoomService(
             var room = await LoadAsync(code, cancellationToken);
             if (room.Phase != RoomPhase.Lobby)
             {
-                throw new RoomConflictException("Players cannot join after the room has started.");
+                throw new RoomConflictException("Players cannot join after the room has started.", RoomConflictCodes.RoomNotJoinable);
             }
             if (room.Players.Count(player => player.IsActive) >= GameRoom.MaximumPlayers)
             {
-                throw new RoomConflictException("The room already contains the maximum number of players.");
+                throw new RoomConflictException("The room already contains the maximum number of players.", RoomConflictCodes.RoomFull);
             }
 
             var normalizedNickname = Nickname.Normalize(validNickname);
             if (room.Players.Any(player => player.IsActive && player.NormalizedNickname == normalizedNickname))
             {
-                throw new RoomConflictException("This nickname is already in use in the room.");
+                throw new RoomConflictException("This nickname is already in use in the room.", RoomConflictCodes.NicknameTaken);
             }
 
             var now = clock.UtcNow;
