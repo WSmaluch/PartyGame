@@ -1,6 +1,5 @@
 using PartyGame.Infrastructure.Media;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace PartyGame.Tests.Infrastructure.Media;
 
@@ -9,8 +8,8 @@ public sealed class DrawingAnswerBlankCanvasTests
     [Fact]
     public void WhiteAndTransparentCanvases_HaveNoInk()
     {
-        using var white = new Image<Rgba32>(400, 400, Color.White);
-        using var transparent = new Image<Rgba32>(400, 400, Color.Transparent);
+        using var white = Canvas(SKColors.White);
+        using var transparent = Canvas(SKColors.Transparent);
         Assert.Equal(0, DrawingInkDetector.CalculateInkPixelRatio(white, "#FFFFFF"));
         Assert.Equal(0, DrawingInkDetector.CalculateInkPixelRatio(transparent, "#FFFFFF"));
     }
@@ -21,8 +20,8 @@ public sealed class DrawingAnswerBlankCanvasTests
     [InlineData(100)]
     public void SparsePixels_RemainBelowConfiguredThreshold(int pixelCount)
     {
-        using var image = new Image<Rgba32>(400, 400, Color.White);
-        for (var index = 0; index < pixelCount; index++) image[index % 400, index / 400] = Color.Black;
+        using var image = Canvas(SKColors.White);
+        for (var index = 0; index < pixelCount; index++) image.SetPixel(index % 400, index / 400, SKColors.Black);
         Assert.True(DrawingInkDetector.CalculateInkPixelRatio(image, "#FFFFFF") < 0.001);
     }
 
@@ -32,12 +31,19 @@ public sealed class DrawingAnswerBlankCanvasTests
     [InlineData(0, 70, 220, 128)]
     public void ThinRealLines_AreDetectedInAnyColorOrOpacity(byte red, byte green, byte blue, byte alpha)
     {
-        using var image = new Image<Rgba32>(400, 400, Color.White);
-        for (var y = 0; y < image.Height; y++)
+        using var image = Canvas(SKColors.White);
+        using (var canvas = new SKCanvas(image))
+        using (var paint = new SKPaint { Color = new SKColor(red, green, blue, alpha), BlendMode = SKBlendMode.Src })
         {
-            image[199, y] = new Rgba32(red, green, blue, alpha);
-            image[200, y] = new Rgba32(red, green, blue, alpha);
+            canvas.DrawRect(new SKRect(199, 0, 201, 400), paint);
         }
         Assert.True(DrawingInkDetector.CalculateInkPixelRatio(image, "#FFFFFF") >= 0.001);
+    }
+
+    private static SKBitmap Canvas(SKColor background)
+    {
+        var bitmap = new SKBitmap(new SKImageInfo(400, 400, SKColorType.Rgba8888, SKAlphaType.Premul));
+        bitmap.Erase(background);
+        return bitmap;
     }
 }

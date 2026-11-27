@@ -4,7 +4,7 @@ Backend dodaje trzeci typ pytania i cztery trwałe etapy zdjęciowe. Lista upraw
 
 ## Upload i media
 
-Multipart upload jest autoryzowany reconnect tokenem i idempotentny przez UUID klienta. Mutacja działa pod blokadą pokoju. `LocalMediaStorage` dekoduje JPEG/PNG przez ImageSharp 3.1.x, wykonuje `AutoOrient`, usuwa EXIF/ICC/XMP/IPTC, skaluje bez powiększania, koduje `display.jpg` i `thumbnail.jpg`, a następnie liczy SHA-256 pliku display. Linia 3.1 została wybrana świadomie: aktualne ImageSharp 4 wymaga klucza licencyjnego dla bezpośredniej zależności; obowiązuje Six Labors Split License i przed komercjalizacją należy ponownie zweryfikować warunki na oficjalnej stronie Six Labors.
+Multipart upload jest autoryzowany reconnect tokenem i idempotentny przez UUID klienta. Mutacja działa pod blokadą pokoju. `LocalMediaStorage` dekoduje JPEG/PNG przez ImageSharp 3.1.x, wykonuje `AutoOrient`, usuwa EXIF/ICC/XMP/IPTC, skaluje bez powiększania, koduje `display.jpg` i `thumbnail.jpg`, a następnie liczy SHA-256 pliku display. Linia 3.1 została wybrana świadomie: aktualne ImageSharp 4 wymaga klucza licencyjnego dla bezpośredniej zależności. **Aktualizacja po RC15:** produkcyjny kod mediów korzysta z SkiaSharp (licencja MIT), bo ImageSharp 3.1 miał nienaprawione podatności przy dekodowaniu; ImageSharp został wyłącznie w projekcie testów jako niezależny dekoder do sprawdzania wyników.
 
 Domyślny root to `${TMPDIR}/PartyGame/media`; klucze mają postać `rooms/{roomId}/questions/{questionInstanceId}/{photoAnswerId}/{variant}.jpg`. Żadna wartość klienta nie staje się segmentem ścieżki. Storage odrzuca traversal i sprawdza zgodność zadeklarowanego MIME z faktycznie zdekodowanym formatem. Jeśli commit SQLite zawiedzie, oba finalne pliki są kompensacyjnie usuwane; nieudane usunięcie jest logowane bez ścieżki. Ograniczony sweep przy starcie usuwa tylko pliki `media/.tmp/*.tmp` starsze niż `MediaStorage:TemporaryFileRetentionMinutes` (domyślnie 60 minut) i nigdy nie przegląda finalnych mediów.
 
@@ -27,4 +27,4 @@ Polecenia odbiorowe:
 ./scripts/demo-mixed-three-types-game.sh
 ```
 
-Znane ograniczenia: provider pozostaje lokalny, nie ma automatycznego sweepu finalnych osieroconych katalogów po awarii samej kompensacji, a Etap 4B (kamera/galeria i UI PhotoAnswer) nie jest częścią tego odbioru. Warunki licencji ImageSharp trzeba niezależnie zweryfikować przed komercjalizacją; niniejszy zapis nie jest poradą prawną.
+Znane ograniczenia: provider pozostaje lokalny, nie ma automatycznego sweepu finalnych osieroconych katalogów po awarii samej kompensacji, a Etap 4B (kamera/galeria i UI PhotoAnswer) nie jest częścią tego odbioru. Serwer nie zawiera już ImageSharp (zob. wyżej); niniejszy zapis nie jest poradą prawną.

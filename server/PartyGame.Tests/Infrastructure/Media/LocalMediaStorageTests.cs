@@ -44,6 +44,40 @@ public sealed class LocalMediaStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task SavePhotoAsync_AppliesExifOrientationAndDropsColorProfile()
+    {
+        // A portrait phone photo is stored landscape with EXIF orientation 6
+        // ("rotate 90° clockwise to display"). Left half red, right half blue.
+        var storage = CreateStorage(minimum: 10);
+        await using var input = new MemoryStream();
+        using (var image = new Image<Rgba32>(800, 400, Color.Blue))
+        {
+            for (var y = 0; y < 400; y++)
+                for (var x = 0; x < 400; x++)
+                    image[x, y] = Color.Red;
+            image.Metadata.ExifProfile = new ExifProfile();
+            image.Metadata.ExifProfile.SetValue(ExifTag.Orientation, (ushort)6);
+            await image.SaveAsJpegAsync(input, new JpegEncoder { Quality = 95 });
+        }
+        input.Position = 0;
+
+        var result = await storage.SavePhotoAsync(Request(input, "image/jpeg"));
+
+        Assert.Equal((400, 800), (result.Width, result.Height));
+        await using var display = await storage.OpenReadAsync(result.DisplayStorageKey);
+        using var displayImage = await Image.LoadAsync<Rgba32>(display!);
+        Assert.Equal((400, 800), (displayImage.Width, displayImage.Height));
+        Assert.Null(displayImage.Metadata.ExifProfile);
+        Assert.Null(displayImage.Metadata.IccProfile);
+        Assert.Null(displayImage.Metadata.XmpProfile);
+        // Rotating 90° clockwise moves the original left (red) half to the top.
+        var top = displayImage[200, 100];
+        var bottom = displayImage[200, 700];
+        Assert.True(top.R > 200 && top.B < 60, $"top pixel {top}");
+        Assert.True(bottom.B > 200 && bottom.R < 60, $"bottom pixel {bottom}");
+    }
+
+    [Fact]
     public async Task SavePhotoAsync_ScalesLargeImageWithoutUpscalingSmallImage()
     {
         var storage = CreateStorage(maxLongEdge: 1000, minimum: 10);

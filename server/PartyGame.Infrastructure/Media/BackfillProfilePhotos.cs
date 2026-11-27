@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using PartyGame.Domain.Game;
 using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
-using SixLabors.ImageSharp;
 
 public sealed record ProfilePhotoBackfillResult(int Candidates, int Backfilled, int Skipped, int Errors);
 
@@ -48,8 +47,18 @@ public static class BackfillProfilePhotos
                 }
 
                 await using var input = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-                using var image = await Image.LoadAsync(input, cancellationToken);
-                var contentType = image.Metadata.DecodedImageFormat?.DefaultMimeType;
+                ImageHeader header;
+                using (var processor = SkiaImageProcessor.Open(input))
+                {
+                    if (processor is null)
+                    {
+                        errors++;
+                        logger.LogWarning("Skipping legacy profile photo for player {PlayerId}: invalid image.", player.Id);
+                        continue;
+                    }
+                    header = processor.Header;
+                }
+                var contentType = header.ContentType;
                 if (contentType is not ("image/jpeg" or "image/png"))
                 {
                     skipped++;
@@ -70,8 +79,8 @@ public static class BackfillProfilePhotos
                     DisplayStorageKey = player.ProfilePhotoStorageKey!,
                     ThumbnailStorageKey = player.ProfilePhotoStorageKey!,
                     ContentType = contentType,
-                    Width = image.Width,
-                    Height = image.Height,
+                    Width = header.Width,
+                    Height = header.Height,
                     ByteLength = byteLength,
                     Sha256 = hash,
                     CreatedAtUtc = DateTimeOffset.UtcNow
@@ -80,16 +89,6 @@ public static class BackfillProfilePhotos
                 db.MediaAssets.Add(asset);
                 player.ProfilePhotoMediaAssetId = asset.Id;
                 backfilled++;
-            }
-            catch (UnknownImageFormatException exception)
-            {
-                errors++;
-                logger.LogWarning(exception, "Skipping legacy profile photo for player {PlayerId}: invalid image.", player.Id);
-            }
-            catch (InvalidImageContentException exception)
-            {
-                errors++;
-                logger.LogWarning(exception, "Skipping legacy profile photo for player {PlayerId}: invalid image.", player.Id);
             }
             catch (InvalidOperationException exception)
             {
