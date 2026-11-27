@@ -3,9 +3,9 @@ using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using PartyGame.Api.Health;
 using PartyGame.Api.Configuration;
 using PartyGame.Api.Diagnostics;
+using PartyGame.Api.Health;
 using PartyGame.Infrastructure.Media;
 using PartyGame.Infrastructure.Persistence;
 

@@ -37,19 +37,42 @@ public sealed class PlayAgainIntegrationTests
             }
             db.MediaAssets.Add(new MediaAsset
             {
-                Id = Guid.NewGuid(), MediaKind = MediaKind.PhotoAnswer, RoomId = room.Id, PlayerId = room.Players[0].Id,
-                QuestionInstanceId = access.QuestionInstanceId, DisplayStorageKey = "game/display.jpg", ThumbnailStorageKey = "game/thumb.jpg",
-                ContentType = "image/jpeg", Width = 1, Height = 1, ByteLength = 1, Sha256 = new string('a', 64), CreatedAtUtc = DateTimeOffset.UtcNow
+                Id = Guid.NewGuid(),
+                MediaKind = MediaKind.PhotoAnswer,
+                RoomId = room.Id,
+                PlayerId = room.Players[0].Id,
+                QuestionInstanceId = access.QuestionInstanceId,
+                DisplayStorageKey = "game/display.jpg",
+                ThumbnailStorageKey = "game/thumb.jpg",
+                ContentType = "image/jpeg",
+                Width = 1,
+                Height = 1,
+                ByteLength = 1,
+                Sha256 = new string('a', 64),
+                CreatedAtUtc = DateTimeOffset.UtcNow
             });
             db.SubmissionReceipts.Add(new SubmissionReceipt
             {
-                Id = Guid.NewGuid(), RoomId = room.Id, PlayerId = room.Players[0].Id, QuestionInstanceId = access.QuestionInstanceId,
-                ActionType = SubmissionActionType.PlayerSelection, ClientSubmissionId = Guid.NewGuid(), PayloadFingerprint = new string('b', 64), CreatedAtUtc = DateTimeOffset.UtcNow
+                Id = Guid.NewGuid(),
+                RoomId = room.Id,
+                PlayerId = room.Players[0].Id,
+                QuestionInstanceId = access.QuestionInstanceId,
+                ActionType = SubmissionActionType.PlayerSelection,
+                ClientSubmissionId = Guid.NewGuid(),
+                PayloadFingerprint = new string('b', 64),
+                CreatedAtUtc = DateTimeOffset.UtcNow
             });
             db.SubmissionAuditEntries.Add(new SubmissionAuditEntry
             {
-                Id = Guid.NewGuid(), RoomId = room.Id, PlayerId = room.Players[0].Id, QuestionInstanceId = access.QuestionInstanceId,
-                ActionType = SubmissionActionType.PlayerSelection, ClientSubmissionId = Guid.NewGuid(), PayloadFingerprint = new string('b', 64), Result = SubmissionAuditResult.Accepted, CreatedAtUtc = DateTimeOffset.UtcNow
+                Id = Guid.NewGuid(),
+                RoomId = room.Id,
+                PlayerId = room.Players[0].Id,
+                QuestionInstanceId = access.QuestionInstanceId,
+                ActionType = SubmissionActionType.PlayerSelection,
+                ClientSubmissionId = Guid.NewGuid(),
+                PayloadFingerprint = new string('b', 64),
+                Result = SubmissionAuditResult.Accepted,
+                CreatedAtUtc = DateTimeOffset.UtcNow
             });
             await db.SaveChangesAsync();
         }

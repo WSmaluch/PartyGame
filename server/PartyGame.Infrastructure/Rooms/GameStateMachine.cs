@@ -548,8 +548,10 @@ public sealed class GameStateMachine(PartyGameDbContext dbContext, ScoreCalculat
             state.Artifacts.Add(new FinalRoundArtifact
             {
                 SubjectPlayerId = players[index].Id,
-                SelfiePromptPl = prompt.Pl, SelfiePromptEn = prompt.En,
-                TargetRolePl = role.Pl, TargetRoleEn = role.En
+                SelfiePromptPl = prompt.Pl,
+                SelfiePromptEn = prompt.En,
+                TargetRolePl = role.Pl,
+                TargetRoleEn = role.En
             });
         }
         session.FinalRoundStateJson = state.Write();
