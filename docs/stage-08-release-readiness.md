@@ -62,3 +62,5 @@ Końcowa walidacja: dwie pełne regresje Backend Release, każda 292/292 PASS, o
 RC używa jednego źródła wersji `release/VERSION` oraz przenośnego pakietu `partygame-<version>.tar.gz`. Pakiet zawiera release, lifecycle, backup/restore, diagnostykę, support-bundle, dokumentację oraz opcjonalne szablony systemd/launchd. Instalator odrzuca niezweryfikowane lub niebezpieczne archiwa, wymaga jawnego private-LAN hosta i operator tokenu, utrzymuje runtime poza immutable release oraz wdraża atomowo. `scripts/test-release-package.sh` ćwiczy fresh install, migrację pustej bazy, readiness, backup/restore, disaster recovery i uninstall na fixture. `scripts/validate-release-candidate.sh` zapisuje redacted evidence i raport RC poza Git.
 
 Przed finalnym `v1.0.0` pozostaje manual physical-device acceptance iPhone'a, drugiego klienta oraz Display/TV zgodnie z `docs/installation/release-checklist.md`.
+
+**Status:** 8.1–8.6 — ukończone. Kolejne kandydaty RC są budowane z tej samej ścieżki; aktualną wersję określa `release/VERSION`. Część automatyczna Etapu 8 jest zamknięta, a przed finalnym `v1.0.0` pozostaje wyłącznie manual physical-device acceptance.
