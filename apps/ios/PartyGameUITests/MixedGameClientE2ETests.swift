@@ -79,9 +79,14 @@ final class MixedGameClientE2ETests: XCTestCase {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.91, dy: 0.20)).tap()
         }
         // PhotosUI exposes the photo as an accessibility image but does not
-        // consistently mark it hittable. The top-left tile is visible after
-        // dismissing onboarding, so tap its screen position directly.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.16, dy: 0.25)).tap()
+        // consistently mark it hittable, so tap the centre of the tile's own
+        // frame. A fixed screen position breaks when the picker adds a header
+        // above the grid (e.g. the iOS 27 "Private Access to Photos" banner).
+        guard firstPhoto.exists else {
+            XCTFail("Timeout: oczekiwano kafelka zdjęcia w PhotosPicker.\n\(app.debugDescription)")
+            throw NSError(domain: "MixedGameClientE2E", code: 1)
+        }
+        firstPhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func playFullGame() throws {
